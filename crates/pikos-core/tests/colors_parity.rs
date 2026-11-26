@@ -1,16 +1,8 @@
-//! The folder palette, graded against the design source of truth.
+//! The folder palette, graded against `packages/core/src/constants/colors.ts`.
 //!
-//! `tests/corpus/colors.json` is `packages/core/src/constants/colors.ts`
-//! written where a Rust test can read it — regenerate with
-//! `pnpm --filter @pikos/core gen:parity`.
-//!
-//! Not a behaviour capture: a palette is a constant, and a constant copied by
-//! hand into a second language is a constant that drifts. What this catches is
-//! a colour added on one side and not the other, a hex typed a digit out, and —
-//! the one worth naming — the *order* changing. The rows are not arbitrary:
-//! the saturated eight are what a person picks for their own folders and the
-//! pastel eight are where a synced calendar is mapped, so a shuffle that keeps
-//! every value would still put an imported calendar in a colour that shouts.
+//! Order matters: the saturated eight are what a person picks for their own folders and the
+//! pastel eight are where a synced calendar is mapped, so a shuffle that keeps every value
+//! would still put an imported calendar in a colour that shouts.
 
 use std::fs;
 use std::path::PathBuf;
@@ -64,9 +56,7 @@ fn every_provider_default_is_a_colour_the_palette_actually_has() {
             "provider {}",
             entry.provider
         );
-        // The fallback arm included: an unrecognised provider must land on a
-        // real palette entry, or a calendar from one arrives with a colour no
-        // picker can show and no picker can change.
+        // An unrecognised provider must land on a palette entry too.
         assert!(
             PALETTE_COLORS.iter().any(|c| c.value == entry.color),
             "{} maps to {}, which is not in the palette",
@@ -76,14 +66,8 @@ fn every_provider_default_is_a_colour_the_palette_actually_has() {
     }
 }
 
-/// The two rows have to stay eight and eight.
-///
-/// `pikos-calendar-sync::palette::SYNCED_PALETTE` spells the pastel eight out
-/// again as its own constant — it is what a provider's colour is mapped into,
-/// and that crate does not depend on this one. Nothing makes the two agree, so
-/// this pins the boundary: a colour added to the pastel row here that is not
-/// added there is a colour the picker offers and re-discovery can never assign,
-/// and this test is the only place that reads as a contradiction.
+/// The pastel row stays eight, matching `pikos-calendar-sync::palette::SYNCED_PALETTE`,
+/// which that crate spells out itself and nothing else keeps in step.
 #[test]
 fn the_palette_is_two_rows_of_eight() {
     assert_eq!(PALETTE_COLORS.len(), 16);

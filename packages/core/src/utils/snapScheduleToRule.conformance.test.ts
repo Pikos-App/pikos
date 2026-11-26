@@ -1,7 +1,6 @@
-// Snapping a parsed schedule onto its rule, run against the table
-// `snap_schedule_to_rule` also runs. Quick Add and `pikos add` snap the same
-// parser output; the engine is shared but the end-shift is not, and an end that
-// doesn't travel with its start lands before it.
+// The same table `snap_schedule_to_rule` runs. Quick Add and `pikos add` snap the same parser
+// output; the engine is shared but the end-shift is not, and an end that doesn't travel with its
+// start lands before it.
 
 import { describe, expect, it } from "vitest";
 

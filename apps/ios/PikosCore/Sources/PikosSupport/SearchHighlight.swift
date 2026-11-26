@@ -24,12 +24,10 @@ public enum SearchHighlight {
 
     /// A passage made to show its match on one line of a phone.
     ///
-    /// The data layer centres its excerpt on the match with sixty characters either
-    /// side, sized for the desktop palette; a phone row holds under fifty, so the
-    /// match would be cut off past the end. Each line of the passage is a block of
-    /// the page, so lines are joined with a middle dot rather than run together
-    /// into one false sentence, and the lead-in before the first match is cut back
-    /// to `context` characters at a word boundary.
+    /// The data layer's excerpt has sixty characters either side of the match, sized
+    /// for the desktop palette, so on a phone row the match would be cut off. Lines
+    /// are blocks of the page, joined with a middle dot rather than run into one
+    /// false sentence, and the lead-in is cut to `context` characters at a word boundary.
     public static func leadIn(_ text: String, terms: [String], context: Int = 24) -> String {
         let flat = text.split(whereSeparator: \.isNewline)
             .map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }

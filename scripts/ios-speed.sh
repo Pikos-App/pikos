@@ -15,7 +15,6 @@ PROJECT="$ROOT/apps/ios/Pikos/Pikos.xcodeproj"
 DERIVED="$ROOT/target/ios-speed"
 TEMPLATE="$ROOT/target/pikos-speed-200k.sqlite"
 BUNDLE_ID="app.pikos.ios"
-# Must match SpeedTests' workspace directory at scale.
 DESTINATION_IN_CONTAINER="Library/Caches/pikos.sqlite"
 
 step() { printf '\033[1m▶ %s\033[0m\n' "$1"; }

@@ -106,9 +106,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     STORAGE_KEYS.overdueCollapsed,
     true
   );
-  // Completed accordion resets to collapsed on every view navigation (no persistence).
-  // Reset on the change itself: remembering which view it was opened on reopened it
-  // on a return to that view.
+  // Resets to collapsed on every view navigation, on the change itself: remembering the view it was
+  // opened on reopened it on a return.
   const [completedCollapsed, setCompletedCollapsed] = useState(true);
   const [completedViewId, setCompletedViewId] = useState(activeViewId);
   if (completedViewId !== activeViewId) {
@@ -140,7 +139,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   const isTodayView = activeViewId === "today";
   const isUpcomingView = activeViewId === "upcoming";
-  // Re-renders once per minute so the overdue/today split follows the date over midnight.
   const now = useNow();
   const { overdue, today } = isTodayView
     ? groupTodayPages(visiblePages, now)
@@ -189,7 +187,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         case "tail":
           return row.count * placeholderHeight(density);
         case "page": {
-          // Compact hides subtitle; cozy matches current; spacious adds ~8px.
           if (density === "compact") return 44;
           const base = row.page.subtitle ? 68 : 52;
           return density === "spacious" ? base + 8 : base;
@@ -228,7 +225,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         reach(row.slot.section, row.slot.index, row.slot.index + PRELOAD_ROWS);
         continue;
       }
-      // Only the part of a tail block on screen, and a little past it.
       const from = Math.max(0, Math.floor((scrollTop - item.start) / rowHeight));
       const to = Math.min(
         row.count - 1,
@@ -246,7 +242,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     cached ? `${cached.ids.length}|${cached.sections.map((x) => x.count).join(",")}` : null
   );
 
-  // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {
     if (!activePage?.id) return;
     const rowIndex = pageToRowIndex.get(activePage.id);
@@ -255,10 +250,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }, [activePage?.id]);
 
-  /** Pages in rendered order: `rows` already encodes Today's overdue→today grouping, per-view
-   *  sort, and which sections are expanded. `visiblePages` would diverge from the screen on Today
-   *  (no sort applied in usePageList — grouping does the ordering) and would also miss the
-   *  overdueCollapsed / completedCollapsed gates. */
+  /** Pages in rendered order. `rows` already encodes Today's overdue-to-today grouping, per-view sort
+   *  and expanded sections; `visiblePages` would diverge on Today and miss the collapsed gates. */
   function navigablePages(): PageSummary[] {
     return rows.flatMap((r) => (r.type === "page" ? [r.page] : []));
   }
@@ -292,7 +285,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       const deletedIdx = deletedActiveIndex(navigable);
       if (deletedIdx === null) return;
 
-      // The page that followed the deleted one has moved up into its row.
       const stepIdx = direction === 1 ? deletedIdx : deletedIdx - 1;
       const page = navigable[Math.max(0, Math.min(navigable.length - 1, stepIdx))];
       if (page) handleSelectPage(page);
@@ -301,8 +293,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
     const currentIdx = navigable.findIndex((p) => p.id === activePage.id);
     if (currentIdx === -1) {
-      // Active page not in navigable list (e.g. it's inside a collapsed section).
-      // Up → last visible page; down → do nothing (avoid jumping to top).
       if (direction === -1) {
         const page = navigable[navigable.length - 1];
         if (page) handleSelectPage(page, { browsed: true });
@@ -311,7 +301,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
     const newIdx = Math.max(0, Math.min(navigable.length - 1, currentIdx + direction));
     if (cached && direction === 1 && newIdx === currentIdx) {
-      // The last loaded row: the next one is in the list but not loaded yet.
       const next = cached.ids[cached.ids.indexOf(navigable[currentIdx]?.id ?? "") + 1];
       if (next) void cached.rows([next]).then(() => handleSelectPage(next, { browsed: true }));
       return;
@@ -325,42 +314,33 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     () => {
       if (cached) void cached.allIds().then(selectAll);
       else selectAll(visiblePages.map((p) => p.id));
-      // Pull focus onto the list (role="group", non-interactive) so the next
-      // Space/arrow acts on the selection. Without this, focus stays on whatever
-      // was clicked — e.g. a folder row, which is role="button" and would
-      // swallow Space (its own Enter/Space re-selects the folder), so the bulk
-      // toggle never fired.
+      // Pull focus onto the list (role="group", non-interactive) so the next Space/arrow acts on the
+      // selection; otherwise focus stays on a clicked folder row, whose own Space handler swallows it.
       listRef.current?.focus();
     },
     { group: "Page list", label: "Select all open pages in folder", preventDefault: true }
   );
 
-  // Space: toggle completion. Registered globally so it works after Cmd+A
-  // regardless of which non-editable element holds focus (body, sidebar
-  // button, etc.). The `when` gate keeps Space inert outside the page-list
-  // context — no accidental toggles when the user is e.g. on the calendar.
+  // Registered globally so Space works after Cmd+A whichever non-editable element holds focus; the
+  // `when` gate keeps it inert outside the page-list context.
   async function toggleSelected() {
     const selected = cached ? await selectedPages() : loadedSelection();
     const { recurring, toComplete, toUncomplete } = partitionToggleSelection(selected, (id) =>
       recurrenceRules.some((r) => r.pageId === id)
     );
     clearSelection();
-    // Plain flips collapse to ONE transactional write per status group (not N
-    // round-trips). Awaited so nothing else in this handler writes concurrently.
+    // Plain flips are ONE transactional write per status group, awaited so nothing else writes concurrently.
     if (toComplete.length > 0) await setPagesStatus(toComplete, "done", nowLocalISO());
     if (toUncomplete.length > 0) await setPagesStatus(toUncomplete, "not_started", null);
-    // Recurring completion clones + advances the head, so it can't be a plain
-    // flip. Complete each one at a time — awaited, never concurrently — so the
-    // writers don't race the WAL pool, and never through the gap dialog (its
-    // single pending slot would drop all but the last of a bulk selection), so a
-    // bulk tick completes one occurrence each and leaves any backlog alone.
+    // Recurring completion clones and advances the head, so it can't be a plain flip. Done one at a
+    // time to avoid racing the WAL pool, and never through the gap dialog (its single pending slot
+    // would drop all but the last), so a bulk tick completes one occurrence each.
     for (const p of recurring) {
       if (p.status === "done") {
         if (!(await uncompleteRecurringHead(p.id)))
           await setPagesStatus([p.id], "not_started", null);
         continue;
       }
-      // An occurrence row names its own date; a head lets the backend derive it.
       const occurrence = occurrenceDateOf(p);
       if (occurrence && p.scheduledStart) {
         await completeSyncedOccurrence({
@@ -393,22 +373,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   );
 
-  // Arrow Up/Down: move to the previous/next page. Registered globally (like
-  // Space above) so navigation works regardless of which non-editable element
-  // holds focus — e.g. after opening a page moves focus into the editor panel.
-  // `allowInInputs` stays false, so arrows still move the cursor inside the
-  // editor and text inputs.
-  //
-  // Stand down only when focus is on a control that natively consumes arrows
-  // (popover trigger, listbox, etc.) so it owns the key press.
+  // Registered globally (like Space above) so navigation works whichever non-editable element holds
+  // focus. `allowInInputs` stays false, so arrows still move the cursor in the editor and inputs. Stand
+  // down when focus is on a control that natively consumes arrows (popover trigger, listbox).
   function canNavigatePages() {
     if (renamingId) return false;
 
     if (activePage === null && deletedActiveIndex(navigablePages()) === null) return false;
     return !isArrowKeyConsumer(document.activeElement);
   }
-  // Discrete presses navigate immediately. Held-key auto-repeats (e.repeat) are
-  // coalesced to one navigation per animation frame to avoid render saturation.
+  // Held-key auto-repeats (e.repeat) coalesce to one navigation per animation frame.
   function navigateFromKey(e: KeyboardEvent, direction: 1 | -1) {
     if (!e.repeat) {
       navigatePage(direction);
@@ -454,7 +428,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     return [...visiblePages, ...completedPages].filter((p) => selectedPageIds.has(p.id));
   }
 
-  /** The selected pages, fetching any a cached list hasn't loaded. */
   async function selectedPages(): Promise<PageSummary[]> {
     const loaded = loadedSelection();
     if (!cached) return loaded;
@@ -463,14 +436,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     return missing.length > 0 ? [...loaded, ...(await cached.rows(missing))] : loaded;
   }
 
-  /** How many pages a row's menu acts on: the selection when the row is in it, else one. */
   function menuActsOn(triggerId: string): number {
     if (!selectedPageIds.has(triggerId) || selectedPageIds.size <= 1) return 1;
     if (cached) return selectedPageIds.size;
     return Math.max(loadedSelection().length, 1);
   }
 
-  /** Run an action on the selected pages (if page is selected), or just the given page. */
   function onMenuTargets(page: PageSummary, action: (pages: PageSummary[]) => void) {
     if (menuActsOn(page.id) === 1) {
       action([page]);
@@ -513,10 +484,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onSelect={(e) => handlePageClick(page, e)}
         onToggleDateFormat={toggleDateFormat}
         onToggleStatus={() => {
-          // A multi-select status toggle (clicking one selected row's checkbox)
-          // routes through toggleSelected, which serializes its writes. The old
-          // batchAction loop fired N concurrent writes and hit the same WAL race
-          // as Cmd+A → Space (QA §4). Single rows flip directly.
+          // A multi-select status toggle routes through toggleSelected, which serializes its writes; N
+          // concurrent writes hit the WAL race. Single rows flip directly.
           if (menuActsOn(page.id) > 1) void toggleSelected();
           else handleToggleStatus(page.id, page.status);
         }}
@@ -539,9 +508,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         );
 
       case "section-header": {
-        // Overdue is the one header that also carries an action, so it can't be
-        // a single button any more — a button inside a button is invalid, and
-        // the collapse toggle has to stay the row-wide target it always was.
+        // Overdue's header also carries an action, so it can't be a single button (a button inside a
+        // button is invalid); the collapse toggle stays the row-wide target.
         const isOverdueHeader = row.key === "overdue-header";
         return row.collapsible ? (
           <div className="flex w-full items-center border-b border-border pr-2 text-muted-foreground">
@@ -659,7 +627,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         sortMode={sortMode}
       />
 
-      {/* Page list */}
       {}
       <div
         aria-busy={cached?.loading ?? false}
@@ -712,7 +679,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         </div>
       )}
 
-      {/* Drag handle — right edge */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}
       <div
         aria-label="Resize page list"

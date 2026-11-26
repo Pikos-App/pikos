@@ -5,9 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 
 /**
- * YYYY-MM-DD → e.g. "Tue May 5". No comma between weekday and date so a
- * comma-separated list of these reads cleanly. Constructed at noon local
- * time to dodge the parseISO-treats-bare-date-as-UTC pitfall.
+ * YYYY-MM-DD to e.g. "Tue May 5", with no comma so a comma-separated list reads cleanly. Built at
+ * noon local time to dodge parseISO reading a bare date as UTC.
  */
 function formatDateLabel(yyyymmdd: string): string {
   const [y, m, d] = yyyymmdd.split("-").map(Number);
@@ -54,10 +53,9 @@ function ChoiceCard({ helper, onClick, title }: ChoiceCardProps) {
 }
 
 /**
- * Scope prompt for a recurring gesture that lands on a backlog. Mounted once at
- * the app level; subscribes to RecurringGapDialogContext.pending and renders
- * card-shaped actions. Each card is a single-click commit (no separate confirm
- * button); Escape or clicking outside dismisses.
+ * Scope prompt for a recurring gesture that lands on a backlog. Mounted once at the app level;
+ * subscribes to RecurringGapDialogContext.pending. Each card commits on one click; Escape or an
+ * outside click dismisses.
  */
 export function RecurringGapDialog() {
   const { cancel, confirm, pending } = useRecurringGapDialog();
@@ -65,10 +63,9 @@ export function RecurringGapDialog() {
   const others = pending?.missedDates.length ?? 0;
   const total = others + 1;
   const isDelete = pending?.kind === "delete";
-  // Naming the page is the point: this dialog opens on a repeat with a backlog behind
-  // it, and "Delete occurrence" over "Deletes 3 days" asked you to remove several days
-  // of something it never identified. One word for the thing, too — the body counts
-  // days, so the title does not call them occurrences.
+  // The title names the page, because "Delete occurrence" over "Deletes 3 days" asked you to remove
+  // several days of something unidentified. The body counts days, so the title doesn't call them
+  // occurrences.
   const name = pending ? `\u201C${pending.pageTitle}\u201D` : "";
   const title = isDelete
     ? pending?.syncedActive

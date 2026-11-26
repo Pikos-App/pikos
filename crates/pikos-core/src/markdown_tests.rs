@@ -173,10 +173,8 @@ fn empty_doc() {
 
 #[test]
 fn empty_paragraph_renders_single_blank_line() {
-    // The importer turns one source blank line into one empty paragraph node.
-    // Export must give it back ONE blank line (two '\n'), not three — otherwise
-    // a markdown → import → export → re-import round trip amplifies blank runs
-    // (1 → 3 → 7 …). Regression for QA §14.
+    // One source blank line is one empty paragraph node, and export must give back ONE blank
+    // line (two '\n'), not three, or a round trip amplifies blank runs (1 → 3 → 7).
     let doc = json!({
         "type": "doc",
         "content": [
@@ -190,8 +188,7 @@ fn empty_paragraph_renders_single_blank_line() {
 
 #[test]
 fn consecutive_empty_paragraphs_scale_blank_lines_one_for_one() {
-    // K empty paragraphs → K+1 newlines (K blank lines), so re-import yields the
-    // same K empty paragraphs. Two empties here → exactly two blank lines.
+    // K empty paragraphs → K+1 newlines, so re-import yields the same K empty paragraphs.
     let doc = json!({
         "type": "doc",
         "content": [

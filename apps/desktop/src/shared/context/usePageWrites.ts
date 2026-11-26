@@ -1,8 +1,7 @@
-// usePageWrites — creating, deleting, restoring and reordering pages, plus the
-// bulk status write. What is NOT here: the debounced field write (updatePage /
-// flushPage, in usePageWriteQueue), anything schedule-shaped (useScheduleWrites)
-// and anything recurring (useRecurringWrites) — those defer to a queue or to a
-// backend recompute in ways plain page CRUD does not.
+// Creating, deleting, restoring and reordering pages, plus the bulk status write. Not here: the
+// debounced field write (usePageWriteQueue), anything schedule-shaped (useScheduleWrites) and
+// anything recurring (useRecurringWrites), which defer to a queue or a backend recompute in ways
+// plain page CRUD does not.
 
 import type {
   Folder,
@@ -19,8 +18,8 @@ import type { WorkspaceEventBus } from "@/shared/events/workspaceEvents";
 
 import type { OptimisticWrite } from "./usePageWriteQueue";
 
-/** What a page can be created with, so a caller that knows its tags, priority or body writes them
- *  with the page rather than in a second write that lands after it is already on screen. */
+/** Lets a caller that knows tags, priority or body write them with the page rather than in a second
+ *  write that lands after it is on screen. */
 export interface NewPageFields {
   title?: string;
   folderId?: string | null;
@@ -30,10 +29,8 @@ export interface NewPageFields {
 }
 
 export interface PageWrites {
-  /** Resolve the "calendar description changed" notice — see the adapter method. */
   clearPendingDescription: (id: string) => Promise<void>;
   createPage: (opts: NewPageFields) => Promise<Page>;
-  /** Hard delete. Soft-delete (recoverable) is softDeletePage. */
   deletePage: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
   restorePage: (id: string) => Promise<void>;
@@ -87,10 +84,9 @@ export function usePageWrites({
   }
 
   async function softDeletePage(id: string) {
-    // `apply` runs synchronously, BEFORE the await. If the removal waited on the
-    // adapter, a fast Undo (restorePage) could interleave with the pending await
-    // and re-add the page while it's still present — duplicating it in the
-    // derived active/completed lists (and confusing the virtualizer).
+    // `apply` runs synchronously, BEFORE the await: if the removal waited on the adapter, a fast Undo
+    // could interleave and re-add the page while it's still present, duplicating it in the derived
+    // lists.
     const snapshot = pagesRef.current.find((p) => p.id === id);
     await optimistic({
       apply: () => {
@@ -115,17 +111,16 @@ export function usePageWrites({
     await adapter.restorePage(id);
     let page = await adapter.getPage(id);
     if (page) {
-      // A page deleted with its folder remembers a folder that may no longer exist,
-      // and came back pointing at nothing. Reparent before it reaches the store, so
-      // the list never holds a page whose folder cannot be found.
+      // A page deleted with its folder remembers a folder that may no longer exist and would come
+      // back pointing at nothing. Reparent before it reaches the store, so the list never holds a
+      // page whose folder cannot be found.
       const home = folderIdForRestoredPage(page.folderId, foldersRef.current, defaultFolderId);
       if (home !== page.folderId) {
         await adapter.updatePage(id, { folderId: home });
         page = (await adapter.getPage(id)) ?? page;
       }
       const summary = toPageSummary(page);
-      // Dedupe: never blind-append. If a copy is somehow still present
-      // (delete/undo race), replace it rather than create a duplicate.
+      // Replace a copy still present (delete/undo race) rather than create a duplicate.
       setPages((prev) => [...prev.filter((p) => p.id !== id), summary]);
     }
   }
@@ -170,8 +165,7 @@ export function usePageWrites({
       },
       write: async () => {
         const updated = await adapter.setPagesStatus(ids, status, completedAt);
-        // Reconcile from the DB truth (e.g. updatedAt) for the rows that actually
-        // changed; soft-deleted ids are absent from `updated` and left as-is.
+        // Reconcile from the DB truth for rows that changed; soft-deleted ids are absent from `updated`.
         const byId = new Map(updated.map((p) => [p.id, p]));
         setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
       },

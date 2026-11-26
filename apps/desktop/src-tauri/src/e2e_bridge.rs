@@ -42,8 +42,6 @@ const PORT: u16 = 1423;
 
 pub type Args = Map<String, Value>;
 
-/// A command's outcome as Tauri would settle it: the serialized value, or the
-/// payload the promise rejects with.
 pub type Reply = Result<Value, Value>;
 
 #[derive(Deserialize)]
@@ -54,11 +52,9 @@ struct Call {
     db: String,
 }
 
-/// Pools the bridge keeps open at once. Each holds a thread per connection and a checkpoint task
-/// until it is closed, and a lane runs thousands of tests with a database each: kept forever, they
-/// ran the process out of threads about 500 mutants into a mutation run, and every test after
-/// failed to reach its database. Past this the least recently used is closed, and its token
-/// reopens from disk on its next call.
+/// Each pool holds a thread per connection and a checkpoint task, and a lane runs thousands of
+/// tests with a database each: kept forever, they run the process out of threads. Past this the
+/// least recently used is closed, and its token reopens from disk on its next call.
 const OPEN_POOLS: usize = 24;
 
 struct Bridge {
@@ -71,7 +67,6 @@ struct Pools {
     /// A cell per token, so two tabs connecting one database at once (React's
     /// dev double-mount) open it once rather than racing its migrations.
     cells: HashMap<String, Arc<OnceCell<SqlitePool>>>,
-    /// Tokens with a cell, least recently used first.
     recent: VecDeque<String>,
     /// Every token `connect_db` opened, so a closed one reopens rather than reads as never
     /// connected.
@@ -155,9 +150,8 @@ async fn serve() -> std::io::Result<()> {
         let bridge = bridge.clone();
         tokio::spawn(async move {
             let service = service_fn(move |req| handle(bridge.clone(), req));
-            // One request per connection. Kept alive, WebKit sometimes sent a call down a
-            // connection as it closed, and the page saw "The network connection was lost" for a
-            // write the bridge never ran: a bulk delete left a page behind about one run in ten.
+            // One request per connection: kept alive, WebKit sometimes sends a call down a connection
+            // as it closes, and the page sees "The network connection was lost" for a write the bridge never ran.
             if let Err(e) = http1::Builder::new()
                 .keep_alive(false)
                 .serve_connection(TokioIo::new(stream), service)
@@ -451,9 +445,7 @@ impl Bridge {
     }
 }
 
-/// Take one argument out of a call, keyed the way Tauri keys it: the Rust name
-/// in camelCase. A missing key reads as null, so an `Option` argument can be
-/// left out, as it can over IPC.
+/// Keyed the way Tauri keys it (camelCase); a missing key reads as null, as over IPC.
 pub fn arg<T: DeserializeOwned>(args: &mut Args, name: &str) -> Result<T, Value> {
     let key = camel_case(name);
     let raw = args.remove(&key).unwrap_or(Value::Null);

@@ -109,6 +109,7 @@ const DATE_OR_TIME: [Granularity; 6] = [
     Granularity::Minute,
 ];
 
+/// Parse one line of quick-add input.
 pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
     if raw.trim().is_empty() {
         return ParseResult::Single {

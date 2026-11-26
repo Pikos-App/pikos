@@ -1,65 +1,3 @@
-// ─── NAVIGATION ───────────────────────────────────────────────────────────
-//
-// Tests are grouped roughly by RESULT SHAPE (single / finite / recurring)
-// with cross-cutting concerns at the bottom. New cases should live in the
-// section that matches their primary contract — if you find yourself unsure,
-// "scenario matrix" near the bottom holds one canonical case per shape.
-//
-// RESULT SHAPE — single (no schedule, title + metadata only)
-//   • single page creation
-//   • priority and folder edge cases
-//   • numeric priority shortcuts (!0-4)              ← table
-//   • empty-title cases
-//   • priority case-insensitivity
-//   • multi-tag ordering stability
-//   • tag and folder regex boundaries
-//
-// RESULT SHAPE — single (date-only, datetime, or date range)
-//   • time without date
-//   • duration parsing / duration parsing edges      ← table
-//   • bare date parsing (no @ prefix)
-//   • time ranges / time edge cases
-//   • multi-day all-day ranges + adjacent edges
-//   • for disambiguation (with/without recurrence)
-//   • chrono casual phrases (tomorrow morning, tonight, this/last weekday)
-//
-// RESULT SHAPE — finite (N concrete pages from m/w/f, weekdays, …)
-//   • finite recurrence + shared properties
-//
-// RESULT SHAPE — recurring (FREQ + optional BYDAY/INTERVAL/COUNT/UNTIL)
-//   • infinite recurrence
-//   • recurring word order / 'and' separator / plural day names
-//   • recurring with duration / metadata / time range
-//   • recurring title cleanliness
-//   • bare day names stay single                     ← regression
-//   • bounded recurrence — every X + window
-//   • every + day-list composition
-//   • default daily when window present
-//   • until / till as window boundary
-//   • interval cadences (biweekly, every other, every N)  ← table
-//   • interval + weekday composition (every other tuesday)
-//   • yearly cadence                                  ← table
-//   • monthly / weekly / daily keyword cadence
-//   • recurrence + window composition — adjacent edges
-//   • recurring edge cases
-//   • RRULE validation                                ← rrule round-trip
-//
-// CROSS-CUTTING
-//   • reminder tokens — units and shorthand          ← table
-//   • reminder tokens — all-day vs timed resolution  ← table
-//   • reminder tokens — nothing to anchor to         ← table
-//   • body separator ("//")                          ← table
-//   • token stripping and title cleanliness
-//   • title leakage — finite window keywords
-//   • time-without-date weekday anchoring
-//   • reference date variation                        ← year/month rollover
-//   • kitchen-sink composition                        ← inline snapshots
-//   • adversarial input                               ← case, punct, emoji
-//   • negative paths and garbage input                ← never throw
-//   • full NLP composition
-//   • scenario matrix (one canonical per shape)       ← table
-//   • parser invariants (property tests)              ← end of file
-
 import { describe, expect, it } from "vitest";
 
 import { parseRrule } from "../utils/recurrence";
@@ -68,12 +6,9 @@ import { assertCase, forAll, type ParserCase } from "./parser.testHelpers";
 
 const NOW = new Date("2026-03-15T12:00:00");
 
-/** Tabular runner that fixes the suite NOW. Use as `runCase({...})` inside an it.each. */
 const runCase = (c: ParserCase) => assertCase(c, NOW);
 
 describe("NL Page Creation Parser", () => {
-  // ─── 1. Single page creation ───────────────────────────────────────────────
-
   describe("single page creation", () => {
     const cases: ParserCase[] = [
       {
@@ -103,7 +38,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "brainstorm !high #design #ux",
       },
-      // NOW = Sunday 2026-03-15, @monday → next Monday = 2026-03-16.
       {
         expected: {
           input: { scheduledStart: "2026-03-16T09:00:00", title: "standup" },
@@ -119,7 +53,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-20T15:30:00" }, type: "single" },
         input: "call @march20 at 3:30pm",
       },
-      // NOW=12:00, 15:30 is future → today.
       {
         expected: { input: { scheduledStart: "2026-03-15T15:30:00" }, type: "single" },
         input: "meeting at 3:30pm",
@@ -128,7 +61,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
         input: "meeting 14:00",
       },
-      // Plain text → no schedule, no tags. Title carries the full input.
       {
         expected: {
           input: { tags: [], title: "quick note" },
@@ -137,8 +69,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "quick note",
       },
-      // chrono-node may or may not parse "march5" without a space.
-      // Known limitation: prefer "@march 5" or "@mar 5".
+      // chrono may not parse "march5" without a space; "@march 5" is the supported form.
       {
         expected: {
           custom: (r) => {
@@ -156,11 +87,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 2. Priority & folder edge cases ───────────────────────────────────────
-
   describe("priority and folder edge cases", () => {
     const cases: ParserCase[] = [
-      // Last-wins for priority and folder.
       {
         expected: { input: { priority: "low" }, type: "single" },
         input: "task !urgent !low",
@@ -173,7 +101,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { folderQuery: "C" }, type: "single" },
         input: "task ~A ~B ~C",
       },
-      // Bare priority token → empty title.
       {
         expected: { input: { priority: "high", title: "" }, type: "single" },
         input: "!high",
@@ -181,8 +108,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── Numeric priority shortcuts ────────────────────────────────────────────
 
   describe("numeric priority shortcuts (!0-4)", () => {
     const cases: ParserCase[] = [
@@ -194,29 +119,20 @@ describe("NL Page Creation Parser", () => {
       { expected: { input: { priority: "medium" }, type: "single" }, input: "task !3" },
       { expected: { input: { priority: "low" }, type: "single" }, input: "task !4" },
       { expected: { input: { priority: null }, type: "single" }, input: "task !0" },
-      // last wins
       { expected: { input: { priority: "medium" }, type: "single" }, input: "task !1 !3" },
-      // !5 isn't a valid numeric priority — title containing "!5" proves
-      // it wasn't consumed; toMatchObject can't assert "priority absent",
-      // so the title assertion carries the contract.
+      // `toMatchObject` can't assert "priority absent", so the title still holding "!5" carries it.
       { expected: { input: { title: "task !5" }, type: "single" }, input: "task !5" },
-      // word form still works
       { expected: { input: { priority: "urgent" }, type: "single" }, input: "task !urgent" },
     ];
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 3. Time without date ──────────────────────────────────────────────────
-
   describe("time without date", () => {
-    // NOW = 12:00.
     const cases: ParserCase[] = [
-      // 2pm is future → today.
       {
         expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
         input: "meeting 2pm",
       },
-      // 8am is past → tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T08:00:00" }, type: "single" },
         input: "meeting 8am",
@@ -224,8 +140,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 4. Duration parsing ───────────────────────────────────────────────────
 
   describe("duration parsing", () => {
     const cases: ParserCase[] = [
@@ -240,11 +154,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 5. Finite recurrence ─────────────────────────────────────────────────
-
   describe("finite recurrence", () => {
     const cases: ParserCase[] = [
-      // m/w/f at 3pm for 45m → 3 pages (Mon 3/16, Wed 3/18, Fri 3/20).
       {
         expected: {
           count: 3,
@@ -257,7 +168,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "run m/w/f at 3pm for 45m",
       },
-      // m/w/f for 1h through march 31: 3/16, 3/18, 3/20, 3/23, 3/25, 3/27, 3/30 = 7.
       {
         expected: {
           count: 7,
@@ -274,20 +184,18 @@ describe("NL Page Creation Parser", () => {
         },
         input: "gym m/w/f for 1h through march 31",
       },
-      // weekdays at 9am 3 times → next 3 weekdays.
       {
         expected: {
           count: 3,
           inputs: [
-            { scheduledStart: "2026-03-16T09:00:00" }, // Mon
-            { scheduledStart: "2026-03-17T09:00:00" }, // Tue
-            { scheduledStart: "2026-03-18T09:00:00" }, // Wed
+            { scheduledStart: "2026-03-16T09:00:00" },
+            { scheduledStart: "2026-03-17T09:00:00" },
+            { scheduledStart: "2026-03-18T09:00:00" },
           ],
           type: "finite",
         },
         input: "review sprint weekdays at 9am 3 times",
       },
-      // Bare weekdays → next 5 weekdays (Mon–Fri).
       {
         expected: {
           count: 5,
@@ -302,7 +210,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup weekdays",
       },
-      // t/th/f slash syntax — t maps to Tuesday: Tue 3/17, Thu 3/19, Fri 3/20.
       {
         expected: {
           count: 3,
@@ -315,7 +222,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "run t/th/f at 3pm",
       },
-      // Through Thursday March 19 → Mon 3/16 and Wed 3/18, NOT Fri 3/20.
       {
         expected: {
           count: 2,
@@ -324,7 +230,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "task m/w/f through march 19",
       },
-      // scheduledEnd computes correctly on expanded finite pages.
       {
         expected: {
           count: 3,
@@ -342,8 +247,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 6. Finite recurrence — shared properties ─────────────────────────────
 
   describe("finite recurrence shared properties", () => {
     it.each<ParserCase>([
@@ -363,10 +266,7 @@ describe("NL Page Creation Parser", () => {
     ])("$input", runCase);
   });
 
-  // ─── 7. Infinite recurrence ───────────────────────────────────────────────
-
   describe("infinite recurrence", () => {
-    // NOW = Sun 2026-03-15. Next Monday = 2026-03-16. Wed 2026-03-18 → next Monday = 2026-03-23.
     const WED = new Date("2026-03-18T12:00:00");
     const cases: ParserCase[] = [
       {
@@ -446,12 +346,7 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 7b. Recurring — word order variations ────────────────────────────────
-
   describe("recurring word order variations", () => {
-    // All variations should produce the same result: recurring WEEKLY;BYDAY=MO
-    // with scheduledStart on next Monday at 9am. Title "standup" survives in
-    // whatever case the parser preserves; case-insensitive match accepts all.
     const cases: ParserCase[] = [
       "standup every monday at 9am",
       "standup at 9am every monday",
@@ -472,8 +367,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 7c. Recurring — "and" separator ─────────────────────────────────────
-
   describe("recurring with 'and' separator", () => {
     const cases: ParserCase[] = [
       {
@@ -488,7 +381,6 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["BYDAY=TU,TH"], type: "recurring" },
         input: "gym every tue and thu at 6pm",
       },
-      // Oxford comma.
       {
         expected: { rrule: ["BYDAY=MO,WE,FR"], type: "recurring" },
         input: "standup every mon, wed, and fri at 9am",
@@ -496,8 +388,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7d. Recurring — plural day names ────────────────────────────────────
 
   describe("recurring via plural day names", () => {
     const cases: ParserCase[] = [
@@ -513,12 +403,10 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["BYDAY=TU,TH"], type: "recurring" },
         input: "gym tuesdays and thursdays at 6pm",
       },
-      // "on" + plural.
       {
         expected: { rrule: ["BYDAY=MO"], type: "recurring" },
         input: "standup on mondays at 9am",
       },
-      // Plural without time → all-day recurring (next Friday = 2026-03-20).
       {
         expected: {
           input: { scheduledStart: "2026-03-20" },
@@ -530,8 +418,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7e. Recurring — duration preserved ──────────────────────────────────
 
   describe("recurring with duration", () => {
     const TUE_MORN = new Date("2026-03-16T08:00:00");
@@ -547,7 +433,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday at 9am for 30m",
       },
-      // NOW = Mon 2026-03-16 08:00; 9am future → today.
       {
         expected: {
           input: { durationMinutes: 15 },
@@ -560,8 +445,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7f. Recurring — metadata preserved ──────────────────────────────────
 
   describe("recurring with metadata", () => {
     it.each<ParserCase>([
@@ -580,8 +463,6 @@ describe("NL Page Creation Parser", () => {
       },
     ])("$input", runCase);
   });
-
-  // ─── 7g. Recurring — title cleanliness ───────────────────────────────────
 
   describe("recurring title cleanliness", () => {
     const cases: ParserCase[] = [
@@ -613,31 +494,21 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 7h. Bare day names should NOT recur ─────────────────────────────────
-
   describe("bare day names stay single (not recurring)", () => {
     const cases: ParserCase[] = [
       {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "standup monday at 9am",
       },
-      // Smoke test: just the type contract.
       { expected: { type: "single" }, input: "call next monday" },
-      // Singular "on monday".
       { expected: { type: "single" }, input: "meeting on monday at 2pm" },
     ];
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 7i. Bounded recurrence (every X + window) ───────────────────────────
-  //
-  // "every X for N weeks/days/months" or "N times" or "through <date>"
-  // should yield ONE recurring page with a bounded RRULE (COUNT or UNTIL),
-  // expanded virtually — NOT N independent pages.
-
   describe("bounded recurrence — every X + window", () => {
     const cases: ParserCase[] = [
-      // Regression: ~folder must not turn the bounded recurring page into a finite list.
+      // ~folder must not turn a bounded recurring page into a finite list.
       {
         expected: {
           input: { folderQuery: "dog", title: "run" },
@@ -671,7 +542,6 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: [], rruleAbsent: ["DTSTART"], type: "recurring" },
         input: "every monday for 4 weeks",
       },
-      // Expansion-count rows.
       {
         expected: {
           expansion: { count: 10, dtstart: "20260316T150000Z" },
@@ -691,7 +561,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "every monday for 2 weeks",
       },
-      // 7am with NOW=12:00 → tomorrow (3/16); 5-day window ends 3/20.
       {
         expected: {
           expansion: { count: 5, dtstart: "20260316T070000Z" },
@@ -701,8 +570,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "water plant every day at 7am for 5 days",
       },
-      // dtstart = today (2026-03-15). UNTIL ≈ +89 days ≈ June 11.
-      // Monthly from 3/15: 3/15, 4/15, 5/15, 6/15 — but UNTIL < 6/15 → 3 occurrences.
       {
         expected: {
           expansion: { count: 3, dtstart: "20260315T000000Z" },
@@ -711,7 +578,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "pay rent every month for 3 months",
       },
-      // Mondays on/before Apr 30: 3/16, 3/23, 3/30, 4/6, 4/13, 4/20, 4/27 = 7.
       {
         expected: {
           expansion: { count: 7, dtstart: "20260316T000000Z" },
@@ -720,8 +586,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday through april 30",
       },
-      // From 3/15, scheduledStart = Tue 3/17 18:00. 2 weeks window through 3/30.
-      // Occurrences: 3/17, 3/19, 3/24, 3/26 = 4.
       {
         expected: {
           expansion: { count: 4, dtstart: "20260317T180000Z" },
@@ -738,7 +602,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every weekday at 9am for 2 weeks",
       },
-      // Round-trip parseable: RRULE alone (no DTSTART) survives parseRrule.
       {
         expected: {
           custom: (r) => {
@@ -752,11 +615,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7j. Composition: every + slash / plural days ────────────────────────
-  //
-  // "every [week] <day-list>" should augment the infinite weekly rule with
-  // BYDAY rather than overwrite it with a finite-slash list.
 
   describe("every + day-list composition", () => {
     const cases: ParserCase[] = [
@@ -775,7 +633,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "run every week m/f for 10 weeks",
       },
-      // Implicit weekly. NOW=Sun 3/15, next Mon 3/16, 3pm.
       {
         expected: {
           input: { scheduledStart: "2026-03-16T15:00:00", title: "run" },
@@ -788,9 +645,8 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["BYDAY=MO,WE,FR"], type: "recurring" },
         input: "run every m/w/f at 3pm",
       },
-      // Regression: full/short day names in a slash list under "every" must
-      // stay one infinite BYDAY rule. Previously the "every <day>" rule ate
-      // "every mon" and stranded "/wed/fri", collapsing it to a finite series.
+      // Day names in a slash list under "every" stay one infinite BYDAY rule: the "every <day>"
+      // rule must not eat "every mon" and strand "/wed/fri".
       {
         expected: { rrule: ["FREQ=WEEKLY", "BYDAY=MO,WE,FR"], type: "recurring" },
         input: "run every mon/wed/fri at 3pm",
@@ -803,19 +659,11 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["FREQ=WEEKLY", "BYDAY=MO,WE"], type: "recurring" },
         input: "standup every week mondays and wednesdays at 9am",
       },
-      // Regression: bare m/f (no "every") stays finite.
       { expected: { count: 2, type: "finite" }, input: "run m/f at 3pm" },
-      // Regression: bare "weekdays" stays finite (Mon–Fri).
       { expected: { count: 5, type: "finite" }, input: "standup weekdays" },
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7k. Default daily when window given without cadence ─────────────────
-  //
-  // A window ("10 times", "for 2 weeks", "through <date>") without an explicit
-  // cadence word defaults to FREQ=DAILY. Keeps the user's count/boundary
-  // signal meaningful instead of silently stripping it from the title.
 
   describe("default daily when window present but no cadence", () => {
     const cases: ParserCase[] = [
@@ -836,7 +684,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "run dog 10 times tomorrow",
       },
-      // 8am with NOW=12:00 → tomorrow (3/16); 2-week window → 14 occurrences.
       {
         expected: {
           expansion: { count: 14, dtstart: "20260316T080000Z" },
@@ -854,14 +701,11 @@ describe("NL Page Creation Parser", () => {
         },
         input: "practice piano through june",
       },
-      // No window → single, title unchanged.
       {
         expected: { input: { title: "run dog" }, type: "single" },
         input: "run dog",
       },
-      // Regression: slash has its own cadence, stays finite.
       { expected: { count: 6, type: "finite" }, input: "run m/w/f for 2 weeks" },
-      // Regression: explicit 'daily 10 times' is unchanged.
       {
         expected: { rrule: ["FREQ=DAILY", "COUNT=10"], type: "recurring" },
         input: "run dog daily 10 times",
@@ -869,8 +713,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7l. "until" / "till" as window boundary (synonym of "through") ──────
 
   describe("until / till as window boundary", () => {
     const cases: ParserCase[] = [
@@ -886,7 +728,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "meditate until june",
       },
-      // 'till' alias.
       {
         expected: { rrule: ["UNTIL="], type: "recurring" },
         input: "practice every day till june",
@@ -894,8 +735,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7m. Interval cadences (biweekly / every other / every N) ────────────
 
   describe("interval cadences", () => {
     const cases: ParserCase[] = [
@@ -935,7 +774,6 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["FREQ=MONTHLY", "INTERVAL=6"], type: "recurring" },
         input: "checkup every 6 months",
       },
-      // every N + COUNT → bounded
       {
         expected: { rrule: ["INTERVAL=2", "COUNT=5"], type: "recurring" },
         input: "sync every 2 weeks 5 times",
@@ -943,8 +781,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 7n. Yearly / annually ───────────────────────────────────────────────
 
   describe("yearly cadence", () => {
     const cases: ParserCase[] = [
@@ -958,10 +794,7 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 7o. Time ranges (from X to Y) ───────────────────────────────────────
-
   describe("time ranges", () => {
-    // NOW=12:00, 3pm is future → today.
     const cases: ParserCase[] = [
       {
         expected: {
@@ -984,7 +817,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "meeting 3pm to 5pm tomorrow",
       },
-      // Recurring + time range.
       {
         expected: {
           input: {
@@ -1000,11 +832,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── Multi-day all-day ranges ────────────────────────────────────────────
-  // chrono-node handles the parsing — we only need to plumb `result.end` into
-  // scheduledEnd for date-only spans. Only supported when start is date-only
-  // (timed events with a date range are deliberately treated as single-day
-  // timed to avoid ambiguous semantics).
+  // Date-only spans only: a timed event with a date range is treated as single-day, because the
+  // semantics are ambiguous.
 
   describe("multi-day all-day ranges", () => {
     const cases: ParserCase[] = [
@@ -1026,10 +855,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "vacation from April 18 to April 25",
       },
-      // "to" joins a date range; chrono returns both dates with day-certainty.
-      // "through" / "thru" between "<Month> <day>" pairs is normalized to "to" at
-      // the top of parseInput so spans parse identically — see the "<Month> <day>
-      // through ..." cases below.
       {
         expected: {
           input: { scheduledEnd: "2026-04-20", scheduledStart: "2026-04-18" },
@@ -1037,7 +862,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "offsite April 18 to April 20",
       },
-      // A weekday end is certain of its weekday, not its day, and was dropped.
+      // A weekday end is certain of its weekday, not its day, and must not be dropped.
       {
         expected: {
           input: { scheduledEnd: "2026-03-20", scheduledStart: "2026-03-16", title: "offsite" },
@@ -1059,7 +884,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "retreat Fri to Mon",
       },
-      // NOW=12:00, 3pm is future → today (2026-03-15). Time range stays single-day.
       {
         expected: {
           input: {
@@ -1070,9 +894,8 @@ describe("NL Page Creation Parser", () => {
         },
         input: "meeting 3pm to 5pm",
       },
-      // "<Month> <day> through <day>" gets normalized to "... to ..." up front;
-      // without this, chrono reads "2 through 10" as a time range (2am–10am) and
-      // produces a 2am timed event tomorrow instead of the span the user typed.
+      // "<Month> <day> through <day>" is rewritten to "to" first; chrono would read "2 through 10" as
+      // the time range 2am-10am.
       {
         expected: {
           input: {
@@ -1098,7 +921,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip April 18 through April 25",
       },
-      // Cross-year span.
       {
         expected: {
           input: { scheduledEnd: "2027-01-03", scheduledStart: "2026-12-28" },
@@ -1106,9 +928,8 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip Dec 28 through Jan 3",
       },
-      // Regression: cadence + "through" stays a bounded-recurrence window — the
-      // rewrite only fires when a "<Month> <day>" literal sits immediately before
-      // "through", which isn't the case here.
+      // Cadence plus "through" stays a bounded window: the rewrite fires only when a "<Month> <day>"
+      // literal sits right before "through".
       {
         expected: { rrule: ["FREQ=DAILY", "UNTIL=202606"], type: "recurring" },
         input: "practice piano through june",
@@ -1117,7 +938,6 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["BYDAY=MO", "UNTIL=2026043"], type: "recurring" },
         input: "standup every monday through april 30",
       },
-      // Single bare date (no range) → no scheduledEnd.
       {
         expected: {
           input: { scheduledStart: "2026-04-18" },
@@ -1126,8 +946,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "vacation April 18",
       },
-      // Date-range + time has conservative semantics: start gets the time, and
-      // end (if present) collapses to the same day. Conditional end check.
+      // The start gets the time and any end collapses to the same day.
       {
         expected: {
           custom: (r) => {
@@ -1150,11 +969,8 @@ describe("NL Page Creation Parser", () => {
     });
   });
 
-  // ─── 8. RRULE validation ──────────────────────────────────────────────────
-
   describe("RRULE validation", () => {
     const cases: ParserCase[] = [
-      // Rrule string is parseable by the recurrence engine.
       {
         expected: {
           custom: (r) => {
@@ -1165,7 +981,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "every monday",
       },
-      // Rrule must not contain DTSTART.
       {
         expected: { rrule: [], rruleAbsent: ["DTSTART"], type: "recurring" },
         input: "morning run daily",
@@ -1174,16 +989,12 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 9. `for` disambiguation ─────────────────────────────────────────────
-
   describe("for disambiguation", () => {
     const cases: ParserCase[] = [
-      // Duration only.
       {
         expected: { input: { durationMinutes: 60 }, type: "single" },
         input: "task for 1h",
       },
-      // Window + no cadence → defaults to daily.
       {
         expected: {
           input: { title: "task" },
@@ -1192,8 +1003,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "task for 2 weeks",
       },
-      // Finite, duration=60, window=2 weeks. 2 weeks from 3/15: Mon/Wed/Fri in
-      // 3/16–3/29 → 3/16, 3/18, 3/20, 3/23, 3/25, 3/27 = 6 pages (3/29 is Sunday).
       {
         expected: {
           count: 6,
@@ -1206,16 +1015,12 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 10. Token stripping / title cleanliness ──────────────────────────────
-
   describe("token stripping and title cleanliness", () => {
     const cases: ParserCase[] = [
-      // Strips tokens, collapses whitespace.
       {
         expected: { input: { title: "meeting" }, type: "single" },
         input: "  #work  meeting  @tomorrow  at 2pm  ",
       },
-      // Only tags → empty title.
       {
         expected: {
           input: { tags: ["a", "b", "c"], title: "" },
@@ -1223,12 +1028,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "#a #b #c",
       },
-      // Plain text passthrough.
       {
         expected: { input: { title: "hello world" }, type: "single" },
         input: "hello world",
       },
-      // Unrecognized !token stays in title.
       {
         expected: {
           input: { title: "task !invalid" },
@@ -1237,7 +1040,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "task !invalid",
       },
-      // Bare ~ with no word stays in title.
       {
         expected: {
           inputAbsent: ["folderQuery"],
@@ -1250,11 +1052,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 11. daily keyword interaction ────────────────────────────────────────
-
   describe("daily keyword interaction with every", () => {
     const cases: ParserCase[] = [
-      // 'daily' survives in title when 'every <day>' is the recurrence.
       {
         expected: {
           input: { title: "daily standup" },
@@ -1263,7 +1062,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "daily standup every monday",
       },
-      // 'daily' alone triggers FREQ=DAILY recurrence.
       {
         expected: {
           input: { title: "standup" },
@@ -1276,11 +1074,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 12. bare date parsing (no @ prefix) ──────────────────────────────────
-
   describe("bare date parsing (no @ prefix)", () => {
     const cases: ParserCase[] = [
-      // Bare temporal keywords / day-name positions.
       {
         expected: {
           input: { scheduledStart: "2026-03-16T14:00:00", title: "team meeting" },
@@ -1292,9 +1087,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-15", title: "lunch" }, type: "single" },
         input: "lunch today",
       },
-      // "monday" at start: chrono picks it up as first result; subsequent "9am" is a
-      // separate result and not merged (parser uses chronoResults[0] only). Tested
-      // without trailing time to cleanly verify day-at-start parsing.
       {
         expected: { input: { scheduledStart: "2026-03-16", title: "standup" }, type: "single" },
         input: "monday standup",
@@ -1310,7 +1102,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "team monday meeting",
       },
-      // Multi-word relative phrases.
       {
         expected: {
           input: { scheduledStart: "2026-03-20T15:00:00", title: "review" },
@@ -1333,12 +1124,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "call march 20 at 3:30pm",
       },
-      // Bare time only — NOW=12:00, so 2pm is future → today.
       {
         expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
         input: "meeting 2pm",
       },
-      // @ prefix still works (regression check).
       {
         expected: {
           input: { scheduledStart: "2026-03-16T14:00:00", title: "meeting" },
@@ -1350,18 +1139,15 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "standup @monday 9am",
       },
-      // Bare day name consumed by 'every' before chrono sees it → recurring.
       {
         expected: { rrule: ["BYDAY=MO"], type: "recurring" },
         input: "standup every monday",
       },
-      // Slash syntax consumed before chrono sees it → finite (m/w/f from Sun 3/15: 3/16, 3/18, 3/20).
       {
         expected: { count: 3, type: "finite" },
         input: "run m/w/f at 3pm",
       },
-      // Bare month alone: chrono resolves with forwardDate. Only assert presence
-      // of scheduledStart (exact value depends on chrono version).
+      // Only presence is asserted: the exact value depends on the chrono version.
       {
         expected: {
           input: { title: "plan trip" },
@@ -1370,8 +1156,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "plan trip march",
       },
-      // "may" in "may day celebration" is ambiguous enough that chrono skips it.
-      // No false positive — safe/correct behaviour.
+      // chrono skips the ambiguous "may" in "may day celebration".
       {
         expected: {
           input: { title: "may day celebration" },
@@ -1383,8 +1168,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 13. Edge cases from test strategy ──────────────────────────────────────
 
   describe("monthly keyword", () => {
     it.each<ParserCase>([
@@ -1409,7 +1192,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "sync weekly",
       },
-      // NOW=Sun 3/15, 3pm future → today. Next weekly anchors to today.
       {
         expected: {
           input: { scheduledStart: "2026-03-15T15:00:00", title: "review" },
@@ -1424,7 +1206,6 @@ describe("NL Page Creation Parser", () => {
 
   describe("for disambiguation — no recurrence pattern", () => {
     const cases: ParserCase[] = [
-      // 'for 30min' with no recurrence → duration only.
       {
         expected: {
           input: { durationMinutes: 30, title: "focus session" },
@@ -1432,7 +1213,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "focus session for 30min",
       },
-      // 'for 2h' without day pattern → duration only. NOW=Sun 3/15, tomorrow 9am.
       {
         expected: {
           input: {
@@ -1468,8 +1248,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 14. Recurring + time range (timed event with end) ────────────────────
-
   describe("recurring with time range", () => {
     const cases: ParserCase[] = [
       {
@@ -1499,17 +1277,12 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 15. Edge cases: midnight times, zero/negative bounds, bare digits ─
-
   describe("time edge cases", () => {
-    // NOW = 2026-03-15 12:00 (noon).
     const cases: ParserCase[] = [
-      // 12am (00:00) today is past → tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T00:00:00" }, type: "single" },
         input: "late job at 12am",
       },
-      // 11:59pm today is future → today.
       {
         expected: { input: { scheduledStart: "2026-03-15T23:59:00" }, type: "single" },
         input: "late note at 11:59pm",
@@ -1518,12 +1291,9 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 16. Token regex boundaries (\w only — no hyphens/unicode) ───────────
-
   describe("tag and folder regex boundaries", () => {
     const cases: ParserCase[] = [
-      // Regex is /#(\w+)/ — \w matches [A-Za-z0-9_], not hyphens. Anything after
-      // the hyphen stays in the title.
+      // `\w` excludes hyphens, so what follows one stays in the title.
       {
         expected: {
           input: { tags: ["multi"] },
@@ -1532,7 +1302,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "review #multi-word",
       },
-      // Tag with digits.
       {
         expected: {
           input: { tags: ["q4", "2025"], title: "plan" },
@@ -1540,17 +1309,15 @@ describe("NL Page Creation Parser", () => {
         },
         input: "plan #q4 #2025",
       },
-      // Tag with underscores.
       {
         expected: { input: { tags: ["snake_case"] }, type: "single" },
         input: "note #snake_case",
       },
-      // Parser does NOT dedupe duplicate tag names — caller's responsibility.
+      // Duplicates are the caller's to handle.
       {
         expected: { input: { tags: ["work", "work"] }, type: "single" },
         input: "note #work #work",
       },
-      // Hyphenated folder captures only the word-char prefix.
       {
         expected: {
           input: { folderQuery: "side" },
@@ -1559,7 +1326,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "page ~side-project",
       },
-      // Parser preserves casing; QuickAddDialog lowercases for the Inbox check.
+      // Casing is preserved; the Inbox check lowercases.
       {
         expected: {
           input: { folderQuery: "Inbox", title: "dump" },
@@ -1571,11 +1338,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── 17. Title remains empty when all input is tokens ────────────────────
-
   describe("empty-title cases (caller falls back to 'Untitled')", () => {
     const cases: ParserCase[] = [
-      // Only a date → empty title.
       {
         expected: {
           input: { scheduledStart: "2026-03-16", title: "" },
@@ -1583,7 +1347,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "tomorrow",
       },
-      // Only a time. NOW=12:00, 3pm future → today.
       {
         expected: {
           input: { scheduledStart: "2026-03-15T15:00:00", title: "" },
@@ -1591,7 +1354,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "at 3pm",
       },
-      // Only a duration → empty title, no schedule.
       {
         expected: {
           input: { durationMinutes: 120, title: "" },
@@ -1599,7 +1361,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "for 2h",
       },
-      // Only priority + folder.
       {
         expected: {
           input: { folderQuery: "Projects", priority: "high", title: "" },
@@ -1610,8 +1371,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 18. Priority casing variations ──────────────────────────────────────
 
   describe("priority case-insensitivity", () => {
     const cases: ParserCase[] = [
@@ -1626,8 +1385,6 @@ describe("NL Page Creation Parser", () => {
     ];
     it.each(cases)("$input", runCase);
   });
-
-  // ─── 19. Composition: full NLP combo ────────────────────────────────────
 
   describe("full NLP composition", () => {
     const cases: ParserCase[] = [
@@ -1646,7 +1403,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "team review tomorrow at 2pm for 90m !high #design #ux ~Engineering",
       },
-      // Token-order independence — same combo, scrambled.
       {
         expected: {
           input: {
@@ -1666,8 +1422,6 @@ describe("NL Page Creation Parser", () => {
 
   describe("recurring edge cases", () => {
     const cases: ParserCase[] = [
-      // INTERVAL=1 may be omitted by the rrule serializer (default), but the
-      // emitted rule must round-trip cleanly.
       {
         expected: {
           custom: (r) => {
@@ -1678,7 +1432,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "sync every 1 week",
       },
-      // 'every monday for 1 week' → bounded with one Monday in the window.
       {
         expected: {
           expansion: { count: 1, dtstart: "20260316T000000Z" },
@@ -1687,7 +1440,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday for 1 week",
       },
-      // 'every monday 1 time' → COUNT=1.
       {
         expected: { rrule: ["COUNT=1"], type: "recurring" },
         input: "kickoff every monday 1 times",
@@ -1696,12 +1448,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── multi-day all-day range — adjacent failure modes ───────────────────────
-  // The "Month day-day" / "Month day through day" rewrite has tests for the
-  // happy paths and the cross-year case. The cases below cover the edges that
-  // historically broke before the rewrite landed: hyphen with single-digit
-  // days, ordinals, abbreviated months, range plus metadata tokens, degenerate
-  // same-day ranges, and reversed ranges (end ≤ start ⇒ no scheduledEnd).
   describe("multi-day all-day ranges — adjacent edges", () => {
     const cases: ParserCase[] = [
       {
@@ -1718,7 +1464,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip Sep 1-7",
       },
-      // The rewrite regex captures ordinal suffixes so the span resolves cleanly.
+      // The rewrite captures ordinal suffixes.
       {
         expected: {
           input: { scheduledEnd: "2026-05-10", scheduledStart: "2026-05-02" },
@@ -1733,10 +1479,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip Apr 18th thru Apr 25th",
       },
-      // chrono is configured with forwardDate: true. When the second date is
-      // earlier in the calendar than the first, it advances to the next year so
-      // the range is still chronologically valid. Pinned so a future change to
-      // forwardDate doesn't break silently.
+      // forwardDate advances an earlier second date to the next year so the range stays valid.
       {
         expected: {
           input: { scheduledEnd: "2027-04-18", scheduledStart: "2026-04-25" },
@@ -1791,8 +1534,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "travel from May 2 to May 10",
       },
-      // Chrono consumes "tomorrow" but not the leading "from" — verify the strip
-      // extension covers single-date phrasing too, not just spans.
+      // chrono consumes "tomorrow" but not the leading "from"; the strip extension covers it.
       {
         expected: { input: { title: "call" }, type: "single" },
         input: "call from tomorrow",
@@ -1804,7 +1546,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip May 2 through Jun 5",
       },
-      // Degenerate same-day: no scheduledEnd.
       {
         expected: {
           input: { scheduledStart: "2026-04-18" },
@@ -1813,8 +1554,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip April 18 to April 18",
       },
-      // No month → the rewrite regex doesn't apply. "18-25" is not a date in
-      // chrono's grammar; the span fields must not be set.
       {
         expected: { inputAbsent: ["scheduledEnd"], type: "single" },
         input: "trip 18-25",
@@ -1823,12 +1562,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── token leakage — adjacent failure modes ────────────────────────────────
-  // After a finite-window phrase ("through <date>" / "until <date>") consumes
-  // its tokens, no boundary keyword should remain in the title.
   describe("title leakage — finite window keywords", () => {
     const cases: ParserCase[] = [
-      // 'through' + month name consumed after a successful boundary parse.
       {
         expected: {
           inputMatches: { title: /^(?!.*\bthrough\b)(?!.*\bapril\b).*$/i },
@@ -1853,12 +1588,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday till april 30",
       },
-      // 'X times' consumed even when paired with 'every'.
       {
         expected: { input: { title: "standup" }, rrule: [], type: "recurring" },
         input: "standup every monday 4 times",
       },
-      // 'for N weeks' consumed when paired with cadence.
       {
         expected: { input: { title: "standup" }, rrule: [], type: "recurring" },
         input: "standup every monday for 2 weeks",
@@ -1867,13 +1600,10 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── title leakage — date connectors and day-of-month forms ─────────────────
-  // NOW = Sun 2026-03-15 noon. chrono inconsistently absorbs the connector
-  // ("on friday" yes, "on May 24" no) and can't parse bare day-of-month forms
-  // at all ("on the 24th", "Sat 24"). Both must vanish from the title.
+  // chrono inconsistently absorbs the connector ("on friday" yes, "on May 24" no) and can't parse
+  // "on the 24th" or "Sat 24". Both must vanish from the title.
   describe("title leakage — connectors and day-of-month", () => {
     const cases: ParserCase[] = [
-      // Leading connector swallowed after a chrono date match.
       {
         expected: {
           input: { scheduledStart: "2026-03-24T14:00:00", title: "Call mom" },
@@ -1896,30 +1626,25 @@ describe("NL Page Creation Parser", () => {
         },
         input: "Submit report for tomorrow",
       },
-      // Bare day-of-month with a calendar preposition → this/next month's day.
       {
         expected: { input: { scheduledStart: "2026-03-24", title: "Meeting" }, type: "single" },
         input: "Meeting on the 24th",
       },
       {
-        // 1st is past in March → rolls to April.
         expected: { input: { scheduledStart: "2026-04-01", title: "Pay rent" }, type: "single" },
         input: "Pay rent by the 1st",
       },
-      // Weekday + number: day-of-month wins, weekday hint dropped.
       {
         expected: { input: { scheduledStart: "2026-03-24", title: "Plan sprint" }, type: "single" },
         input: "Plan sprint Sat 24",
       },
       {
-        // 13th past in March → April; trailing time attaches cleanly.
         expected: {
           input: { scheduledStart: "2026-04-13T16:00:00", title: "Standup" },
           type: "single",
         },
         input: "Standup fri 13th 4pm",
       },
-      // Negative: bare ordinals/numbers without a connector stay in the title.
       {
         expected: {
           input: { title: "3rd draft review" },
@@ -1944,7 +1669,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "review section 24",
       },
-      // Negative: "every <weekday>" recurrence not eaten by the weekday+number rule.
       {
         expected: { rrule: ["FREQ=WEEKLY", "BYDAY=FR"], type: "recurring" },
         input: "standup every friday",
@@ -1953,8 +1677,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // NOW = Sun 2026-03-15 noon. A sentence typed whole, or passed whole by an assistant:
-  // the date phrase, its connecting words and the full stop that ended the sentence all go.
+  // A sentence typed whole, or passed whole by an assistant: the date phrase, its connecting
+  // words and the full stop that ended the sentence all go.
   describe("title leakage — sentences typed whole", () => {
     const cases: ParserCase[] = [
       {
@@ -2000,7 +1724,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "Coffee with Jordan on Thursday at 3:30pm.",
       },
-      // Negative: a full stop the title itself ends with stays.
       {
         expected: {
           input: { title: "Call mum." },
@@ -2009,12 +1732,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "Call mum.",
       },
-      // Negative: "!" and "?" carry meaning and stay after a strip.
       {
         expected: { input: { scheduledStart: "2026-03-16", title: "Ship it!" }, type: "single" },
         input: "Ship it tomorrow!",
       },
-      // Negative: "end of" about something other than a month is not a date.
       {
         expected: {
           input: { title: "Read the end of the book" },
@@ -2074,11 +1795,8 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── time-without-date anchor — additional weekday cases ────────────────────
   describe("time-without-date weekday anchoring", () => {
-    // NOW = 2026-03-15 (Sunday).
     const cases: ParserCase[] = [
-      // "every tuesday at 4pm" anchors to Mar 17.
       {
         expected: {
           input: { scheduledStart: "2026-03-17T16:00:00" },
@@ -2087,7 +1805,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "call every tuesday at 4pm",
       },
-      // BYDAY=FR + time anchors to next Friday.
       {
         expected: {
           input: { scheduledStart: "2026-03-20T09:00:00" },
@@ -2100,7 +1817,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── duration parsing — parsing-only edges ────────────────────────────────
   describe("duration parsing edges", () => {
     const cases: ParserCase[] = [
       {
@@ -2119,7 +1835,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── recurrence + window composition adjacent ──────────────────────────────
   describe("recurrence + window composition — adjacent edges", () => {
     const cases: ParserCase[] = [
       {
@@ -2147,11 +1862,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── interval + weekday combinations ───────────────────────────────────────
-  // The interval regex requires a unit word (day/week/month/year), so phrases
-  // like "every other tuesday" don't match it and fall through to chrono. These
-  // tests document the gap so we can decide whether to extend the grammar
-  // (interval + BYDAY) before launch.
   describe("interval + weekday composition", () => {
     const cases: ParserCase[] = [
       {
@@ -2168,7 +1878,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "kickoff every 2 mondays",
       },
-      // NOW = Sunday Mar 15 2026; next Tuesday = Mar 17.
       {
         expected: {
           input: { scheduledStart: "2026-03-17", title: "standup" },
@@ -2189,15 +1898,9 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── reference-date variation ──────────────────────────────────────────────
-  // Most tests in this file run with NOW = Sun Mar 15 2026. These vary the
-  // reference date to catch behaviour that depends on (a) what weekday now is,
-  // (b) end-of-year rollover, (c) the current-day-vs-rule-day boundary.
   describe("reference date variation", () => {
-    // Mon Mar 16 2026 at 7am. The rule is Monday 9am — same day, future time.
-    // Documents current behaviour: the parser anchors to nextWeekdayOccurrence,
-    // which always returns at least 7 days ahead when called for the same weekday
-    // (consistent with chrono "monday" semantics).
+    // Same weekday as the rule, later the same day: the parser anchors via nextWeekdayOccurrence,
+    // which is at least 7 days ahead, as chrono "monday" does.
     const MON_MORN = new Date("2026-03-16T07:00:00");
     const MON_AFTN = new Date("2026-03-16T15:00:00");
     const FRI = new Date("2026-03-20T12:00:00");
@@ -2243,7 +1946,6 @@ describe("NL Page Creation Parser", () => {
         input: "standup every monday",
         now: SAT,
       },
-      // Year rollover: Dec 30 2026 is a Wednesday → next Monday is Jan 4 2027.
       {
         expected: {
           input: { scheduledStart: "2027-01-04" },
@@ -2261,7 +1963,6 @@ describe("NL Page Creation Parser", () => {
         input: "party tomorrow",
         now: DEC31,
       },
-      // Month rollover: Sun Mar 29 → next Monday Mar 30. 2 weeks = 14 days → Apr 12.
       {
         expected: {
           input: { scheduledStart: "2026-03-30" },
@@ -2275,14 +1976,7 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input @ $now", runCase);
   });
 
-  // ─── kitchen-sink composition ──────────────────────────────────────────────
-  // Each piece (cadence, window, time range, duration, tag, folder, priority)
-  // is unit-tested in isolation. These tests stress how they interact when the
-  // user types a single dense phrase. Catching e.g. "rrule emitted but tag
-  // dropped" or "title had stranded fragments" requires the whole-input view.
-  // Kitchen-sink: dense phrases that exercise every token type. Inline
-  // snapshots lock the entire ParseResult so any drift surfaces as a diff.
-  // To intentionally update: `pnpm --filter @pikos/core exec vitest run -u`.
+  // Inline snapshots lock the whole ParseResult. To update: `pnpm --filter @pikos/core exec vitest run -u`.
   describe("kitchen-sink composition", () => {
     it("bounded weekly + time range + tags + folder + priority", () => {
       expect(
@@ -2420,14 +2114,9 @@ describe("NL Page Creation Parser", () => {
     });
   });
 
-  // ─── adversarial input ─────────────────────────────────────────────────────
-  // Tests for inputs the parser is likely to encounter from real users:
-  // mixed case, trailing punctuation, very long titles, redundant whitespace,
-  // and ambiguous phrasings.
   describe("adversarial input", () => {
     const longTitle = "a ".repeat(120).trim();
     const cases: ParserCase[] = [
-      // Recurrence keywords are case-insensitive.
       {
         expected: {
           input: { scheduledStart: "2026-03-16T09:00:00" },
@@ -2436,17 +2125,14 @@ describe("NL Page Creation Parser", () => {
         },
         input: "STANDUP EVERY MONDAY at 9am",
       },
-      // Mixed case.
       {
         expected: { rrule: ["INTERVAL=2", "BYDAY=TU"], type: "recurring" },
         input: "standup EvErY OtHeR TuEsDaY",
       },
-      // Trailing punctuation on priority: the "." orphaned by the strip goes.
       {
         expected: { input: { priority: "urgent", title: "call" }, type: "single" },
         input: "call !urgent.",
       },
-      // Redundant whitespace collapses. NOW=12:00, 3pm tomorrow → 2026-03-16T15:00:00.
       {
         expected: {
           input: { scheduledStart: "2026-03-16T15:00:00", title: "call mom" },
@@ -2464,7 +2150,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "🎉 birthday party tomorrow at 7pm",
       },
-      // Very long title (200+ chars) is preserved.
       {
         expected: {
           input: { scheduledStart: "2026-03-16", title: longTitle },
@@ -2472,10 +2157,8 @@ describe("NL Page Creation Parser", () => {
         },
         input: `${longTitle} tomorrow`,
       },
-      // Multiple 'every' phrases — the first regex consumes "every monday",
-      // a second pass picks up "every wednesday". Document whichever the parser
-      // emits so future changes don't break silently. At minimum: recurring
-      // weekly with at least one BYDAY among MO/WE.
+      // The first pass consumes "every monday", a second "every wednesday"; pin only recurring
+      // weekly with a BYDAY among MO/WE.
       {
         expected: {
           custom: (r) => {
@@ -2486,7 +2169,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday and every wednesday",
       },
-      // Priority placed before title preserves the rest.
       {
         expected: {
           input: {
@@ -2498,8 +2180,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "!urgent buy groceries tomorrow",
       },
-      // /#(\w+)/ is non-overlapping and word-char greedy. "#abc#def" captures
-      // "abc" first then sees "#def" → captures "def" too.
       {
         expected: {
           input: { tags: ["abc", "def"], title: "note" },
@@ -2507,7 +2187,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "note #abc#def",
       },
-      // Tag separated by punctuation; orphan separator dropped after tag strip.
       {
         expected: {
           input: { tags: ["abc", "def"], title: "note" },
@@ -2515,13 +2194,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "note #abc, #def",
       },
-      // 9am today is in the past from NOW (12pm) → tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "meeting at 09:00",
       },
-      // "every <day>" regex requires a known weekday; "word" doesn't match,
-      // so input stays single.
       {
         expected: {
           inputAbsent: ["scheduledStart"],
@@ -2530,7 +2206,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "every word counts in the report",
       },
-      // "#404" matches the tag regex and becomes a tag — documented behaviour.
       {
         expected: { input: { tags: ["404"], title: "fix bug" }, type: "single" },
         input: "fix #404 bug",
@@ -2539,14 +2214,9 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── chrono casual phrases ─────────────────────────────────────────────────
-  // chrono-node parses many casual time expressions. These tests pin the ones
-  // that real users are most likely to type so we know if a chrono upgrade
-  // changes their semantics.
   describe("chrono casual phrases", () => {
     const LATE = new Date("2026-03-15T21:00:00");
     const cases: ParserCase[] = [
-      // ─── tomorrow + time-of-day ────────────────────────────────────────────
       {
         expected: {
           input: { scheduledStart: "2026-03-16T09:00:00", title: "call" },
@@ -2566,12 +2236,10 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-16T20:00:00" }, type: "single" },
         input: "call tomorrow night",
       },
-      // ─── today / tonight ───────────────────────────────────────────────────
       {
         expected: { input: { scheduledStart: "2026-03-15T20:00:00" }, type: "single" },
         input: "call tonight",
       },
-      // NOW=12:00, "this morning" 9am has passed → rolls to tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "call this morning",
@@ -2591,18 +2259,15 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-15T15:00:00" }, type: "single" },
         input: "call today afternoon",
       },
-      // 9am has passed → tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "call today morning",
       },
-      // 9pm > 8pm → tonight rolls to tomorrow.
       {
         expected: { input: { scheduledStart: "2026-03-16T20:00:00" }, type: "single" },
         input: "call tonight",
         now: LATE,
       },
-      // ─── weekday + time-of-day ─────────────────────────────────────────────
       {
         expected: {
           input: { scheduledStart: "2026-03-16T09:00:00", title: "standup" },
@@ -2618,10 +2283,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
         input: "standup this monday morning",
       },
-      // ─── day qualifiers (this/next/last) ───────────────────────────────────
-      // chrono parses "next monday" forward by default; "this <weekday>" picks
-      // the same calendar week's weekday (today if applicable); "last <weekday>"
-      // picks the previous week's occurrence.
       {
         expected: { input: { scheduledStart: "2026-03-16" }, type: "single" },
         input: "call next monday",
@@ -2650,7 +2311,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-08" }, type: "single" },
         input: "note last sunday",
       },
-      // ─── recurring + casual time-of-day ────────────────────────────────────
       {
         expected: {
           input: { scheduledStart: "2026-03-16T09:00:00" },
@@ -2683,7 +2343,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "dinner every other tuesday evening",
       },
-      // First occurrence: next Saturday Mar 21 at 09:00.
       {
         expected: {
           input: { scheduledStart: "2026-03-21T09:00:00" },
@@ -2692,18 +2351,14 @@ describe("NL Page Creation Parser", () => {
         },
         input: "brunch every weekend morning",
       },
-      // ─── trailing punctuation cleanup ──────────────────────────────────────
-      // "call !urgent." → priority consumes "!urgent", and the "." it orphans goes too.
       {
         expected: { input: { priority: "urgent", title: "call" }, type: "single" },
         input: "call !urgent.",
       },
-      // "note #abc, #def" → tags ["abc","def"], title "note" not "note ,".
       {
         expected: { input: { tags: ["abc", "def"], title: "note" }, type: "single" },
         input: "note #abc, #def",
       },
-      // ─── relative phrases ──────────────────────────────────────────────────
       {
         expected: { input: { scheduledStart: "2026-03-18" }, type: "single" },
         input: "review in 3 days",
@@ -2724,9 +2379,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-20T15:00:00" }, type: "single" },
         input: "review friday at 3pm",
       },
-      // ─── floating date/time cases — assertion patterns use inputMatches ────
-      // 9pm to 5am — start 21:00 today/tomorrow, end at 05:00 next day. Duration
-      // should reflect 8 hours, not −16.
       {
         expected: {
           input: { durationMinutes: 8 * 60 },
@@ -2743,8 +2395,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "workshop noon to 5pm",
       },
-      // NOW is 12:00 — chrono returns 12:00; if the parser uses <= ref, it
-      // shifts to tomorrow. Pin only the time component.
+      // chrono returns 12:00 = NOW; a `<=` against ref shifts it to tomorrow. Pin only the time.
       {
         expected: {
           inputMatches: { scheduledStart: /^2026-03-1[56]T12:00:00$/ },
@@ -2752,7 +2403,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "call mom at noon",
       },
-      // chrono returns 00:00 today; <= ref shifts to tomorrow.
       {
         expected: {
           inputMatches: { scheduledStart: /T00:00:00$/ },
@@ -2760,7 +2410,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "alarm at midnight",
       },
-      // Pin only that something forward of NOW was parsed.
       {
         expected: {
           inputMatches: { scheduledStart: /^2026-03-(2[0-9]|1[6-9])/ },
@@ -2768,8 +2417,7 @@ describe("NL Page Creation Parser", () => {
         },
         input: "review next week",
       },
-      // "5p" is sometimes parsed by chrono as 5pm. Pin only the hour, and only
-      // when chrono actually produced a date.
+      // chrono sometimes reads "5p" as 5pm. Pin only the hour, and only when it produced a date.
       {
         expected: {
           custom: (r) => {
@@ -2785,15 +2433,9 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── negative paths / garbage input ────────────────────────────────────────
-  // The parser should never throw or emit garbage on adversarial inputs.
-  // These tests pin "graceful degradation" — a single page with the input as
-  // its title and no schedule.
   describe("negative paths and garbage input", () => {
     const longToken = "x".repeat(1000);
     const cases: ParserCase[] = [
-      // Pure punctuation: priority regex requires a known word/digit, so '!!!'
-      // is not consumed.
       {
         expected: {
           input: { title: "!!!" },
@@ -2802,12 +2444,10 @@ describe("NL Page Creation Parser", () => {
         },
         input: "!!!",
       },
-      // Whitespace + tabs → empty title.
       {
         expected: { input: { title: "" }, type: "single" },
         input: "   \t\t  \n  ",
       },
-      // Random garbage stays in title; no schedule, no tags.
       {
         expected: {
           input: { tags: [], title: "asdf jkl qwerty" },
@@ -2816,17 +2456,14 @@ describe("NL Page Creation Parser", () => {
         },
         input: "asdf jkl qwerty",
       },
-      // Number-only input — title contains the number.
       {
         expected: { inputMatches: { title: /12345/ }, type: "single" },
         input: "12345",
       },
-      // Bare '#' isn't followed by a word char, tag regex doesn't match.
       {
         expected: { input: { tags: [], title: "#" }, type: "single" },
         input: "#",
       },
-      // Bare '~' — not consumed as folder.
       {
         expected: {
           input: { title: "~" },
@@ -2835,8 +2472,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "~",
       },
-      // Invalid window: "for N weeks" requires \d+, so non-numeric "X" falls
-      // through. Recurrence still matches via "every monday".
       {
         expected: {
           rrule: ["BYDAY=MO"],
@@ -2845,20 +2480,15 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every monday for X weeks",
       },
-      // 'x' isn't a weekday — slash-day regex requires the WHOLE list to be
-      // valid weekdays. Single 'x' breaks the match → not consumed.
       {
         expected: { inputMatches: { title: /m\/x\/f/ }, type: "single" },
         input: "plan m/x/f",
       },
-      // Conflicting cadence: "every monday tuesday" — everyDayRe needs a
-      // separator. Matches "every monday" and leaves "tuesday" for chrono.
       {
         expected: { rrule: ["BYDAY=MO"], type: "recurring" },
         input: "standup every monday tuesday",
       },
-      // JS \w is ASCII-only by default, so "#café" captures only "caf"; "é"
-      // stays in the title.
+      // `\w` is ASCII-only, so "#café" captures "caf" and "é" stays in the title.
       {
         expected: {
           input: { tags: ["caf"] },
@@ -2867,7 +2497,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "note #café",
       },
-      // 1000-char unbroken token doesn't crash the parser.
       {
         expected: {
           custom: (r) => {
@@ -2877,13 +2506,9 @@ describe("NL Page Creation Parser", () => {
         },
         input: longToken,
       },
-      // Stress: every token type at once + adversarial whitespace. Smoke test
-      // (no shape claim — just ensure parser produces a result without throwing).
       {
         expected: {
-          custom: () => {
-            // No-op: presence of a result satisfies the contract.
-          },
+          custom: () => {},
           rrule: [],
           type: "recurring",
         },
@@ -2893,9 +2518,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── reminder tokens ───────────────────────────────────────────────────────
-  // The lead itself: every unit spelling, the !rN shorthand, and the filler
-  // words a person actually types around them.
   describe("reminder tokens — units and shorthand", () => {
     const cases: ParserCase[] = [
       {
@@ -2934,7 +2556,6 @@ describe("NL Page Creation Parser", () => {
         input: "Dentist tomorrow at 3pm remind 1.5h before",
       },
       {
-        // A timed page keeps a day-lead as plain minutes — see the all-day block below.
         expected: { input: { reminderMinutes: [1440], title: "Dentist" }, type: "single" },
         input: "Dentist tomorrow at 3pm remind 1d before",
       },
@@ -2971,7 +2592,6 @@ describe("NL Page Creation Parser", () => {
         input: "Dentist tomorrow at 3pm remind me please 10 minutes beforehand",
       },
       {
-        // "before" is optional — the word "remind" already said which direction.
         expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
         input: "Dentist tomorrow at 3pm remind 30m",
       },
@@ -2987,12 +2607,10 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── reminder resolution against the schedule shape ────────────────────────
   describe("reminder tokens — all-day vs timed resolution", () => {
     const cases: ParserCase[] = [
       {
-        // All-day: no start time to count back from, so the lead becomes the
-        // day-before anchor (pikos_db DAY_BEFORE_MINUTES = -2).
+        // All-day has no start time to count back from, so the lead becomes the day-before anchor.
         expected: {
           input: { reminderMinutes: [-2], scheduledStart: "2026-03-16", title: "Dentist" },
           type: "single",
@@ -3011,8 +2629,7 @@ describe("NL Page Creation Parser", () => {
         input: "Dentist tomorrow remind 1d before",
       },
       {
-        // Even a minutes lead collapses: it is the only reminder an all-day page
-        // can carry, and a 30-minute row on it would never fire.
+        // Even a minutes lead collapses: a 30-minute row on an all-day page would never fire.
         expected: { input: { reminderMinutes: [-2], title: "Dentist" }, type: "single" },
         input: "Dentist tomorrow !r30",
       },
@@ -3024,7 +2641,6 @@ describe("NL Page Creation Parser", () => {
         input: "vacation April 18-25 remind day before",
       },
       {
-        // Timed: "day before" is a plain 1440-minute lead.
         expected: {
           input: { reminderMinutes: [1440], scheduledStart: "2026-03-16T15:00:00" },
           type: "single",
@@ -3065,8 +2681,6 @@ describe("NL Page Creation Parser", () => {
   describe("reminder tokens — nothing to anchor to", () => {
     const cases: ParserCase[] = [
       {
-        // No schedule, so the words stay in the title rather than becoming a row
-        // the scheduler could never fire.
         expected: {
           input: { title: "Call mom remind 30m before" },
           inputAbsent: ["reminderMinutes", "scheduledStart"],
@@ -3083,7 +2697,6 @@ describe("NL Page Creation Parser", () => {
         input: "Call mom !r30",
       },
       {
-        // "remind me to …" names no unit, so it is ordinary title text.
         expected: {
           input: { scheduledStart: "2026-03-16", title: "remind me to buy milk" },
           inputAbsent: ["reminderMinutes"],
@@ -3092,7 +2705,6 @@ describe("NL Page Creation Parser", () => {
         input: "remind me to buy milk tomorrow",
       },
       {
-        // "in" is deliberately not a filler word, so chrono still gets the date.
         expected: {
           input: { scheduledStart: "2026-03-17", title: "Ping team remind me" },
           inputAbsent: ["reminderMinutes"],
@@ -3101,7 +2713,6 @@ describe("NL Page Creation Parser", () => {
         input: "Ping team remind me in 2 days",
       },
       {
-        // Composes with the rest of the grammar without eating it.
         expected: {
           input: {
             durationMinutes: 120,
@@ -3130,7 +2741,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── title/body separator ("//") ───────────────────────────────────────────
   describe("body separator", () => {
     const cases: ParserCase[] = [
       {
@@ -3141,7 +2751,6 @@ describe("NL Page Creation Parser", () => {
         input: "Buy a gift // she likes the blue one",
       },
       {
-        // The body is verbatim: no tag, folder, priority or date is read out of it.
         expected: {
           input: {
             content: "remember #blue and ~folder !urgent tomorrow",
@@ -3154,17 +2763,14 @@ describe("NL Page Creation Parser", () => {
         input: "Buy a gift // remember #blue and ~folder !urgent tomorrow",
       },
       {
-        // Only the FIRST separator splits — later ones belong to the body.
         expected: { input: { content: "b // c", title: "a" }, type: "single" },
         input: "a // b // c",
       },
       {
-        // A string edge counts as the boundary, so a body-only input is allowed.
         expected: { input: { content: "just a note", title: "" }, type: "single" },
         input: "// just a note",
       },
       {
-        // Nothing after the separator is no body at all.
         expected: { input: { title: "Task" }, inputAbsent: ["content"], type: "single" },
         input: "Task //",
       },
@@ -3173,7 +2779,6 @@ describe("NL Page Creation Parser", () => {
         input: "Notes // line one\nline two",
       },
       {
-        // Whitespace on both sides is required — this is what keeps URLs intact.
         expected: {
           input: { scheduledStart: "2026-03-16", title: "check https://example.com/a//b" },
           inputAbsent: ["content"],
@@ -3205,7 +2810,6 @@ describe("NL Page Creation Parser", () => {
         input: "Call // tomorrow at 3pm",
       },
       {
-        // The title side keeps its full grammar.
         expected: {
           input: {
             content: "ask about the trip",
@@ -3230,7 +2834,6 @@ describe("NL Page Creation Parser", () => {
         input: "Dentist tomorrow at 3pm remind 30m before // bring the insurance card",
       },
       {
-        // The body travels onto every page of a finite series.
         expected: {
           count: 3,
           eachInput: { content: "bring a towel", title: "gym" },
@@ -3242,11 +2845,6 @@ describe("NL Page Creation Parser", () => {
     it.each(cases)("$input", runCase);
   });
 
-  // ─── scenario coverage matrix ──────────────────────────────────────────────
-  // One representative test per top-level scenario the parser must handle for
-  // production. Each test pins the contract the rest of the app relies on:
-  // result.type, scheduledStart shape (date-only / datetime / undefined), and
-  // metadata fields (tags / folder / priority).
   describe("scenario matrix — relative dates", () => {
     const cases: ParserCase[] = [
       {
@@ -3279,7 +2877,6 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-20T15:00:00" }, type: "single" },
         input: "appt march 20 at 3pm",
       },
-      // March 5 has passed; chrono with forwardDate rolls to next year.
       {
         expected: { input: { scheduledStart: "2027-03-05" }, type: "single" },
         input: "dentist @march 5",
@@ -3294,7 +2891,6 @@ describe("NL Page Creation Parser", () => {
 
   describe("scenario matrix — N pages (finite recurrence)", () => {
     const cases: ParserCase[] = [
-      // m/w/f at 3pm → 3 finite pages: Mon 3/16, Wed 3/18, Fri 3/20.
       {
         expected: {
           count: 3,
@@ -3308,7 +2904,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "gym m/w/f at 3pm",
       },
-      // weekdays at 9am 5 times → Mon 3/16 through Fri 3/20, all 09:00.
       {
         expected: {
           count: 5,
@@ -3359,7 +2954,6 @@ describe("NL Page Creation Parser", () => {
 
   describe("scenario matrix — non-scheduled", () => {
     const cases: ParserCase[] = [
-      // Plain text → no schedule, no tags/folder/priority.
       {
         expected: {
           input: { tags: [], title: "buy groceries" },
@@ -3368,7 +2962,6 @@ describe("NL Page Creation Parser", () => {
         },
         input: "buy groceries",
       },
-      // Title-only with metadata (still non-scheduled).
       {
         expected: {
           input: {
@@ -3388,7 +2981,6 @@ describe("NL Page Creation Parser", () => {
 
   describe("scenario matrix — tags / priority / folder mix", () => {
     const cases: ParserCase[] = [
-      // All three present, scrambled order.
       {
         expected: {
           input: {
@@ -3401,23 +2993,18 @@ describe("NL Page Creation Parser", () => {
         },
         input: "!high #work #urgent ~Engineering team sync",
       },
-      // Tags accumulate.
       {
         expected: { input: { tags: ["a", "b", "c"] }, type: "single" },
         input: "note #a #b #c",
       },
-      // Priority: last wins.
       {
         expected: { input: { priority: "low" }, type: "single" },
         input: "task !urgent !low",
       },
-      // Folder: last wins.
       {
         expected: { input: { folderQuery: "B" }, type: "single" },
         input: "task ~A ~B",
       },
-      // !0 explicitly clears priority. Folder last-wins ensures the user's
-      // most-recent ~Folder choice takes effect.
       {
         expected: {
           input: { folderQuery: "B", priority: null },
@@ -3430,11 +3017,8 @@ describe("NL Page Creation Parser", () => {
   });
 
   describe("scenario matrix — schema/UI mapping contract", () => {
-    // These tests pin the shape the editor + page-list components depend on.
-    // If any of these break, the UI mapping has shifted and downstream components
-    // may render incorrectly. The assertion target spans all three result shapes
-    // (single, recurring, finite), so these stay imperative — ParserCase narrows
-    // per shape, which would obscure the cross-shape invariants below.
+    // These stay imperative: ParserCase narrows per shape, which would obscure these cross-shape
+    // invariants the editor and page list depend on.
 
     it("ParsedInput.title is always a string (never undefined)", () => {
       const inputs = ["", "   ", "buy groceries", "#tag #only", "tomorrow"];
@@ -3549,13 +3133,7 @@ describe("a rename leaves the date to the page's slot", () => {
   });
 });
 
-// ─── property tests ──────────────────────────────────────────────────────────
-//
-// Invariants the parser must hold for ANY input we generate. Each property
-// runs the parser against ~100 randomised inputs (tags + folder + priority +
-// date + time + duration + recurrence, in random order with random
-// whitespace). Catches compositional bugs no enumerable test will surface.
-// Seed is fixed so failures are reproducible.
+// Invariants for any generated input. The seed is fixed so failures reproduce.
 
 describe("parser invariants (property tests)", () => {
   it("never throws", () => {

@@ -1,19 +1,6 @@
-// The mock's copied guard messages, checked against the writers they came from —
-// in both directions, because only one of them is the direction that bites.
-//
-// These strings are the ones a user actually reads when a write is refused, and
-// the mock is the only place any test sees them. Reword the Rust side and nothing
-// fails by itself: the mock keeps answering with the old wording and every
-// assertion against it still passes, so the drift surfaces in the product rather
-// than in CI. Reading the Rust source is the point — an exported constant on the
-// TypeScript side could only ever agree with itself.
-//
-// The reverse direction is the one that already cost a divergence. A guard the
-// writers raise and the mock has never heard of leaves no stale string to catch:
-// the mock simply allows the write, and an e2e written against it asserts the
-// permissive behavior as if it were the product's. So the sweep below is over the
-// Rust source, not over the mock's table, and a new `AppError::Conflict` fails
-// here until the mock either mirrors it or is recorded as out of reach.
+/** `AppError::Conflict` is the refusal a user reads; the other variants are plumbing or carry an
+ *  interpolated id the mock can't reproduce. Its argument is a literal or a shared `const`, so both
+ *  are resolved. */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -25,8 +12,8 @@ import { MIRRORED_GUARD_MESSAGES } from "./MockStorageAdapter";
 
 const CRATE = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../crates/pikos-db/src");
 
-/** Every writer module. Deliberately not a hand-listed subset: the guard that
- *  prompted this check lived in the one file the list had left out. */
+/** Every writer module, not a hand-listed subset: the guard that prompted this check lived in the
+ *  one file such a list had left out. */
 function rustSources(): { file: string; text: string }[] {
   return readdirSync(CRATE, { recursive: true, withFileTypes: true })
     .filter((e) => e.isFile() && e.name.endsWith(".rs") && !e.name.includes("_tests"))
@@ -64,9 +51,8 @@ function rustGuardMessages(): Map<string, string> {
   return found;
 }
 
-/** A refusal the mock cannot meaningfully reach, with the reason it can't. Empty
- *  is the healthy state — an entry here is a hole in mock fidelity that has been
- *  looked at and accepted, not a place to silence a failure. */
+/** A refusal the mock can't meaningfully reach, with the reason. Empty is healthy: an entry is a
+ *  hole in mock fidelity that was looked at and accepted, not a place to silence a failure. */
 const OUT_OF_MOCK_REACH: Record<string, string> = {};
 
 describe("mirrored guard messages", () => {

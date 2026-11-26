@@ -7,7 +7,6 @@ export const LINE_WIDTH_CLASS: Record<LineWidth, string> = {
   wide: "max-w-[880px]",
 };
 
-/** HTML attributes applied to the ProseMirror contenteditable element. */
 export const EDITOR_ATTRIBUTES = {
   "aria-label": "Page content",
   "aria-multiline": "true",

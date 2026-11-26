@@ -16,7 +16,6 @@ export const stepEditorFontSize = stepTextSize;
 export interface EditorSettingsValue {
   lineWidth: LineWidth;
   setLineWidth: (v: LineWidth) => void;
-  /** Body type size in px. The editor's whole type scale is relative to it. */
   fontSize: EditorFontSize;
   setFontSize: (v: EditorFontSize) => void;
   stepFontSize: (direction: 1 | -1) => void;

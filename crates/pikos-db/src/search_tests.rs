@@ -83,7 +83,6 @@ async fn seed_pages(pool: &sqlx::SqlitePool) {
         .await
         .unwrap();
     }
-    // Soft-delete p5 so deleted_at IS NOT NULL.
     sqlx::query("UPDATE pages SET deleted_at = '2026-01-01T00:00:00Z' WHERE id = 'p5'")
         .execute(pool)
         .await
@@ -98,7 +97,7 @@ async fn title_match_outranks_content_match() {
     let resp = search_pages_impl(&pool, "morning".into(), None)
         .await
         .unwrap();
-    // p1's title contains "Morning" — should rank above p3 whose match is body-only.
+    // A title match ranks above a body-only match.
     let ids: Vec<&str> = resp.results.iter().map(|r| r.id.as_str()).collect();
     let p1 = ids.iter().position(|&i| i == "p1").expect("p1 present");
     let p3 = ids.iter().position(|&i| i == "p3").expect("p3 present");
@@ -119,7 +118,6 @@ async fn excludes_deleted_and_completed_by_default() {
     let ids: Vec<&str> = resp.results.iter().map(|r| r.id.as_str()).collect();
     assert!(!ids.contains(&"p5"), "soft-deleted page leaked: {ids:?}");
     assert!(!ids.contains(&"p4"), "completed page leaked: {ids:?}");
-    // completed_count counts matches regardless of include_completed.
     assert_eq!(resp.completed_count, 1, "p4 is the only done match");
 }
 
@@ -132,7 +130,6 @@ async fn include_completed_returns_done_pages() {
         .await
         .unwrap();
     let ids: Vec<&str> = resp.results.iter().map(|r| r.id.as_str()).collect();
-    // p4 is the only completed match — flag must let it through.
     assert!(ids.contains(&"p4"), "completed page absent: {ids:?}");
     assert!(!ids.contains(&"p5"), "soft-deleted page leaked: {ids:?}");
     assert_eq!(resp.completed_count, 1);
@@ -143,7 +140,7 @@ async fn prefix_match_on_last_token() {
     let pool = test_pool().await;
     seed_pages(&pool).await;
 
-    // "morn" alone should still match "morning" via the trailing `*`.
+    // The trailing `*` makes "morn" match "morning".
     let resp = search_pages_impl(&pool, "morn".into(), None).await.unwrap();
     let ids: Vec<&str> = resp.results.iter().map(|r| r.id.as_str()).collect();
     assert!(ids.contains(&"p1"), "prefix match missed p1: {ids:?}");
@@ -154,8 +151,7 @@ async fn hyphenated_query_does_not_crash() {
     let pool = test_pool().await;
     seed_pages(&pool).await;
 
-    // Naive FTS5 would treat `-` as NOT or column-qualifier and error out.
-    // Tokenizer should split on hyphen.
+    // FTS5 would read `-` as NOT or a column qualifier and error, so the tokenizer splits on it.
     let resp = search_pages_impl(&pool, "multi-color".into(), None)
         .await
         .unwrap();
@@ -277,8 +273,8 @@ fn build_excerpt_strips_title_and_subtitle() {
     assert!(out.contains("morning"), "{out:?}");
 }
 
-/// Two blocks of a page are two sentences, and HTML would fold the newline between them into a
-/// space: "the alcove Order the desktop top" reads as one phrase nobody wrote.
+/// Two blocks are two sentences, and HTML folds the newline between them into a space, reading as
+/// one phrase nobody wrote.
 #[test]
 fn build_excerpt_joins_blocks_rather_than_running_them_together() {
     let body = "My Page\nMeasure the alcove\n\nOrder the desktop top";
@@ -286,8 +282,8 @@ fn build_excerpt_joins_blocks_rather_than_running_them_together() {
     assert_eq!(out, "Measure the alcove \u{00B7} Order the desktop top");
 }
 
-/// A pasted URL is a word with no whitespace in it, so the edge the window wanted has no
-/// boundary to snap to. Cutting there is what makes an excerpt read as corrupted data.
+/// A pasted URL has no whitespace, so the window's edge has no boundary to snap to, and cutting
+/// there reads as corrupted data.
 #[test]
 fn build_excerpt_never_cuts_a_word_in_half() {
     // The hit sits far enough into the URL that the window's left edge lands inside it.
@@ -301,8 +297,8 @@ fn build_excerpt_never_cuts_a_word_in_half() {
     );
 }
 
-/// The window has to hold the match. Snapping inward on a body with one space closed both
-/// edges onto it and returned an excerpt of the wrong part of the page.
+/// The window must hold the match: snapping inward on a body with one space closes both edges
+/// onto it.
 #[test]
 fn build_excerpt_keeps_the_match_when_the_body_has_one_space() {
     let body = "My Page\nSee ".to_string() + &"a".repeat(200) + "motorized" + &"b".repeat(200);
@@ -324,7 +320,7 @@ fn build_mirror_excerpt_joins_blocks_rather_than_running_them_together() {
 
 #[test]
 fn strip_prefix_ci_handles_multibyte() {
-    // Regression check: char-based prefix strip must not panic on UTF-8.
+    // The char-based prefix strip must not panic on UTF-8.
     let stripped = strip_prefix_ci("Café au lait\nbody", "café");
     assert_eq!(stripped, Some(" au lait\nbody"));
 }
@@ -413,8 +409,6 @@ async fn the_index_update_trigger_names_every_indexed_column() {
     named.sort();
     assert_eq!(named, indexed);
 }
-
-// ─── search_page ────────────────────────────────────────────────────
 
 async fn seed_matches(pool: &sqlx::SqlitePool, open: usize, done: usize) {
     for i in 0..open + done {

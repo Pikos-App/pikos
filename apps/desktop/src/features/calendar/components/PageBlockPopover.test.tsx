@@ -1,6 +1,3 @@
-// PageBlockPopover — read-only mirror metadata on a synced (locked) event, and
-// the reminder bell's one real boundary (timed vs all-day, on every origin).
-
 import type { PageRecurrenceRule, PageSummary } from "@pikos/core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -127,9 +124,8 @@ describe("PageBlockPopover — reminder bell", () => {
     expect(screen.getByLabelText("Page reminders")).toBeInTheDocument();
   });
 
-  // An all-day page has no start time to count a lead time back from, but it
-  // does have the day-before anchor — same split the editor byline makes, so
-  // the bell is offered here too and the dropdown carries the all-day options.
+  // An all-day page has no start time to count a lead time back from but has the day-before
+  // anchor, so the bell is offered and the dropdown carries the all-day options.
   it("offers the day-before reminder on a locked all-day recurring series", async () => {
     mocks.recurrenceRules = [rule];
     renderPopover(
@@ -166,11 +162,10 @@ describe("PageBlockPopover — reminder bell", () => {
   });
 });
 
-// The lock is enforced in the backend and every write path already refuses, but a
-// control the user can reach and press only to have the change revert reads as the
-// app losing their edit. So the affordances have to be gone, not merely inert —
-// and each is a separate branch, which is why the absences are asserted one by one
-// against an unlocked control that proves the query would have found them.
+// The lock is enforced in the backend, but a control the user can press only to see the change
+// revert reads as the app losing their edit. So the affordances must be gone, not inert; each is
+// a separate branch, asserted absent one by one against an unlocked control that proves the
+// query would have found them.
 describe("PageBlockPopover — a locked mirror offers no schedule affordances", () => {
   const schedulePicker = () => screen.queryByRole("button", { name: /^Scheduled:|^Set schedule$/ });
   const folderPicker = () => screen.queryByRole("button", { name: /^Folder:/ });

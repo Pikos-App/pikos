@@ -2,22 +2,12 @@ import XCTest
 
 @testable import PikosCore
 
-/// Tests for the FFI boundary itself, not for the logic behind it.
-///
-/// The logic is already graded against a golden corpus generated from the
-/// TypeScript reference (`crates/pikos-core/tests/`), and re-asserting it here
-/// would only re-test Rust through a second door. What these cover is the
-/// layer those tests cannot see: whether UniFFI's type mapping preserves
-/// meaning on the way across. Optionals that should stay nil, unsigned counts
-/// that must not wrap, enum cases that must carry their payloads, and strings
-/// that must survive as UTF-8.
+/// Covers whether UniFFI's type mapping preserves meaning (nil optionals,
+/// non-wrapping unsigned counts, enum payloads, UTF-8), not the logic, which the
+/// Rust golden corpus grades.
 final class BridgeMappingTests: XCTestCase {
-
-    // MARK: - Optionals
-
-    /// `None` must arrive as `nil`, not as an empty string. A bridge that
-    /// flattened them would turn "this event has no end" into "this event ends
-    /// at the epoch", which reads as a real value everywhere downstream.
+    /// A bridge that flattened `None` to an empty string would turn "no end"
+    /// into an epoch end that reads as a real value downstream.
     func testAbsentValuesArriveAsNil() {
         XCTAssertNil(computeNextEnd(baseEnd: "2026-03-16", nextStart: "2026-03-17"),
                      "an all-day series has no end time to carry")
@@ -30,8 +20,6 @@ final class BridgeMappingTests: XCTestCase {
         let end = computeNextEnd(baseEnd: "2026-03-16T10:30:00", nextStart: "2026-03-20T09:00:00")
         XCTAssertEqual(end, "2026-03-20T10:30:00")
     }
-
-    // MARK: - Enums with payloads
 
     func testDeepLinkCasesCarryTheirPayloads() {
         guard case .page(let pageId, let focus)? =
@@ -51,8 +39,7 @@ final class BridgeMappingTests: XCTestCase {
         }
     }
 
-    /// Percent-encoded text is what actually arrives from a widget tap or a
-    /// notification, and quick-add prefills routinely contain spaces and #tags.
+    /// Widget taps and notifications deliver percent-encoded text.
     func testQuickAddPrefillIsPercentDecoded() {
         guard case .quickAdd(let prefill)? =
                 parseDeepLink(url: "pikos://quick-add?text=tomorrow%20at%203pm%20%23work") else {
@@ -61,11 +48,7 @@ final class BridgeMappingTests: XCTestCase {
         XCTAssertEqual(prefill, "tomorrow at 3pm #work")
     }
 
-    // MARK: - Unsigned counts
-
-    /// Counts cross as UInt32. A negative value would wrap to something huge
-    /// rather than erroring, so the reversed-interval case is worth pinning at
-    /// the boundary rather than trusting.
+    /// Counts cross as UInt32, so a negative value would wrap to something huge.
     func testReversedIntervalCountsZeroRatherThanWrapping() {
         let count = countCrossingMidnights(start: "2026-03-16T10:00:00",
                                            end: "2026-03-16T09:00:00")
@@ -79,8 +62,6 @@ final class BridgeMappingTests: XCTestCase {
         XCTAssertEqual(countCrossingMidnights(start: "2026-03-16T23:00:00",
                                               end: "2026-03-18T01:00:00"), 2)
     }
-
-    // MARK: - Records and collections
 
     func testTimedLayoutRoundTripsRecords() {
         let pages = [
@@ -140,10 +121,7 @@ final class BridgeMappingTests: XCTestCase {
                                        rangeEnd: "2026-04-01").isEmpty)
     }
 
-    // MARK: - Strings
-
-    /// Page content is arbitrary user text. UTF-8 has to survive the crossing
-    /// intact, including characters outside the basic multilingual plane.
+    /// Includes characters outside the basic multilingual plane.
     func testUnicodeSurvivesExtraction() {
         let doc = """
         {"type":"doc","content":[{"type":"paragraph","content":[\
@@ -152,30 +130,21 @@ final class BridgeMappingTests: XCTestCase {
         XCTAssertEqual(extractText(docJson: doc), "emoji 🎉 and ünïcode")
     }
 
-    /// Malformed content must return empty rather than trapping. A Rust panic
-    /// crosses the FFI as a process abort with no Swift-side recovery, so a
-    /// corrupt page would take the whole app down on open.
+    /// A Rust panic aborts the process with no Swift-side recovery, so a corrupt
+    /// page would take the app down on open.
     func testMalformedContentDoesNotTrap() {
         for junk in ["", "{}", "{", "not json", "\u{0}"] {
             XCTAssertEqual(extractText(docJson: junk), "")
         }
     }
 
-    // MARK: - Schema version
-
-    /// iOS must refuse to save over a page written by a newer editor schema.
-    /// This asserts the constant is reachable and sane; the cross-language
-    /// agreement itself is guarded on the Rust side.
+    /// Only reachability: the cross-language agreement is guarded on the Rust side.
     func testContentSchemaVersionIsExposed() {
         XCTAssertGreaterThanOrEqual(contentSchemaVersion(), 1)
     }
 
-    // MARK: - Wall-clock semantics
-
-    /// The whole reason dates cross as strings rather than as `Date`: a daily
-    /// 09:00 series must stay at 09:00 through a DST transition. Converting at
-    /// the boundary would force a timezone choice per call and shift events by
-    /// an hour twice a year.
+    /// Dates cross as strings, not `Date`, which would force a timezone choice
+    /// per call and shift events by an hour twice a year.
     func testWallClockHoldsAcrossDaylightSavingTransition() {
         let occurrences = expandRecurrence(
             rrule: "FREQ=DAILY",

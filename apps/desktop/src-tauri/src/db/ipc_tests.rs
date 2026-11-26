@@ -1,24 +1,18 @@
 //! The IPC boundary — the one layer `workflows_tests.rs` deliberately tests below.
 //!
-//! Those tests enter at `*_impl`, which is right for data logic and blind to the
-//! wire. The frontend does not call `*_impl`; it invokes a command name with a
-//! **camelCase** body, and Tauri deserializes that into snake_case parameters. That
-//! conversion is by convention and checked by nothing: rename a parameter and every
-//! call site keeps compiling, the TypeScript keeps type-checking, and the command
-//! fails at runtime with an argument error the user meets as a dead button.
+//! Those tests enter at `*_impl`, blind to the wire. The frontend invokes a command name with
+//! a **camelCase** body that Tauri deserializes into snake_case parameters, a convention
+//! checked by nothing: rename a parameter and every call site still compiles, while the
+//! command fails at runtime with an argument error the user meets as a dead button.
 //!
-//! So this asserts one thing per command — the body the adapter really sends
-//! deserializes into the signature. A command whose handler then fails on its own
-//! terms (no such page, no such account) still passes: reaching the handler at all
-//! is the proof the wire agreed. Only an argument error fails the test.
+//! So this asserts that the body the adapter really sends deserializes into each signature.
+//! A handler that then fails on its own terms still passes: reaching it is the proof.
 //!
-//! Being able to invoke for real also settles a question the TypeScript cannot: the
-//! adapter's read/write classification is a claim about what each handler *does*,
-//! and the probe below holds it to a live database.
+//! The probe below also holds the adapter's read/write classification, a claim about what
+//! each handler *does*, to a live database.
 //!
-//! Debug-only, because `RuntimeAuthority::new` takes the ACL manifest argument
-//! solely under `debug_assertions`. `cargo test` builds debug; a release test build
-//! skips the module rather than failing to compile.
+//! Debug-only: `RuntimeAuthority::new` takes the ACL manifest argument solely under
+//! `debug_assertions`.
 #![cfg(debug_assertions)]
 
 use std::collections::BTreeMap;
@@ -35,10 +29,8 @@ use tauri::{Manager, WebviewWindowBuilder};
 
 use pikos_db::test_pool;
 
-/// The exact bodies `TauriSQLiteAdapter.ts` sends, for every command whose
-/// parameters are multi-word — the only ones where the camelCase⇄snake_case
-/// conversion has anything to disagree about. Single-word parameters (`id`,
-/// `data`, `updates`, `filter`) are spelled identically on both sides.
+/// The bodies `TauriSQLiteAdapter.ts` sends for every command with multi-word parameters,
+/// the only ones where camelCase⇄snake_case can disagree.
 fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
     vec![
         (
@@ -73,9 +65,8 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
             "set_sync_calendar_color",
             json!({ "color": "#ffffff", "syncCalendarId": "c1" }),
         ),
-        // Disabling, not enabling: the enable arm pokes the sync loop through managed
-        // state this app never registers, and `state()` panics on an unmanaged type.
-        // Either arm proves the arguments deserialized, which is all this asks.
+        // Disabling: the enable arm pokes the sync loop through managed state this app never
+        // registers, and `state()` panics on an unmanaged type.
         (
             "toggle_sync_calendar",
             json!({ "color": null, "enabled": false, "syncCalendarId": "c1" }),
@@ -117,10 +108,8 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
     ]
 }
 
-/// Multi-word commands the wire test deliberately does not drive. Reaching the
-/// handler is the whole assertion, so anything whose handler leaves the process
-/// on the way to failing is worse than untested — these each go out to the
-/// network, the login keychain, or the user's disk before they can refuse.
+/// Commands the wire test does not drive: each goes out to the network, the login keychain,
+/// or the user's disk before it can refuse.
 const NOT_DRIVEN: &[(&str, &str)] = &[
     ("connect_caldav_account", "performs CalDAV discovery"),
     ("reconnect_caldav_account", "performs CalDAV discovery"),
@@ -135,13 +124,8 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
     ),
 ];
 
-/// Bodies for the read commands `wire_cases` does not already carry. Split that
-/// way so a command reachable from both tests has one body, not two that drift.
-///
-/// These name the ids [`seed_probe_workspace`] plants, unlike the wire cases, whose
-/// ids deliberately match nothing. The probe measures whether a handler wrote, so a
-/// body that resolves to no row would let a misfiled writer pass by finding nothing
-/// to write to.
+/// These name the ids [`seed_probe_workspace`] plants, unlike the wire cases: a body that
+/// resolves to no row would let a misfiled writer pass by finding nothing to write to.
 fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
     vec![
         ("get_page", json!({ "id": PROBE_PAGE })),
@@ -191,8 +175,6 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
 const PROBE_PAGE: &str = "probe-page";
 const PROBE_FOLDER: &str = "probe-folder";
 
-/// One row in each table a read command can reach, so the reads do real work and a
-/// misfiled writer has something to destroy.
 async fn seed_probe_workspace(pool: &sqlx::SqlitePool) {
     pikos_db::insert_test_folder(pool, PROBE_FOLDER, "Work")
         .await
@@ -204,7 +186,6 @@ async fn seed_probe_workspace(pool: &sqlx::SqlitePool) {
     pikos_db::insert_test_page(pool, page).await.unwrap();
 }
 
-/// Read commands the probe below cannot drive, with the reason.
 const NOT_PROBED: &[(&str, &str)] = &[
     (
         "backup_db",
@@ -232,10 +213,8 @@ fn probe_body(cmd: &str) -> Option<serde_json::Value> {
         .map(|(_, body)| body)
 }
 
-/// `mock_context` resolves an empty ACL, so every invoke is refused before it
-/// reaches a handler. Tauri's own `__allow_command` grants windows but leaves
-/// webviews empty, and the authority requires a match on both — hence the entries
-/// are built here rather than through it.
+/// `mock_context` resolves an empty ACL, and Tauri's `__allow_command` grants windows but
+/// leaves webviews empty while the authority requires both, so the entries are built here.
 fn permissive_authority() -> RuntimeAuthority {
     let allowed_commands: BTreeMap<_, _> = wire_cases()
         .into_iter()
@@ -331,8 +310,8 @@ fn invoke(
             cmd: cmd.into(),
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
-            // Any other origin resolves as `Remote`, which no entry above matches —
-            // the refusal then reads as a command/window problem rather than a URL one.
+            // Any other origin resolves as `Remote`, which no entry matches, and the refusal then
+            // reads as a command/window problem.
             url: "tauri://localhost".parse().unwrap(),
             body: body.into(),
             headers: Default::default(),
@@ -361,21 +340,13 @@ fn every_command_accepts_the_body_the_adapter_sends() {
     }
 }
 
-/// `TauriSQLiteAdapter` splits every command into `WRITE_COMMANDS` and
-/// `READ_COMMANDS`, and issuing a write opens a window that tells the DB watcher to
-/// ignore the change event it is about to see. Misfile a mutating command as a read
-/// and the watcher takes the app's own echo for somebody else's write and refetches
-/// the workspace on top of what the user just did — a flicker after a bulk complete
-/// or a drag, with nothing failing and nothing logged. Six commands were missing
-/// from the write set once already.
+/// A write opens a window telling the DB watcher to ignore its own echo. A mutating command
+/// misfiled as a read makes the watcher refetch the workspace on top of what the user just
+/// did, with nothing failing and nothing logged. The adapter's own test pins that every
+/// command is classified, not that the classification is *true*, so this drives each declared
+/// read against a real pool and asserts SQLite counted no row changes.
 ///
-/// The adapter's own test pins that every command is classified; it cannot pin that
-/// the classification is *true*, because that fact lives in the Rust handler. So
-/// this drives each declared read against a real single-connection pool and asserts
-/// SQLite counted no row changes. A writer sitting in `READ_COMMANDS` fails here.
-///
-/// The opposite misfiling — a read declared a write — costs only a needless
-/// suppression window, so it is not worth the seed data it would take to detect.
+/// The opposite misfiling costs only a needless suppression window, so it isn't detected.
 #[test]
 fn a_command_the_adapter_calls_a_read_changes_no_rows() {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -421,9 +392,8 @@ fn a_command_the_adapter_calls_a_read_changes_no_rows() {
     );
 }
 
-/// Rows changed on this connection since it opened. Meaningful only because
-/// `test_pool` caps the pool at one connection — `total_changes()` is per-connection,
-/// so a multi-connection pool would report whichever one the probe happened to get.
+/// Meaningful only because `test_pool` caps the pool at one connection: `total_changes()` is
+/// per-connection.
 async fn total_changes(pool: &sqlx::SqlitePool) -> i64 {
     sqlx::query_scalar::<_, i64>("SELECT total_changes()")
         .fetch_one(pool)
@@ -431,9 +401,8 @@ async fn total_changes(pool: &sqlx::SqlitePool) -> i64 {
         .expect("total_changes()")
 }
 
-/// `READ_COMMANDS` as the adapter declares it. Read out of the TypeScript rather
-/// than restated here, since a copy would agree with itself while the real list
-/// moved on — the same reason the guard-message check reads the Rust source.
+/// Read out of the TypeScript rather than restated, since a copy would agree with itself
+/// while the real list moved on.
 fn declared_read_commands() -> Vec<String> {
     let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../src/shared/adapters/TauriSQLiteAdapter.ts");
@@ -463,15 +432,10 @@ fn declared_read_commands() -> Vec<String> {
     commands
 }
 
-/// `wire_cases` is written by hand, and a command added tomorrow with a multi-word
-/// parameter is precisely what it exists to catch — but its own absence from the
-/// list is not something any test notices. The table then narrows as the command
-/// surface grows, while still reading as "every command".
-///
-/// So the set to check is read out of the source, not listed: everything
-/// `db::commands::register` puts on the builder — the `db_commands!` declarations
-/// and the hand-written commands named beside them — against the parameters each
-/// one deserializes, minus the ones Tauri injects.
+/// `wire_cases` is hand-written, and a command added later with a multi-word parameter is
+/// missing from it silently. So the set to check is read out of the source: everything
+/// `db::commands::register` puts on the builder, against the parameters each deserializes,
+/// minus the ones Tauri injects.
 #[test]
 fn every_multi_word_command_has_a_wire_case() {
     let covered: BTreeMap<_, _> = wire_cases().into_iter().collect();
@@ -497,8 +461,6 @@ fn every_multi_word_command_has_a_wire_case() {
     );
 }
 
-/// Every command `db::commands::register` registers, mapped to the parameters
-/// Tauri deserializes out of the invoke body.
 fn registered_commands() -> BTreeMap<String, Vec<String>> {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let declarations = command_declarations(&src);
@@ -539,10 +501,8 @@ fn collect_sources(dir: &std::path::Path, out: &mut Vec<String>) {
     }
 }
 
-/// The `db_commands!` invocation in `db/commands.rs` — the app's entire command
-/// surface, since the macro generates the `invoke_handler` call from it. Sliced
-/// from the invocation onward so the macro's own definition (whose pattern
-/// spells the same anchors in metavariables) is never what gets read.
+/// Sliced from the invocation onward so the macro's own definition, whose pattern spells the
+/// same anchors in metavariables, is never what gets read.
 fn command_declarations(src: &std::path::Path) -> String {
     let path = src.join("db/commands.rs");
     let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path:?}: {e}"));
@@ -552,9 +512,7 @@ fn command_declarations(src: &std::path::Path) -> String {
     source[at..].to_string()
 }
 
-/// Every name `register` puts on the builder: the hand-written commands listed
-/// in the `extras:` block (last path segment only), plus every command the macro
-/// declares — which it registers by construction.
+/// The `extras:` commands (last path segment only) plus every command the macro declares.
 fn registered_names(declarations: &str) -> std::collections::BTreeSet<String> {
     const ANCHOR: &str = "extras: [";
     let start = declarations
@@ -579,14 +537,8 @@ fn registered_names(declarations: &str) -> std::collections::BTreeSet<String> {
         .collect()
 }
 
-/// `(name, body-deserialized parameter names)` for each `db_commands!`
-/// declaration. A declaration reads `name(arg: Ty, …) -> Ret = writer(…);` and
-/// carries exactly what a written-out signature would, so the two scans feed the
-/// same map. The `state` parameter is supplied by the macro, never declared, so
-/// there is nothing injected to filter out here.
-///
-/// A declaration is told from the writer call it expands into by the arrow: only
-/// the parameter list is followed by `->`.
+/// A declaration is told from the writer call it expands into by the arrow: only the
+/// parameter list is followed by `->`. The macro supplies `state`, so nothing injected needs filtering.
 fn declared_signatures(declarations: &str) -> Vec<(String, Vec<String>)> {
     let bytes = declarations.as_bytes();
     let mut out = Vec::new();
@@ -635,9 +587,8 @@ fn declared_signatures(declarations: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
-/// `(name, body-deserialized parameter names)` for each `#[tauri::command]`.
-/// `State`, `AppHandle` and the window types are injected by Tauri and never
-/// appear in the body, so they are dropped by type rather than by name.
+/// `State`, `AppHandle` and the window types are injected by Tauri and never appear in the
+/// body, so they are dropped by type rather than by name.
 fn command_signatures(text: &str) -> Vec<(String, Vec<String>)> {
     const MARKER: &str = "#[tauri::command]";
     const INJECTED: &[&str] = &["State<", "AppHandle", "Window", "Webview"];
@@ -702,9 +653,8 @@ fn split_top_level(params: &str) -> Vec<String> {
     parts.into_iter().filter(|p| !p.trim().is_empty()).collect()
 }
 
-/// The other half of the boundary: a command reached with no pool must surface the
-/// connect-first error rather than panicking or hanging. Every shim opens with
-/// `state.get_pool().await?`, so one command stands for all of them.
+/// A command reached with no pool must surface the connect-first error, not panic or hang.
+/// Every shim opens with `state.get_pool().await?`, so one command stands for all.
 #[test]
 fn a_command_without_a_connected_database_reports_it() {
     let mut ctx = mock_context(noop_assets());

@@ -1,6 +1,4 @@
-// Reloads the workspace when an app event fires — the shared listener behind both
-// the external-change watcher and the background-sync applied signal. Parameterized
-// by event name, log scope/message, and an optional suppression predicate.
+// The shared listener behind the external-change watcher and the background-sync applied signal.
 
 import { useEffect, useRef } from "react";
 
@@ -12,7 +10,6 @@ interface ReloadOnEventOptions {
   event: string;
   logScope: string;
   logMessage: string;
-  /** When it returns true, skip the reload (e.g. our own write echo). */
   suppressed?: () => boolean;
 }
 
@@ -25,8 +22,7 @@ export function useReloadOnEvent({
   const { reload } = useWorkspace();
   const viewCache = useViewCacheController();
 
-  // Keep the listener subscribed for the app's lifetime; read the latest reload
-  // through a ref so we don't resubscribe on every render.
+  // Read the latest reload through a ref so the listener isn't resubscribed on every render.
   const reloadRef = useRef(reload);
   useEffect(() => {
     reloadRef.current = reload;

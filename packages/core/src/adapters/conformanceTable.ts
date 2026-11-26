@@ -1,16 +1,9 @@
-// Reading a scenario table the Rust writers also run, without the silent half.
-//
-// The Rust structs carry `#[serde(deny_unknown_fields)]`, so a fixture that grows
-// a step op or an expectation key stops that runner dead until someone handles it.
-// `JSON.parse` behind an `as` cast gives this side nothing of the kind: an op the
-// switch has no arm for falls through as a no-op, an expectation key nothing reads
-// is simply never asserted, and the row passes either way — against a mock that
-// never did the work the row describes.
-//
-// The asymmetry is what makes it dangerous rather than merely uneven. The Rust
-// failure is what prompts the edit, so the fixture and the Rust runner move
-// together while this side stays behind, and the table quietly becomes a
-// one-sided test that still reads like a two-sided one.
+// Reads a scenario table the Rust writers also run, without the silent half. Their structs carry
+// `#[serde(deny_unknown_fields)]`, so a fixture that grows a step op or expectation key stops the
+// Rust runner until someone handles it. `JSON.parse` behind a cast does nothing of the kind: an
+// unhandled op is a no-op and an unread expectation key is never asserted, so the row passes
+// against a mock that never did the work. The Rust failure prompts the edit, so the fixture and
+// Rust move together while this side lags, and the table becomes one-sided while reading two-sided.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -27,18 +20,18 @@ interface Scenario {
   expect: Record<string, unknown>;
 }
 
-/** Read a table out of the shared fixture directory the Rust runners `include_str!`. */
+/** The shared fixture directory the Rust runners `include_str!`. */
 export function readFixture<T>(fileName: string): T {
   return JSON.parse(readFileSync(resolve(FIXTURES, fileName), "utf8")) as T;
 }
 
 /**
- * Load `<name>-lifecycle.json` and reject any expectation key this runner does not
- * read. Callers pass `Object.keys(CHECKS)` — the keys of the record that holds the
- * assertions — so the set cannot name a key nothing asserts.
+ * Loads `<name>-lifecycle.json` and rejects any expectation key this runner does not read.
+ * Callers pass `Object.keys(CHECKS)` from a `Record<keyof Expect, ...>` of assertions, so a key
+ * added to `Expect` does not compile until it has a checker, and the set can't name a key
+ * nothing asserts.
  *
- * Step ops are deliberately *not* checked here: a `default:` arm that throws covers
- * them at the point of dispatch, where the set is the switch itself.
+ * Step ops are not checked here: a throwing `default:` arm covers them where they dispatch.
  */
 export function readConformanceTable<T extends Scenario>(
   name: string,
@@ -64,8 +57,8 @@ export function readConformanceTable<T extends Scenario>(
   return table;
 }
 
-/** The `default:` arm every step switch needs. Returning instead would make an
- *  op the Rust runner enforces into a no-op here, and the scenario would pass. */
+/** The `default:` arm every step switch needs: returning would make an op the Rust runner
+ *  enforces a no-op here, and the scenario would pass. */
 export function unhandledStep(table: string, op: string): never {
   throw new Error(
     `${table}-lifecycle.json uses the step "${op}", which this runner has no arm for. ` +

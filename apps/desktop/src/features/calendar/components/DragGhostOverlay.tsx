@@ -7,17 +7,13 @@ import { BLOCK_TIME_TEXT_CLASS, chipFolderStyle } from "../utils/calendarColors"
 
 export interface DragGhostOverlayProps {
   content: GhostContent;
-  /** Ref callback from useDragGhost — positions the ghost the moment it mounts. */
   ghostRefCallback: (el: HTMLDivElement | null) => void;
-  /** Ref callback for the inline time label (only rendered for tall blocks). */
   ghostTimeLabelRefCallback: (el: HTMLParagraphElement | null) => void;
 }
 
 /**
- * DOM for the shared ghost overlay used by timed-block drag and all-day chip
- * drag. Mounted only while a drag gesture is active; content updates 2× per
- * gesture (start, end), position updates every frame via ref-bound style
- * writes (see useDragGhost).
+ * DOM for the ghost shared by timed-block drag and all-day chip drag. Position updates every
+ * frame through ref-bound style writes (see useDragGhost).
  */
 export function DragGhostOverlay({
   content,

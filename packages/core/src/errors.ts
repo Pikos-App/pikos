@@ -1,16 +1,6 @@
-// StorageError — typed error class for storage adapter rejections.
-//
-// The Rust backend serialises every command failure as `{ kind, message }`
-// (see `apps/desktop/src-tauri/src/error.rs::AppError`). The adapter layer
-// converts that wire shape into this class so UI code can branch on `kind`
-// instead of string-matching `message`. `Unknown` is the fallback when the
-// wire payload doesn't match the expected shape (rare — usually means a
-// Tauri infrastructure error, not a command failure).
-
-// Every variant of the Rust AppError, and nothing else. A kind missing here is
-// silently downgraded to "Unknown" by the mapper below, which reads to the user
-// as "Something went wrong" — so an offline sync looked identical to a bug for
-// as long as "Network" was absent from this list.
+// Every variant of the Rust AppError (`apps/desktop/src-tauri/src/error.rs`), and nothing else.
+// A kind missing here is silently downgraded to "Unknown" by the mapper below, which reads to
+// the user as "Something went wrong", so an offline sync would look identical to a bug.
 export type StorageErrorKind =
   | "Db"
   | "NotFound"
@@ -26,8 +16,7 @@ export type StorageErrorKind =
 
 export class StorageError extends Error {
   readonly kind: StorageErrorKind;
-  /** Original thrown value, if any — preserved so log scrubbing can fall
-   *  back to a string representation that includes the raw cause. */
+  /** The original thrown value, kept so log scrubbing can fall back to its string form. */
   readonly cause: unknown;
 
   constructor(kind: StorageErrorKind, message: string, cause?: unknown) {
@@ -43,10 +32,9 @@ export function isStorageError(err: unknown): err is StorageError {
 }
 
 /**
- * Best-effort conversion of an unknown thrown value (typically from the
- * Tauri IPC channel) into a StorageError. Recognises the Rust AppError
- * wire shape `{ kind, message }` and a plain `Error`. Falls back to
- * `Unknown` for anything else.
+ * Converts a thrown value into a StorageError so UI code can branch on `kind` instead of
+ * string-matching `message`. Reads the backend's `{ kind, message }` wire shape; a plain `Error`
+ * or anything else becomes `Unknown`.
  */
 export function toStorageError(err: unknown): StorageError {
   if (isStorageError(err)) return err;
@@ -85,10 +73,8 @@ function toStorageErrorKind(raw: unknown): StorageErrorKind {
 }
 
 /**
- * Human-friendly fallback message for each kind. UI surfaces should use
- * this (not the raw `message`) so users never see sqlx/Tauri text that
- * may echo user input. Callers can pass a `verb` to specialise the copy
- * ("saving page", "loading folders") without inventing per-kind strings.
+ * User-facing message for each kind. Show this, not the raw `message`, which may carry
+ * sqlx/Tauri text that echoes user input. `verb` ("saving page") specialises the copy.
  */
 export function storageErrorUserMessage(err: StorageError, verb = "the operation"): string {
   switch (err.kind) {

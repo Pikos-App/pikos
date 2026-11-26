@@ -1,23 +1,15 @@
-// Golden-corpus generator for the TS → Rust port of the NL parser and
-// recurrence math.
+// Golden-corpus generator for the TS to Rust port of the NL parser and recurrence math. A ported
+// Rust function is tested against the TS original on this corpus, so the script runs the current
+// TypeScript (the reference) over every input the suite exercises, at several pinned reference
+// times, and freezes the results as JSON the Rust crate reads.
 //
-// The port's acceptance bar (iOS plan §4) is: "every ported Rust function gets
-// a parity test comparing against the TS original on a fixture corpus before
-// the TS path is deleted." This script produces that corpus. It runs the
-// current TypeScript implementation — the reference, by definition — over every
-// input the test-suite exercises, at several pinned reference times, and
-// freezes the results as JSON the Rust crate reads back.
-//
-// Determinism requirements, both enforced below rather than documented and
-// hoped for:
-//   - TZ must be pinned. The suite's NOW is `new Date("2026-03-15T12:00:00")`
-//     with no zone suffix, so it is *local* time; the same input parsed in
-//     Europe/London and America/New_York yields different ISO output.
+// Determinism, enforced below:
+//   - TZ must be pinned. The suite's NOW is `new Date("2026-03-15T12:00:00")`, local time, so the
+//     same input parsed in London and New York yields different ISO output.
 //   - Reference times are explicit, never `new Date()`.
 //
-// Inputs are scraped from parser.test.ts so the corpus tracks the suite instead
-// of drifting from it, then supplemented with cases that exercise paths the
-// table-driven tests reach only indirectly.
+// Inputs are scraped from parser.test.ts so the corpus tracks the suite, then supplemented with
+// cases the table-driven tests reach only indirectly.
 //
 // Usage:  TZ=UTC node --experimental-strip-types scripts/gen-parity-corpus.ts
 // or via: pnpm gen:parity
@@ -49,13 +41,9 @@ import {
   snapAnchorToRule,
 } from "../src/utils/recurrence";
 
-/**
- * Locate the @pikos/core package root by walking up from the working
- * directory. Resolving against `import.meta.url` would be the obvious choice
- * but breaks the moment the script is bundled — the bundle lives elsewhere and
- * every relative path silently retargets. Anchoring on a marker file fails
- * loudly instead.
- */
+/** The @pikos/core root, found by walking up from the working directory. `import.meta.url` would
+ * break once the script is bundled, since every relative path silently retargets; anchoring on a
+ * marker file fails loudly instead. */
 function packageRoot(): string {
   let dir = process.cwd();
   for (;;) {
@@ -91,11 +79,8 @@ function assertEnvironment(): void {
   }
 }
 
-// ─── Reference times ─────────────────────────────────────────────────────────
-// NOW matches parser.test.ts. The others are the alternate references the suite
-// reaches for when it needs a different weekday or hour-of-day, plus a DST
-// boundary and a leap day — both places where date math historically breaks and
-// where a naive Rust port is most likely to diverge.
+// NOW matches parser.test.ts. The others are references the suite uses for a different weekday or
+// hour, plus a DST boundary and a leap day, where date math breaks and a naive port diverges.
 
 const REFERENCES: { id: string; iso: string; note: string }[] = [
   { id: "sun_noon", iso: "2026-03-15T12:00:00", note: "suite NOW — Sunday, midday" },
@@ -107,14 +92,11 @@ const REFERENCES: { id: string; iso: string; note: string }[] = [
   { id: "year_end", iso: "2026-12-31T23:00:00", note: "year boundary" },
 ];
 
-// ─── Input extraction ────────────────────────────────────────────────────────
-
 function scrapeTestInputs(): string[] {
   const src = readFileSync(resolve(ROOT, "src/nlp/parser.test.ts"), "utf8");
   const found = new Set<string>();
-  // Matches `input: "…"` rows in the table-driven cases. Escaped quotes inside
-  // an input would break this; assert none appear rather than silently
-  // truncating a case.
+  // Matches `input: "..."` rows. An escaped quote inside an input would break this, so assert none
+  // appear rather than silently truncating a case.
   for (const m of src.matchAll(/input:\s*"((?:[^"\\]|\\.)*)"/g)) {
     const raw = m[1]!;
     if (raw.includes('\\"')) {
@@ -125,8 +107,7 @@ function scrapeTestInputs(): string[] {
   return [...found];
 }
 
-// Cases the table-driven suite covers only via `custom` assertions or property
-// runs, plus adversarial shapes a port is likely to get wrong.
+// Cases the suite covers only via `custom` assertions or property runs, plus adversarial shapes.
 const SUPPLEMENTARY_INPUTS: string[] = [
   "",
   "   ",
@@ -159,10 +140,8 @@ const SUPPLEMENTARY_INPUTS: string[] = [
   "MEETING TOMORROW AT 2PM",
 ];
 
-// ─── Recurrence corpus ───────────────────────────────────────────────────────
-// nextOccurrenceAfter / computeNextEnd / expandRecurrenceForRange are the three
-// functions the Rust CLI currently shells to Node for, so they are the port's
-// first target and need their own fixtures independent of the parser.
+// The three functions the Rust CLI shells to Node for, so they need fixtures independent of the
+// parser.
 
 const RECURRENCE_CASES: {
   rrule: string;
@@ -237,10 +216,9 @@ const RECURRENCE_CASES: {
   {
     afterDate: "2026-03-20T22:00:00",
     exdates: [],
-    // Overnight event: end wall-clock (01:00) is earlier than start (22:00),
-    // so computeNextEnd must roll the end onto the following calendar day.
-    // Without a fixture here the `nextEnd <= nextStart` boundary is untested,
-    // and a port that writes `<` passes everything else.
+    // Overnight: the end (01:00) is before the start (22:00), so computeNextEnd must roll it to the
+    // next day. Without this the `nextEnd <= nextStart` boundary is untested and a port writing `<`
+    // passes.
     rrule: "FREQ=WEEKLY;BYDAY=FR",
     scheduledEnd: "2026-03-21T01:00:00",
     scheduledStart: "2026-03-20T22:00:00",
@@ -248,8 +226,7 @@ const RECURRENCE_CASES: {
   {
     afterDate: "2026-03-15T09:00:00",
     exdates: [],
-    // Zero-length event: end equals start, which is the exact `<=` boundary.
-    // The TS original rolls this forward a day; `<` would leave it collapsed.
+    // Zero-length: the exact `<=` boundary; the TS original rolls it forward a day, `<` would not.
     rrule: "FREQ=DAILY",
     scheduledEnd: "2026-03-15T09:00:00",
     scheduledStart: "2026-03-15T09:00:00",
@@ -257,8 +234,7 @@ const RECURRENCE_CASES: {
   {
     afterDate: "2026-03-21T00:00:00",
     exdates: [],
-    // All-day series with a timed-looking end — computeNextEnd must return
-    // null rather than inventing a time.
+    // An all-day series with a timed-looking end must give null, not an invented time.
     rrule: "FREQ=WEEKLY;BYDAY=SA",
     scheduledEnd: null,
     scheduledStart: "2026-03-21",
@@ -266,8 +242,7 @@ const RECURRENCE_CASES: {
   {
     afterDate: "2026-03-15T09:00:00",
     exdates: ["2026-03-16", "2026-03-17"],
-    // Every candidate in range excluded — exercises the skip loop's exhaustion
-    // path rather than its happy path.
+    // Every candidate excluded: the skip loop's exhaustion path.
     rrule: "FREQ=DAILY;COUNT=3",
     scheduledEnd: null,
     scheduledStart: "2026-03-15T09:00:00",
@@ -311,7 +286,7 @@ const EXPANSION_CASES: {
   },
   {
     exdates: [],
-    // Short months: rrule skips months without a 31st rather than clamping.
+    // rrule skips months without a 31st rather than clamping.
     id: "monthly_31st",
     rangeEnd: "2026-12-31",
     rangeStart: "2026-01-01",
@@ -328,9 +303,7 @@ const EXPANSION_CASES: {
   },
   {
     exdates: [],
-    // Spans the EU DST transition (2026-03-29) — wall-clock time must hold at
-    // 09:00 on both sides of the jump, which is the whole point of storing
-    // local wall-clock rather than instants.
+    // Spans the EU DST transition (2026-03-29): the wall clock must hold at 09:00 on both sides.
     id: "daily_across_dst",
     rangeEnd: "2026-04-02",
     rangeStart: "2026-03-25",
@@ -340,9 +313,7 @@ const EXPANSION_CASES: {
   },
 ];
 
-/** Minimal PageSummary. Expansion copies page fields through untouched, so the
- *  values are irrelevant to the logic under test — only the occurrence dates
- *  the expander computes are projected into the corpus below. */
+/** Expansion copies page fields through untouched, so only the occurrence dates matter. */
 const TEMPLATE_PAGE: PageSummary = {
   createdAt: "2026-03-01T00:00:00",
   detachIsReversible: false,
@@ -358,36 +329,25 @@ const TEMPLATE_PAGE: PageSummary = {
   updatedAt: "2026-03-01T00:00:00",
 };
 
-// ─── Date-grouped views corpus ───────────────────────────────────────────────
-// Today and Upcoming. Membership, the overdue split and the day grouping — the
-// three things that decide what a phone shows on its home screen and in what
-// order.
-//
-// These read the wall clock, which is why the capture below freezes it. Three
-// of the functions here reach for `new Date()` or `Date.now()` internally and
-// take no reference parameter: `localToday`, `groupTodayPages`'s "now", and the
-// rule inside `toSortMs` that sorts an all-day item dated *today* at the
-// current moment rather than at midnight. That last one is the subtle
-// behaviour most worth pinning and the one a corpus taken from a live clock
-// could never reproduce twice.
+// Today and Upcoming: membership, the overdue split and the day grouping. These read the wall
+// clock, so the capture freezes it. `localToday`, `groupTodayPages`'s "now" and `toSortMs`'s rule
+// that an all-day item dated today sorts at the current moment, not midnight, take no reference
+// parameter. That last one is the subtle behaviour a corpus from a live clock could never
+// reproduce.
 
 const REAL_DATE = Date;
 
 /**
- * Run `fn` with `new Date()` and `Date.now()` pinned to `iso`.
- *
- * Replacing the global is heavy-handed and deliberate: the functions being
- * captured take no clock parameter, so the only seam is the global one. Scoped
- * to a single call and restored in a `finally`, so a throwing case cannot leave
- * the rest of the generator running against a frozen clock.
+ * Runs `fn` with `new Date()` and `Date.now()` pinned to `iso`. Replacing the global is the only
+ * seam, since the captured functions take no clock parameter; it is scoped to one call and
+ * restored in a `finally`, so a throwing case can't leave the generator on a frozen clock.
  */
 function withFrozenClock<T>(iso: string, fn: () => T): T {
   const frozen = new REAL_DATE(iso).getTime();
   class FrozenDate extends REAL_DATE {
-    // `unknown[]` rather than `ConstructorParameters<typeof Date>`: that helper
-    // resolves to the last overload alone, a one-tuple, which makes the
-    // zero-argument branch below unreachable as far as the compiler is
-    // concerned — and the zero-argument branch is the entire point.
+    // `unknown[]`, not `ConstructorParameters<typeof Date>`: that resolves to the last overload, a
+    // one-tuple, which makes the zero-argument branch below look unreachable, and that branch is
+    // the point.
     constructor(...args: unknown[]) {
       if (args.length === 0) super(frozen);
       else if (args.length === 1) super(args[0] as string | number | Date);
@@ -405,35 +365,28 @@ function withFrozenClock<T>(iso: string, fn: () => T): T {
   }
 }
 
-/**
- * Pages positioned relative to the suite's reference days rather than to fixed
- * dates, so one fixture set exercises every reference time. Each is a literal
- * date chosen to sit a known distance from `sun_noon` (2026-03-15).
- */
+/** Positioned relative to the suite's reference days so one fixture set exercises every reference
+ * time; each is a literal date a known distance from `sun_noon` (2026-03-15). */
 const VIEW_PAGES: PageSummary[] = [
-  // Overdue by days, all-day — must stay overdue whatever the hour.
+  // All-day, days overdue: overdue whatever the hour.
   { ...TEMPLATE_PAGE, id: "v_old_allday", scheduledStart: "2026-03-10", sortOrder: 1 },
-  // Overdue by days, timed.
   { ...TEMPLATE_PAGE, id: "v_old_timed", scheduledStart: "2026-03-10T08:00:00", sortOrder: 2 },
-  // Earlier today, timed — overdue after that hour, not before. The boundary
-  // the reference times are chosen to cross.
+  // Earlier today, timed: overdue after that hour, not before, which the reference times cross.
   { ...TEMPLATE_PAGE, id: "v_today_early", scheduledStart: "2026-03-15T01:45:00", sortOrder: 3 },
-  // All-day today — never overdue, and sorts at "now".
+  // All-day today: never overdue, sorts at "now".
   { ...TEMPLATE_PAGE, id: "v_today_allday", scheduledStart: "2026-03-15", sortOrder: 4 },
-  // Later today, timed.
   { ...TEMPLATE_PAGE, id: "v_today_late", scheduledStart: "2026-03-15T18:30:00", sortOrder: 5 },
-  // Two sharing a moment, to pin the sort's stability.
+  // Two sharing a moment, pinning the sort's stability.
   { ...TEMPLATE_PAGE, id: "v_tie_a", scheduledStart: "2026-03-16T09:00:00", sortOrder: 6 },
   { ...TEMPLATE_PAGE, id: "v_tie_b", scheduledStart: "2026-03-16T09:00:00", sortOrder: 7 },
-  // Inside the Upcoming window from sun_noon; outside it from later references.
+  // In the Upcoming window from sun_noon, outside it from later references.
   { ...TEMPLATE_PAGE, id: "v_day3", scheduledStart: "2026-03-17T12:00:00", sortOrder: 8 },
   { ...TEMPLATE_PAGE, id: "v_day7", scheduledStart: "2026-03-21", sortOrder: 9 },
-  // The eighth day — out of the window from sun_noon, in from later ones.
+  // The eighth day: out of the window from sun_noon, in from later ones.
   { ...TEMPLATE_PAGE, id: "v_day8", scheduledStart: "2026-03-22T10:00:00", sortOrder: 10 },
-  // Far future and unscheduled: in no date view at all.
+  // Far future and unscheduled: in no date view.
   { ...TEMPLATE_PAGE, id: "v_far", scheduledStart: "2026-09-01", sortOrder: 11 },
   { ...TEMPLATE_PAGE, id: "v_none", sortOrder: 12 },
-  // Done — every date view lists open work only.
   {
     ...TEMPLATE_PAGE,
     completedAt: "2026-03-15T09:00:00",
@@ -442,7 +395,7 @@ const VIEW_PAGES: PageSummary[] = [
     sortOrder: 13,
     status: "done",
   },
-  // Filed, to keep the folder/inbox arms of belongsToView honest.
+  // Filed, so the folder and inbox arms of belongsToView are exercised.
   {
     ...TEMPLATE_PAGE,
     folderId: "folder-1",
@@ -454,21 +407,15 @@ const VIEW_PAGES: PageSummary[] = [
 
 const VIEW_IDS = ["today", "upcoming", "inbox", "trash", "folder-1"];
 
-// ─── Overdue bulk-move corpus ────────────────────────────────────────────────
-// What "move the backlog to today" does to each kind of overdue page. Its own
-// fixture set rather than VIEW_PAGES, because the three things this turns on —
-// a recurrence, a calendar's lock, and an end time that has to travel with the
-// start — none of the view pages carry.
-//
-// Positioned around 2026-03-15 so that the seven reference times sweep each
-// page from "days overdue" through "dated today" to "in the future", which is
-// the boundary the plan is most likely to get wrong in only one direction.
+// What "move the backlog to today" does to each kind of overdue page. Its own fixtures, since a
+// recurrence, a calendar's lock and an end time that must travel with the start are in none of the
+// view pages. Positioned around 2026-03-15 so the seven reference times sweep each page from
+// overdue through dated today to future, a boundary a plan gets wrong in one direction only.
 
 const OVERDUE_PAGES: PageSummary[] = [
-  // All-day, days back. Must land on today as an all-day page, not as midnight.
+  // All-day, days back: lands on today as all-day, not as midnight.
   { ...TEMPLATE_PAGE, id: "o_allday", scheduledStart: "2026-03-10", sortOrder: 1 },
-  // Timed with an end: both shift by the same whole days, so a one-hour meeting
-  // stays one hour and stays at 08:00.
+  // Timed with an end: both shift by the same whole days, so a one-hour meeting stays one hour.
   {
     ...TEMPLATE_PAGE,
     id: "o_timed_span",
@@ -488,17 +435,13 @@ const OVERDUE_PAGES: PageSummary[] = [
   { ...TEMPLATE_PAGE, id: "o_recurring", isRecurring: true, scheduledStart: "2026-03-08", sortOrder: 4 },
   // Overdue and mirrored: the calendar owns the schedule.
   { ...TEMPLATE_PAGE, id: "o_locked", scheduledStart: "2026-03-08", scheduleLocked: true, sortOrder: 5 },
-  // Earlier today. Overdue by the clock, with nowhere to go — neither moved nor
-  // reported as left behind.
+  // Earlier today, or all-day today: nowhere to go, neither moved nor reported as left.
   { ...TEMPLATE_PAGE, id: "o_today_early", scheduledStart: "2026-03-15T01:00:00", sortOrder: 6 },
-  // Dated today, all-day. Same.
   { ...TEMPLATE_PAGE, id: "o_today_allday", scheduledStart: "2026-03-15", sortOrder: 7 },
   // Ahead of every reference but one: a negative shift must not run backwards.
   { ...TEMPLATE_PAGE, id: "o_future", scheduledStart: "2026-03-20T10:00:00", sortOrder: 8 },
-  // No date at all.
   { ...TEMPLATE_PAGE, id: "o_none", sortOrder: 9 },
-  // Astride the EU DST change, which the `dst_eve` reference sits next to. A
-  // shift measured in seconds rather than days lands this an hour out.
+  // Astride the EU DST change next to `dst_eve`: a shift in seconds, not days, lands it an hour out.
   {
     ...TEMPLATE_PAGE,
     id: "o_across_dst",
@@ -508,13 +451,8 @@ const OVERDUE_PAGES: PageSummary[] = [
   },
 ];
 
-// ─── extractText corpus ──────────────────────────────────────────────────────
-// Tiptap JSON → plain text. iOS needs this on the `docChanged` bridge message
-// to keep the FTS column populated, so it is a prerequisite for the editor
-// webview rather than a nice-to-have.
-//
-// Inputs are stored as JSON strings, matching how pages.content is persisted
-// and how the function is actually called.
+// Tiptap JSON to plain text. iOS needs it on the `docChanged` bridge message to keep the FTS
+// column populated. Inputs are JSON strings, as `pages.content` is stored.
 
 const EXTRACT_TEXT_CASES: { id: string; doc: string }[] = [
   { doc: "", id: "empty_string" },
@@ -667,9 +605,8 @@ const EXTRACT_TEXT_CASES: { id: string; doc: string }[] = [
   },
 ];
 
-// ─── Capture ─────────────────────────────────────────────────────────────────
-// Errors are captured, not thrown. A Rust port must reproduce the TS behaviour
-// on malformed input too, and "this input throws" is part of that behaviour.
+// Errors are captured, not thrown: a Rust port must reproduce the TS behaviour on malformed input,
+// and "this input throws" is part of it.
 
 type Captured<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -681,24 +618,16 @@ function capture<T>(fn: () => T): Captured<T> {
   }
 }
 
-// ─── Anchor snapping ─────────────────────────────────────────────────────────
-// snapAnchorToRule moves a page's head onto the first date its own rule allows.
-// Quick-add needs it: "every m/w/f" typed on a Sunday would otherwise leave the
-// head on Sunday — a date the rule excludes — rendering a stray first run
-// detached from the occurrences after it.
-//
-// The cases cover: an anchor the rule already permits (unchanged), one it
-// excludes (moved forward), a date-only anchor, an interval rule, a monthly
-// by-weekday rule, a wall-clock time that must survive the move, an exhausted
-// COUNT, and an unparseable rule.
+// snapAnchorToRule moves a head onto the first date its rule allows: "every m/w/f" typed on a
+// Sunday would otherwise leave a stray first run on a date the rule excludes. Cases: permitted,
+// excluded, date-only, interval, monthly by-weekday, wall-clock time surviving, exhausted COUNT,
+// unparseable.
 
-// ─── Editable-rule corpus ────────────────────────────────────────────────────
-// `rruleEditWouldDegrade` decides whether a structured editor may touch a rule
-// at all. Getting it wrong in the permissive direction is the expensive one: the
-// user changes an interval and silently loses the terms that made the rule
-// theirs. So the cases below deliberately straddle the envelope —
-// `RecurrenceOptions` carries FREQ/INTERVAL/BYDAY/BYSETPOS/BYMONTHDAY/BYMONTH/
-// WKST/COUNT/UNTIL, and anything outside it, or unparseable, must lock.
+// `rruleEditWouldDegrade` decides whether the structured editor may touch a rule. Wrongly
+// permissive is the expensive direction (changing an interval silently drops the terms that made
+// the rule theirs), so the cases straddle the envelope: `RecurrenceOptions` carries
+// FREQ/INTERVAL/BYDAY/BYSETPOS/BYMONTHDAY/BYMONTH/WKST/COUNT/UNTIL, and anything outside it, or
+// unparseable, must lock.
 
 const DEGRADE_CASES: { rrule: string; note: string }[] = [
   { note: "plain daily", rrule: "FREQ=DAILY" },
@@ -717,7 +646,7 @@ const DEGRADE_CASES: { rrule: string; note: string }[] = [
   { note: "until with a Z — syntactic only", rrule: "FREQ=DAILY;UNTIL=20260401T235959Z" },
   { note: "until at the provider's own cut-off", rrule: "FREQ=DAILY;UNTIL=20260401T120000" },
   { note: "plus-signed weekday", rrule: "FREQ=WEEKLY;BYDAY=+1MO" },
-  // Outside the envelope — each must lock.
+  // Outside the envelope: each must lock.
   { note: "byhour", rrule: "FREQ=DAILY;BYHOUR=9" },
   { note: "byminute", rrule: "FREQ=DAILY;BYMINUTE=30" },
   { note: "byweekno", rrule: "FREQ=YEARLY;BYWEEKNO=20" },
@@ -766,9 +695,8 @@ const SNAP_CASES: { rrule: string; anchor: string; note: string }[] = [
   { anchor: "2026-03-15T09:00:00", note: "unparseable rule", rrule: "NOT A RULE" },
   { anchor: "2024-02-28T09:00:00", note: "leap day", rrule: "FREQ=WEEKLY;BYDAY=TH" },
   { anchor: "2026-12-31T23:00:00", note: "crosses the year", rrule: "FREQ=WEEKLY;BYDAY=MO" },
-  // The anchor's wall-clock time wins over a time named by the rule itself.
-  // Without these the snapped time is indistinguishable from the occurrence's
-  // own, because every other rule here inherits its time from DTSTART.
+  // The anchor's wall-clock time wins over a time the rule names. Without these the snapped time
+  // is indistinguishable from the occurrence's own, since other rules inherit DTSTART's.
   {
     anchor: "2026-03-15T09:00:00",
     note: "rule names an hour the anchor overrides",
@@ -786,11 +714,7 @@ const SNAP_CASES: { rrule: string; anchor: string; note: string }[] = [
   },
 ];
 
-/**
- * Search-palette queries, scraped from `searchQuery.test.ts` the same way the
- * parser inputs are, so the corpus tracks the suite rather than drifting from
- * it. Supplemented below with the shapes a port is most likely to get wrong.
- */
+/** Scraped from `searchQuery.test.ts` like the parser inputs, then supplemented. */
 function scrapeSearchInputs(): string[] {
   const src = readFileSync(resolve(ROOT, "src/nlp/searchQuery.test.ts"), "utf8");
   const found = new Set<string>();
@@ -804,10 +728,8 @@ function scrapeSearchInputs(): string[] {
   return [...found];
 }
 
-// Shapes the suite reaches indirectly or not at all, and where a
-// reimplementation is most likely to diverge: the word-boundary rule, the
-// quoted-value branch, consecutive operators with nothing between them, and
-// every `due:` range with a side missing.
+// Shapes the suite reaches indirectly, where a reimplementation diverges: the word-boundary rule,
+// the quoted-value branch, consecutive operators, and every `due:` range with a side missing.
 const SUPPLEMENTARY_SEARCH_INPUTS: string[] = [
   "   ",
   "TAG:Work",
@@ -829,9 +751,8 @@ const SUPPLEMENTARY_SEARCH_INPUTS: string[] = [
   "priority:",
   "is:",
   "tag:#work",
-  // Every operator's *value* is matched case-insensitively except a tag's,
-  // which is kept verbatim. Without these a port that lowercases the keyword
-  // and compares the value as typed passes the whole corpus.
+  // Operator values match case-insensitively except a tag's, kept verbatim. Without these a port
+  // that lowercases the keyword and compares the value as typed passes the corpus.
   "is:DONE",
   "is:Open",
   "is:SCHEDULED",
@@ -875,8 +796,7 @@ function main(): void {
   });
 
   const expansionCases = EXPANSION_CASES.map((c) => {
-    // `exactOptionalPropertyTypes` is on, so an absent end must be omitted
-    // rather than set to undefined — the two are not interchangeable here.
+    // `exactOptionalPropertyTypes`: an absent end must be omitted, not set to undefined.
     const rule: PageRecurrenceRule = {
       createdAt: "2026-03-01T00:00:00",
       id: `rule-${c.id}`,
@@ -887,9 +807,7 @@ function main(): void {
       timezone: EXPECTED_TZ,
       ...(c.scheduledEnd === undefined ? {} : { scheduledEnd: c.scheduledEnd }),
     };
-    // Project to the three fields expansion actually computes. The rest of a
-    // VirtualOccurrence is the template page copied through, which would bloat
-    // the fixture without testing anything.
+    // Only the three fields expansion computes; the rest is the template page copied through.
     const occurrences = capture(() =>
       expandRecurrenceForRange(
         rule,
@@ -915,9 +833,8 @@ function main(): void {
     snapped: capture(() => snapAnchorToRule(c.rrule, c.anchor)),
   }));
 
-  // One case per reference time. Each captures what the two date views would
-  // show at that moment: which pages belong where, the window's last day, and
-  // the sections the list is actually built from.
+  // One case per reference time: which pages belong where, the window's last day, and the
+  // sections the list is built from.
   const viewCases = REFERENCES.map((ref) => {
     const today = ref.iso.slice(0, 10);
     return withFrozenClock(ref.iso, () => {
@@ -927,8 +844,7 @@ function main(): void {
           VIEW_IDS.map((viewId) => [viewId, belongsToView(page, viewId, today)])
         ),
       }));
-      // The composition the list performs: open pages that belong to the view,
-      // in the order the sections put them.
+      // Open pages in the view, in section order, as the list composes them.
       const open = VIEW_PAGES.filter((p) => p.status !== "done");
       const todayGroups = capture(() =>
         groupTodayPages(open.filter((p) => belongsToView(p, "today", today)))
@@ -943,8 +859,7 @@ function main(): void {
         membership,
         ref: ref.id,
         today,
-        // Ids only. The rest of each page is the fixture copied through, which
-        // would bloat the corpus without testing anything the ids do not.
+        // Ids only; the rest is fixture copied through.
         todayGroups: todayGroups.ok
           ? {
               ok: true as const,
@@ -984,10 +899,8 @@ function main(): void {
     })
   );
 
-  // The palette is a constant, so this is not a behaviour capture — it is the
-  // design source of truth written where a Rust test can read it. Every surface
-  // that offers a colour picks from this list, and a copy that drifts puts a
-  // folder coloured on the phone in a shade the desktop's picker cannot show.
+  // A constant, so not a behaviour capture: the design source of truth where a Rust test can read
+  // it. A drifted copy puts a folder coloured on the phone in a shade the desktop picker lacks.
   const colors = {
     defaults: ["caldav", "google", "unknown"].map((provider) => ({
       color: defaultColorForProvider(provider),
@@ -996,10 +909,8 @@ function main(): void {
     palette: PALETTE_COLORS,
   };
 
-  // Durations chosen around every boundary the two formatters have: the floor
-  // itself and either side of it, the minute rounding, the singular/plural
-  // switch, the jump to `H:MM:SS`, and an exact hour (where the "5 min" tail is
-  // dropped).
+  // Around every formatter boundary: the floor and either side, minute rounding, singular and
+  // plural, the jump to `H:MM:SS`, and an exact hour (which drops the "5 min" tail).
   const focusDurations = [
     0, 1, 29, 30, 31, 59, 60, 61, 89, 90, 119, 120, 1799, 1800, 3540, 3599, 3600, 3601, 3660,
     5400, 7199, 7200, 86_399, 86_400,

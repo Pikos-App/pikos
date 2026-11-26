@@ -1,13 +1,9 @@
-// Ask chrono a question directly.
-//
-// The corpora say what chrono does for the expressions the parser corpus
-// happens to contain. When the Rust engine needs to know what it does for
-// something just outside that — is a bare "may" a month? does "18-25" without a
-// month parse? — this asks, rather than guessing from the corpus:
+// Asks chrono directly for what the Rust engine needs to know just outside the corpora (is a
+// bare "may" a month? does "18-25" parse?):
 //
 //   pnpm --filter @pikos/core probe:chrono -- "may day" "trip 18-25"
 //
-// Reference defaults to the corpus's sun_noon; override with PROBE_REF.
+// The reference defaults to the corpus's sun_noon; override with PROBE_REF.
 
 import { createRequire } from "node:module";
 

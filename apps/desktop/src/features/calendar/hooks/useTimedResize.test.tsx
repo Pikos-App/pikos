@@ -1,7 +1,5 @@
-// Synced events own a locked schedule (scheduleLocked). The resize gesture must
-// no-op on a locked block — handleBlockResizeStart returns before attaching any
-// listeners, so onReschedule never fires. Mirrored with an unlocked block to
-// prove the guard, not a dead harness.
+// A synced event's schedule is locked: handleBlockResizeStart returns before attaching any
+// listeners, so onReschedule never fires. Mirrored with an unlocked block to prove the guard.
 
 import type { CalendarBlock, PageSummary } from "@pikos/core";
 import { buildCollapseGeometry, DEFAULT_COLLAPSE_CONFIG, DEFAULT_METRICS } from "@pikos/core";

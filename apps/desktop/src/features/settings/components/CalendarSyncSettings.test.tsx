@@ -1,7 +1,3 @@
-// The Calendar Sync panel drives the real adapter commands end-to-end (against
-// MockStorageAdapter in test mode). Covers add-account → toggle → status, and
-// per-calendar recolour.
-
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -41,12 +37,11 @@ describe("CalendarSyncSettings", () => {
 
     expect(await screen.findByText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
-    // Discovered calendars start disabled → status dot reads "Off".
     expect(screen.getByLabelText("Personal: Off")).toBeInTheDocument();
     expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
   });
 
-  // Two providers on one account list is the 0.4.0 shape; each keeps its own
+  // Two providers on one account list: each keeps its own
   // calendars and its own disable scope, so neither can shadow the other.
   it("shows a CalDAV and a Google account side by side", async () => {
     renderWithProviders(<CalendarSyncSettings />);
@@ -88,7 +83,6 @@ describe("CalendarSyncSettings", () => {
         "true"
       )
     );
-    // Enabled but never polled in the mock → "Stale"; only Work stays "Off".
     expect(screen.getByLabelText("Personal: Stale")).toBeInTheDocument();
     expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
   });

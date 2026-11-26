@@ -8,7 +8,7 @@
 // when a file importing a changed module does, when a changed spec carries the row's tag, or
 // when a library it serves moved. A manual row is also on the list when it checks the release
 // build, when the ledger says nobody has driven it for six months, or after a major macOS
-// update (`PKOS-0145`). Touched rows are marked automated (from `qa-marks.mjs`, never typed) or
+// update. Touched rows are marked automated (from `qa-marks.mjs`, never typed) or
 // manual; the rest are untouched. The result is a candidate set for a person to judge before
 // anyone drives a row.
 //
@@ -176,7 +176,7 @@ function main() {
         before.tail &&
         !isTouched(since, s, row)
       ) {
-        // A person's untouched judgment, with its reason (PKOS-0145), until a commit reaches the row.
+        // A person's untouched judgment, with its reason, holds until a commit reaches the row.
         mark = "untouched";
         tail = before.tail;
         carried++;

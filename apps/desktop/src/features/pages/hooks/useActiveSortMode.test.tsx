@@ -1,5 +1,3 @@
-// useActiveSortMode — the per-view sort default, and that a stored choice wins.
-
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -13,9 +11,8 @@ import { useActiveSortMode } from "./useActiveSortMode";
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-/** Navigates to a folder of the requested kind and returns the live hook result.
- *  The external one is made by enabling a calendar, the same path a real sync
- *  takes — `isExternalCalendar` is system-managed and createFolder can't set it. */
+/** Navigates to a folder of the requested kind. The external one is made by enabling a calendar, since
+ *  `isExternalCalendar` is system-managed and createFolder can't set it. */
 async function setupInFolder(kind: "calendar" | "regular") {
   const rendered = renderHookWithProviders(() => ({
     pages: usePages(),

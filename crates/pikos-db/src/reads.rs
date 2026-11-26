@@ -61,7 +61,7 @@ pub(crate) async fn open_starting(
 
 /// The sidebar's counts. Today is every open page starting on or before `today` in `zone`;
 /// Upcoming every one starting in the seven days from `today`. Pages are counted as heads, the
-/// way the badges count them now: a recurring series counts once, by its head's date.
+/// way the badges count them: a recurring series counts once, by its head's date.
 pub async fn count_views(pool: &SqlitePool, zone: &str, today: NaiveDate) -> AppResult<ViewCounts> {
     let tomorrow = today + Days::new(1);
     let week_out = today + Days::new(crate::views::UPCOMING_DAYS);

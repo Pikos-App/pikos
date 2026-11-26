@@ -48,9 +48,9 @@ export type Page = {
   createdAt: string;
   updatedAt: string;
   /**
-   * Which Tiptap document schema produced `content`. See migration 023:
-   * a client finding a version above its own must not save over the document,
-   * or it silently drops node types it cannot represent.
+   * Which Tiptap document schema produced `content`. A client finding a version
+   * above its own must not save over the document, or it drops node types it
+   * cannot represent.
    */
   contentSchemaVersion: number;
   /**
@@ -65,12 +65,10 @@ export type Page = {
    */
   syncState?: "active" | "detached" | "tombstoned" | null;
   /**
-   * Whether a detached page could rejoin its calendar, which is what the copy
-   * splits on: the user wants to know if this is undoable, not how it happened.
-   * True when the calendar is merely switched off or its account disconnected —
-   * both of which the user can reverse. False when the event is gone from the
-   * provider, which nothing here can undo. Meaningless unless `sync_state` is
-   * `detached`; a live page reads false because nothing is switched off.
+   * Whether a detached page could rejoin its calendar. True when the calendar is
+   * switched off or its account disconnected, both of which the user can reverse.
+   * False when the event is gone from the provider. Meaningless unless
+   * `sync_state` is `detached`.
    */
   detachIsReversible: boolean;
   /**
@@ -106,9 +104,8 @@ export type Page = {
   pendingDescription?: string | null;
   /**
    * The day this page first synced. Occurrences of a repeating event from before
-   * it are not rendered — the calendar was never asked about that period, so what
-   * it would show there is unreliable. (Why this day and not the backfill
-   * window is argued at `synced_head_floor`, in the recurrence derivation.)
+   * it are not rendered, because the calendar was never asked about that period.
+   * (Why this day and not the backfill window: `synced_head_floor`.)
    */
   syncedSince?: string | null;
   /**

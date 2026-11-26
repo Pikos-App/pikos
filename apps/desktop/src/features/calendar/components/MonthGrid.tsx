@@ -9,17 +9,12 @@ import { CHIP_HEIGHT_CLASS } from "../utils/calendarColors";
 import { MonthEventChip } from "./MonthEventChip";
 
 interface MonthGridProps {
-  /** Padded month grid — weeks × 7 cells, from `buildMonthGrid`. */
   weeks: MonthCell[][];
   pages: PageSummary[];
-  /** Open the full editor for a page (double-click on a chip). */
   onPageDoubleClick: (pageId: string) => void;
-  /** Jump the calendar to one day in the time grid. Fired by a click on empty
-   * cell space, on the day number, and on the "+K more" pill. */
   onOpenDay: (day: Date) => void;
 }
 
-/** Weekday header labels, ordered from whatever day the grid's weeks start on. */
 function weekdayLabels(week: MonthCell[]): string[] {
   return week.map((cell) => format(cell.date, "EEE"));
 }
@@ -38,18 +33,13 @@ function barWidth(spanCols: number): string | undefined {
 }
 
 /**
- * Month view: the visible month padded to whole weeks, each cell listing its
- * events as chips with a "+K more" pill once the cap is hit.
- *
- * Explicitly out of scope for v1: drag-to-move, resize, and drag-to-create.
- * A month cell has no time axis, so any of those would have to invent a time —
- * the time grid stays the place where scheduling gestures live, and every path
- * out of month view (day number, empty space, overflow pill) lands there.
+ * Month view: the visible month padded to whole weeks, each cell listing chips with a "+K more"
+ * pill at the cap. No drag-to-move, resize or drag-to-create: a month cell has no time axis, so
+ * the time grid stays the place for scheduling, and every path out of month view lands there.
  */
 export function MonthGrid({ onOpenDay, onPageDoubleClick, pages, weeks }: MonthGridProps) {
   const { folders } = usePages();
-  // Same folder→colour source the week grid's all-day section reads, so a page
-  // keeps one colour across both views.
+  // Same folder-to-colour source as the week grid's all-day section, so a page keeps one colour.
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );

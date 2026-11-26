@@ -34,8 +34,7 @@ describe("syncedScheduleLabel", () => {
   });
 
   it("resolves a timed synced event into the viewer's zone", () => {
-    // TZ is pinned to UTC for the suite, so 09:00 in Europe/Berlin (UTC+1 in
-    // March, before the DST switch) reads back as 08:00 local.
+    // TZ is UTC, so 09:00 Europe/Berlin (UTC+1 before the DST switch) reads as 08:00 local.
     const label = syncedScheduleLabel(
       makePage({
         scheduledEnd: "2099-03-15T10:00:00",

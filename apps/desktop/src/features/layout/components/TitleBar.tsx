@@ -28,7 +28,6 @@ export function TitleBar() {
       className={`flex ${BAR_H} shrink-0 items-center border-b border-titlebar-border bg-titlebar`}
       data-tauri-drag-region
     >
-      {/* macOS: reserve space for native traffic lights */}
       {IS_MACOS && <div className="w-[70px] shrink-0" data-tauri-drag-region />}
 
       <div className="flex-1" data-tauri-drag-region />

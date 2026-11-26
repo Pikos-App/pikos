@@ -1,12 +1,9 @@
 use super::*;
 use crate::test_support::memory_keychain as keychain;
 
-/// The real OS store, not the in-memory stand-in.
-///
-/// Ignored by default: it writes to the machine's own keychain, which on macOS means a prompt and
-/// on a headless Linux session means nothing is listening. `scripts/linux-keyring-check.sh` runs it
-/// where a Secret Service exists, which is the only place the Linux backend is exercised at all —
-/// every other test here injects a map, and a missing backend still passes all of them.
+/// Ignored by default: it writes to the machine's own keychain (a prompt on macOS, nothing
+/// listening on headless Linux). `scripts/linux-keyring-check.sh` runs it where a Secret
+/// Service exists, the only place the Linux backend is exercised; every other test injects a map.
 #[test]
 #[ignore = "writes to the machine's keychain; see scripts/linux-keyring-check.sh"]
 fn the_system_keychain_round_trips() {
@@ -19,11 +16,8 @@ fn the_system_keychain_round_trips() {
     assert!(matches!(kc.load(&account), Err(KeychainError::NotFound)));
 }
 
-/// Disconnect really removes the item, as seen by something other than us.
-///
 /// Our own `load` returning `NotFound` would also be the answer if `delete` merely forgot a
-/// handle, so the reader here is `secret-tool`, which asks the Secret Service directly. Ignored
-/// and run by the same script as the round trip.
+/// handle, so the reader is `secret-tool`, which asks the Secret Service directly.
 #[cfg(target_os = "linux")]
 #[test]
 #[ignore = "needs a real Secret Service; see scripts/linux-keyring-check.sh"]
@@ -50,10 +44,8 @@ fn a_deleted_credential_is_gone_from_the_session_keyring() {
     );
 }
 
-/// What a session with no Secret Service does, which is the whole reason the Linux backend exists.
-///
-/// Run outside `dbus-run-session`, so there is nothing to talk to. The assertion is about what
-/// somebody is told: a D-Bus error on its own reads as a crash and names nothing to fix.
+/// Run outside `dbus-run-session`. The assertion is about what somebody is told: a D-Bus
+/// error on its own reads as a crash and names nothing to fix.
 // qa: LNX-05
 #[cfg(target_os = "linux")]
 #[test]
@@ -87,15 +79,10 @@ fn secret_tool_output() -> String {
     )
 }
 
-/// Every platform Pikos builds for names a keyring backend.
-///
 /// With no feature named, keyring compiles in an in-memory mock that accepts every write and
 /// shares nothing between `Entry` instances, so Connect appears to work and every later launch
-/// reads `NotFound`. That is what shipped, and it passed every other test in this file.
-///
-/// A manifest check rather than a round trip because the round trip needs a Secret Service to talk
-/// to, which the suite that would catch the omission has not got. The round trip lives in
-/// `scripts/linux-keyring-check.sh`; this is the half that runs on the commit that drops the line.
+/// reads `NotFound`, while every other test here still passes. A manifest check, because the
+/// round trip (`scripts/linux-keyring-check.sh`) needs a Secret Service this suite lacks.
 #[test]
 fn every_platform_names_a_keyring_backend() {
     let manifest = include_str!("../Cargo.toml");
@@ -187,7 +174,6 @@ fn backend_error_is_not_reconnect_needed() {
 
 #[test]
 fn keyring_no_entry_maps_to_not_found() {
-    // The reconnect-needed primitive hinges on this mapping from the real backend.
     assert!(matches!(
         map_err(keyring::Error::NoEntry),
         KeychainError::NotFound

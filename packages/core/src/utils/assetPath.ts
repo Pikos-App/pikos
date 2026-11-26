@@ -6,16 +6,12 @@ const PIKOS_ASSET_NAME =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 
 /**
- * The file a page's stored image path names, inside this machine's `assetsDir`.
+ * The file a page's stored image path names, inside this machine's `assetsDir`. Pages store
+ * `assets/<file>`, so a workspace copied to another machine still finds its images. A full path
+ * saved by an earlier version that ends in an assets folder and a Pikos-generated name reads as
+ * that file, healing the page without rewriting it; any other path comes back unchanged.
  *
- * Pages store `assets/<file>`, so a workspace copied to another Mac, another user or
- * another build still finds its images. Images saved by earlier versions stored the
- * full path on the machine that saved them; one that ends in an assets folder and a
- * name Pikos generated is read as that file here, which heals those pages without
- * rewriting them. Any other path is not one Pikos saved and comes back unchanged.
- *
- * The desktop backend's `resolve_asset_path` runs the same rule against the same
- * table, `asset-paths.json`.
+ * The backend's `resolve_asset_path` runs the same rule against `asset-paths.json`.
  */
 export function resolveAssetPath(stored: string, assetsDir: string): string {
   const parts = stored.split(/[\\/]/);

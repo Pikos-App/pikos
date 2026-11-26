@@ -124,7 +124,6 @@ describe("setIndentForSelection", () => {
 
   it("indents multiple paragraphs across a selection", () => {
     const editor = createTestEditor("<p>First</p><p>Second</p>");
-    // Select across both paragraphs
     editor.commands.setTextSelection({ from: 1, to: 10 });
 
     setIndentForSelection(editor.state, editor.view.dispatch, 1);
@@ -137,13 +136,12 @@ describe("setIndentForSelection", () => {
 describe("Tab key behavior", () => {
   it("inserts spaces when cursor is not at line start", () => {
     const editor = createTestEditor("<p>Hello world</p>");
-    // Place cursor after "Hello" (position 6)
+    // Position 6 = after "Hello"
     editor.commands.setTextSelection(6);
 
     const event = new KeyboardEvent("keydown", { key: "Tab" });
     editor.view.dom.dispatchEvent(event);
 
-    // Should have inserted 4 spaces at cursor position (after existing space)
     expect(editor.state.doc.firstChild!.textContent).toBe("Hello     world");
     editor.destroy();
   });
@@ -199,7 +197,7 @@ describe("Backspace at position 0 with indent", () => {
 
   it("allows normal backspace when indent is 0", () => {
     const editor = createTestEditor("<p>First</p><p>Second</p>");
-    // Cursor at start of second paragraph
+    // Position 8 = start of the second paragraph
     editor.commands.setTextSelection(8);
 
     const backspace = new KeyboardEvent("keydown", { key: "Backspace" });
@@ -214,7 +212,6 @@ describe("Backspace at position 0 with indent", () => {
 describe("Escape collapses selection", () => {
   it("collapses a text selection to cursor at end", () => {
     const editor = createTestEditor("<p>Hello world</p>");
-    // Select "Hello"
     editor.commands.setTextSelection({ from: 1, to: 6 });
     expect(editor.state.selection.empty).toBe(false);
 

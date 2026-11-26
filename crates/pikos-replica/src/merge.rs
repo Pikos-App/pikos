@@ -38,7 +38,6 @@ impl Value {
     }
 }
 
-/// One field's columns and the clock they were written at.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldState {
     pub values: Vec<Value>,
@@ -74,7 +73,6 @@ pub struct RowState {
 }
 
 impl RowState {
-    /// The newest write to the row, its creation included.
     pub fn newest(&self) -> Hlc {
         self.fields
             .iter()

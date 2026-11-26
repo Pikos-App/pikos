@@ -34,16 +34,12 @@ pub use rule::{
 /// A naive wall-clock value: a date, optionally with a time. Time-less values are
 /// all-day (rendered `YYYY-MM-DD`); timed values render `YYYY-MM-DDTHH:MM:SS`.
 ///
-/// The one home for that pair of formats and for the all-day/timed distinction
-/// they encode. Every layer that stores or reads a schedule value — the
-/// reconciler, the notification log, the providers, the CLI — speaks these two
-/// shapes, so they parse and render through here rather than re-typing the
-/// format strings (and re-deciding what "all-day" means) per call site.
+/// The one home for that pair of formats and for what "all-day" means; every layer
+/// parses and renders through here rather than re-typing the format strings.
 ///
-/// Note that parsing is length-led, not padding-strict: chrono's `%m`/`%d`
-/// accept `2026-9-1`, which [`WallClock::parse`] therefore reads as a date. A
-/// caller that needs zero-padding pinned (because the value will be string-
-/// compared or stored) checks the length itself.
+/// Parsing is length-led, not padding-strict: chrono's `%m`/`%d` accept `2026-9-1`,
+/// which [`WallClock::parse`] reads as a date. A caller that string-compares or
+/// stores the value checks the length itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WallClock {
     pub date: NaiveDate,
@@ -51,7 +47,6 @@ pub struct WallClock {
 }
 
 impl WallClock {
-    /// A timed wall clock — the shape a converted or computed instant takes.
     pub fn timed(dt: NaiveDateTime) -> Self {
         WallClock {
             date: dt.date(),
@@ -59,13 +54,10 @@ impl WallClock {
         }
     }
 
-    /// An all-day wall clock on `date`.
     pub fn all_day(date: NaiveDate) -> Self {
         WallClock { date, time: None }
     }
 
-    /// Parses `YYYY-MM-DD` (all-day) or `YYYY-MM-DDTHH:MM:SS` (timed). Returns
-    /// `None` on any malformed input, mirroring the wrapper's `null` fallbacks.
     pub fn parse(s: &str) -> Option<Self> {
         if s.len() <= 10 {
             NaiveDate::parse_from_str(s, "%Y-%m-%d")
@@ -82,7 +74,6 @@ impl WallClock {
         self.time.is_none()
     }
 
-    /// The instant used for ordering/range comparisons; all-day sorts at midnight.
     pub fn as_datetime(&self) -> NaiveDateTime {
         self.date.and_time(self.time.unwrap_or(NaiveTime::MIN))
     }

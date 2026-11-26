@@ -2,15 +2,10 @@ import Foundation
 
 /// Where the workspace database lives on disk.
 ///
-/// The whole App Group question reduces to this file. Widgets and the share
-/// extension are separate processes with their own containers, so a database in
-/// the app's own sandbox is invisible to them — the shared container is the only
-/// place all three can reach.
-///
-/// The identifier has to match an App Group capability on every target's
-/// provisioning profile. Each target's Info.plist names it, from the same build
-/// setting its entitlements use, so the staging build reaches its own group and
-/// never the real one.
+/// Widgets and the share extension are separate processes with their own
+/// containers, so the shared App Group container is the only place all three
+/// can reach. Each target's Info.plist names the identifier from the same build
+/// setting its entitlements use, so the staging build never reaches the real group.
 public enum WorkspaceLocation {
     /// Must match the App Group in every target's entitlements.
     ///
@@ -19,10 +14,8 @@ public enum WorkspaceLocation {
     public static let appGroupIdentifier =
         Bundle.main.object(forInfoDictionaryKey: "PikosAppGroup") as? String ?? "group.app.pikos"
 
-    /// The database filename inside whichever container is in use.
     static let databaseName = "pikos.sqlite"
 
-    /// Why a workspace path could not be determined.
     public enum Failure: LocalizedError {
         case appGroupUnavailable(identifier: String)
 
@@ -39,29 +32,15 @@ public enum WorkspaceLocation {
 
     /// Environment variable a debug build reads instead of the App Group.
     ///
-    /// Exists for UI tests. `XCUIApplication` can set the environment of the
-    /// process it launches but cannot reach inside it, so this is the seam that
-    /// lets a test hand the app a throwaway workspace.
-    ///
-    /// Two things it buys, and the second is the one that matters. A run is
-    /// isolated — each test gets an empty database instead of inheriting
-    /// whatever the last one left — and CI does not need the App Group
-    /// entitlement to be honoured on a simulator, which is provisioning-
-    /// dependent and would otherwise make "can this app launch" a question
-    /// about certificates.
+    /// Lets a UI test hand the app a throwaway workspace: `XCUIApplication` can
+    /// set the launched process's environment but cannot reach inside it. It
+    /// also keeps CI from depending on a simulator honouring the App Group entitlement.
     public static let workspaceOverrideKey = "PIKOS_WORKSPACE_DIRECTORY"
 
     /// The database's URL.
     ///
-    /// Throws rather than falling back to the app's private container. A silent
-    /// fallback would work perfectly in the app and leave widgets reading an
-    /// empty database — the kind of failure that looks like a widget bug for
-    /// weeks before anyone suspects provisioning.
+    /// Throws when the App Group is unreachable instead of using the private container.
     public static func databaseURL() throws -> URL {
-        // DEBUG only, deliberately. A release build that could be pointed at
-        // another directory by an environment variable is a release build whose
-        // storage location is an input, and the container is the one thing
-        // about this app that should not be negotiable at launch.
         #if DEBUG
             if let override = ProcessInfo.processInfo.environment[workspaceOverrideKey],
                 !override.isEmpty
@@ -90,23 +69,13 @@ public enum WorkspaceLocation {
     /// Make the workspace readable while the device is locked, after the first
     /// unlock since boot.
     ///
-    /// iOS assigns a data-protection class to every file, and the strictest one
-    /// makes a file unreadable whenever the device is locked — surfacing as
-    /// open and write failures rather than as anything that names the cause.
-    /// That is not hypothetical here: a Today widget refreshes on the lock
-    /// screen, which is exactly the moment the app is backgrounded and the
-    /// device is locked.
+    /// The default protection class makes a file unreadable whenever the device
+    /// is locked, surfacing as open and write failures that don't name the cause,
+    /// and a Today widget refreshes on the lock screen. This class keeps the file
+    /// encrypted until first unlock without vanishing on every screen lock. The
+    /// `-wal` and `-shm` files get the same class, or it would look like corruption.
     ///
-    /// `.completeUntilFirstUserAuthentication` is the deliberate choice rather
-    /// than the default one. The file stays encrypted at rest and is unreadable
-    /// on a device that has not been unlocked since boot, which is the property
-    /// worth having; it does not vanish every time the screen locks, which is
-    /// the property that would make the widget lie. SQLite's sidecar files get
-    /// the same class — protecting the database and not its write-ahead log
-    /// would fail in a way that looks like corruption.
-    ///
-    /// Called on every open rather than at creation: the class is a property of
-    /// the file, and the `-wal` and `-shm` files come and go underneath us.
+    /// Called on every open, since those sidecar files come and go.
     public static func applyProtectionClass() throws {
         let database = try databaseURL()
         for suffix in ["", "-wal", "-shm"] {
@@ -121,8 +90,8 @@ public enum WorkspaceLocation {
     /// Move the database and its sidecars out of the way, into the app's Documents where the Files
     /// app shows them, and return the folder they went to.
     ///
-    /// Moved rather than deleted: a workspace no build can open still holds whatever was written
-    /// in it, and the write-ahead log goes with it because it can hold the newest of that.
+    /// Moved rather than deleted: a workspace no build can open still holds what was written
+    /// in it, and the write-ahead log can hold the newest of that.
     public static func setAside(now: Date = Date()) throws -> URL {
         let database = try databaseURL()
         let documents = try FileManager.default.url(
@@ -142,8 +111,7 @@ public enum WorkspaceLocation {
     /// Directory holding page images, beside the database in the same container.
     ///
     /// Created on demand: the editor's scheme handler refuses to serve anything
-    /// outside it, and a missing directory would make every image fail to load
-    /// rather than simply be absent.
+    /// outside it, so a missing directory would make every image fail to load.
     public static func assetsURL() throws -> URL {
         let container = try databaseURL().deletingLastPathComponent()
         let assets = container.appendingPathComponent("assets", isDirectory: true)

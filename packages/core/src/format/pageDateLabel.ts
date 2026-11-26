@@ -1,9 +1,5 @@
-// Date chip labels for the page list. Every label pairs a short display string
-// with the full date as a hover tooltip, and reports whether the schedule has
-// already passed so the caller can colour it.
-//
-// Locale is left to the system (no explicit locale argument) so these read the
-// way the rest of the app does — see UsageStats and the settings surfaces.
+// Each label pairs a short string with the full date as a tooltip, and reports whether the
+// schedule has passed so the caller can colour it. Locale is left to the system, as elsewhere.
 
 import { addDays, endOfDay, startOfDay } from "date-fns";
 
@@ -16,12 +12,11 @@ export interface PageDateLabel {
   tooltip: string;
 }
 
-/** Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p. */
 export function formatCompactTime(date: Date): string {
   return formatClockTime(date.getHours(), date.getMinutes());
 }
 
-/** Full-word date for a tooltip: "Monday, March 23, 2026". */
+/** "Monday, March 23, 2026". */
 export function formatLongDate(date: Date): string {
   return date.toLocaleDateString(undefined, {
     day: "numeric",
@@ -45,7 +40,7 @@ function tooltipFor(iso: string): string {
       });
 }
 
-/** An all-day date is due for the whole of its day, so it counts from that day's start, not from now. */
+/** An all-day date is due for its whole day, so it counts from that day's start, not now. */
 export function isDueSoon(iso: string, now: Date = new Date()): boolean {
   const date = parseLocalISO(iso);
   const windowStart = isAllDayIso(iso) ? startOfDay(now) : now;
@@ -64,8 +59,8 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
 
   const tooltip = tooltipFor(iso);
 
-  // Timed events today always show the time (past ones in red, upcoming as muted).
-  // This keeps them visually distinct from any all-day event on the same date.
+  // Timed events today always show the time, keeping them distinct from an all-day event on the
+  // same date.
   if (!isAllDay && isToday) {
     return { isPast, label: formatCompactTime(date), tooltip };
   }
@@ -80,7 +75,7 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
     ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 
-  // Timed non-today: show date only; time is available on hover via tooltip
+  // Timed non-today shows the date only; the time is in the tooltip.
   const label = dateLabel;
   return { isPast, label, tooltip };
 }
@@ -104,11 +99,10 @@ export function formatPageRelativeTime(iso: string, now: Date = new Date()): Pag
   const abs = Math.abs(diffMs);
   const absMins = Math.round(abs / 60000);
 
-  // Within the hour → relative only (already time-informative)
+  // Within the hour or the day, the relative label alone is already time-informative.
   if (absMins < 60)
     return { isPast: isPast && absMins > 0, label: absMins === 0 ? "now" : `${absMins}m`, tooltip };
   const absHours = Math.round(abs / 3600000);
-  // Within the day → relative only
   if (absHours < 24) return { isPast, label: `${absHours}hr`, tooltip };
   const days = Math.round(abs / 86400000);
   return { isPast, label: `${days}d`, tooltip };

@@ -1,9 +1,5 @@
-// The read half of the backups the app has been writing all along.
-//
-// Snapshots are taken before a migration and before an import, and until now the
-// only way to use one was to quit, open the application-support folder and
-// rename a file. This is the same list, in the place people look when something
-// has gone wrong.
+// The read half of the backups taken before a migration and before an import, listed where people look
+// when something has gone wrong.
 
 import type { BackupEntry, BackupKind, StorageAdapter } from "@pikos/core";
 import { storageErrorUserMessage, toStorageError } from "@pikos/core";
@@ -92,10 +88,8 @@ export function RestoreSection({ storage }: { storage: StorageAdapter | null }) 
     }
   }
 
-  // Nothing to restore means nothing to show. An empty state earns its place when it
-  // tells you how to fill it, and this one cannot: you do not take a backup, Pikos
-  // does, before an update or an import. A heading explaining a thing you cannot act
-  // on is dead weight in the panel people open when they are already worried.
+  // Nothing to restore means nothing to show: an empty state would explain a thing you can't act on,
+  // since Pikos takes the backups, in the panel people open when they are already worried.
   if (load.status === "loading" || (load.status === "ready" && load.backups.length === 0)) {
     return null;
   }

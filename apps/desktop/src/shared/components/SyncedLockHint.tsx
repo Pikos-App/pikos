@@ -8,12 +8,10 @@ interface SyncedLockHintProps {
   className?: string;
 }
 
-/** Names no calendar — both surfaces show it immediately below this icon. */
 const HINT = "Title, date, and schedule are read-only for synced pages";
 
-/** An icon rather than a tooltip on the locked fields themselves: a field-sized
- *  trigger fires whenever the cursor merely rests there, parking the tooltip
- *  over whatever sits below. */
+/** An icon rather than a tooltip on the locked fields: a field-sized trigger fires whenever the
+ *  cursor merely rests there, parking the tooltip over whatever sits below. */
 export function SyncedLockHint({ className, size = 12 }: SyncedLockHintProps) {
   return (
     <Tooltip>

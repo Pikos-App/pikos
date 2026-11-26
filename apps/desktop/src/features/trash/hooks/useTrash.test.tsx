@@ -26,8 +26,7 @@ describe("useTrash", () => {
       const page = await hook.result.current.pages.createPage({ title: "Doomed" });
       id = page.id;
     });
-    // The deletion comes from somewhere that is not the trash — the calendar, or a
-    // shortcut — which is the case the open view used to miss entirely.
+    // The deletion comes from somewhere other than the trash, such as the calendar or a shortcut.
     await act(async () => {
       await hook.result.current.pages.softDeletePage(id);
     });
@@ -37,10 +36,8 @@ describe("useTrash", () => {
     );
   });
 
-  // The route that stayed broken after the page one was fixed. Deleting a folder
-  // takes its pages with it, but the adapter soft-deletes those itself, so no page
-  // event fires and the open list showed none of them. The trash lists pages rather
-  // than folders, so the folder's own row is not expected here.
+  // Deleting a folder takes its pages with it, but the adapter soft-deletes those itself, so no page
+  // event fires. The trash lists pages, not folders, so the folder's own row isn't expected.
   it("lists the pages a folder took with it when the folder was deleted elsewhere", async () => {
     const hook = setup();
     await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));
@@ -61,8 +58,7 @@ describe("useTrash", () => {
     );
   });
 
-  // Restoring the page without its folder used to put it back pointing at a folder
-  // that no longer existed, so it came back into nowhere.
+  // Restoring the page without its folder would put it back pointing at a folder that no longer exists.
   it("puts a restored page in the default folder when its own folder is gone", async () => {
     const hook = setup();
     await waitFor(() => expect(hook.result.current.trash.loading).toBe(false));

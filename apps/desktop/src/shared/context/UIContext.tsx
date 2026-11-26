@@ -1,7 +1,5 @@
-// UIContext — owns navigation and shell UI state.
-// No data fetching — subscribe to WorkspaceContext for pages/folders.
-// Multi-select state lives in SelectionContext (useSelection).
-// Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
+// Navigation and shell UI state. No data fetching: subscribe to WorkspaceContext for pages and
+// folders.
 
 import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
 import { isOpen, isSmartViewId } from "@pikos/core";
@@ -35,7 +33,6 @@ export type SettingsSection =
   | "developer";
 
 export interface UIContextValue {
-  /** ID of the currently selected page. Derive the full Page via useActivePage(). */
   activePageId: string | null;
   setActivePage: (page: PageSummary | string | null) => void;
   activeViewId: ActiveViewId;
@@ -45,74 +42,53 @@ export interface UIContextValue {
   /** Page that was active before switching to calendar. Restored on Cmd+Shift+C back to editor. */
   lastEditorPageId: string | null;
   setLastEditorPageId: (id: string | null) => void;
-  /** Currently viewed week reference date. Persisted so panel toggles don't reset the week. */
-  /** Page ID to briefly flash after navigation (e.g. "View in calendar" jump). Cleared automatically. */
   highlightedPageId: string | null;
-  /** Trigger a one-shot highlight animation on the page's calendar block. */
   flashPageBlock: (pageId: string) => void;
   /**
-   * One-shot scroll target for the calendar timed grid. Set by "view in calendar"
-   * so WeekGrid can scroll to the page's hour after the panel reveals. Token
-   * increments per request so the consumer can apply each request exactly once
-   * even when re-targeting the same hour.
+   * One-shot scroll target for the calendar timed grid. The token increments per request so the
+   * consumer applies each once, even when re-targeting the same hour.
    */
   calendarScrollRequest: { hour: number; token: number } | null;
-  /** Request a calendar scroll to a specific hour (0–24). Token assigned internally. */
   requestCalendarScroll: (hour: number) => void;
-  /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
   /**
-   * A focus session is hiding the left panels. Every consumer that hides them
-   * must read this alongside `sidebarCollapsed` — the session hides the same
-   * two panels, it just doesn't own the preference.
+   * A focus session is hiding the left panels. Every consumer that hides them must read this
+   * alongside `sidebarCollapsed`.
    *
-   * Deliberately *not* persisted, and deliberately not written through
-   * `sidebarCollapsed`: that flag is the user's standing choice, so a session
-   * that set it would survive the session, the app quit, and the next launch —
-   * panels gone with nothing left to explain why. Ending the session drops this
-   * and the standing choice reappears on its own. An explicit toggle mid-session
-   * clears it too, so the app stops fighting a decision the user just made.
+   * Deliberately not persisted, and not written through `sidebarCollapsed`: that flag is the user's
+   * standing choice, so a session that set it would survive the quit and the next launch, panels
+   * gone with nothing to explain why. An explicit toggle mid-session clears this too.
    */
   focusZen: boolean;
   setFocusZen: (v: boolean) => void;
-  /** Page list overlay drawer open state. Only meaningful at the sm breakpoint. Not persisted. */
   pageListDrawerOpen: boolean;
   setPageListDrawerOpen: (v: boolean) => void;
-  /** Per-view sort mode. Persisted to localStorage. */
   getSortMode: (viewId: string, fallback?: SortMode) => SortMode;
   setSortMode: (viewId: string, mode: SortMode) => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
-  /** Active section inside the settings overlay. Persists across open/close. */
   settingsSection: SettingsSection;
   setSettingsSection: (section: SettingsSection) => void;
-  /** Which sort dropdown is open ('folder-sort' | 'page-sort' | null). Shared to ensure mutual exclusion. */
   openSortMenu: string | null;
   setOpenSortMenu: (id: string | null) => void;
-  /** Which dialog is open app-wide ('quick-add' | null). */
   openDialog: string | null;
   /**
-   * Open or close a dialog. `prefill` is consumed once by the dialog on open
-   * (currently the input field for quick-add / search). Cleared automatically
-   * when the dialog closes.
+   * Open or close a dialog. `prefill` is consumed once by the dialog on open and cleared when it
+   * closes.
    */
   setOpenDialog: (id: DialogId | null, prefill?: string) => void;
-  /** Initial text the next-opened dialog should populate its input with. */
   dialogPrefill: string | null;
   /**
-   * Open a page in the editor. Switches to editor panel and sets activePageId
-   * atomically — bypasses setRightPanel's restore logic so order never matters.
-   * `focusBody` puts the cursor at the end of the body once the page loads. `browsed` marks an
-   * arrow step through the list, which page history keeps as one entry per run.
+   * Open a page in the editor, setting activePageId atomically and bypassing setRightPanel's
+   * restore logic. `focusBody` puts the cursor at the end of the body once the page loads. `browsed`
+   * marks an arrow step through the list, which page history keeps as one entry per run.
    */
   openPage: (
     page: PageSummary | string,
     options?: { browsed?: boolean; focusBody?: boolean }
   ) => void;
-  /** Back (-1) or forward (1) to the nearest page in history that is still open. */
   stepHistory: (direction: -1 | 1) => Promise<void>;
-  /** Whether `pageId` was opened asking for the cursor in its body; true once, for the editor. */
   takeBodyFocus: (pageId: string) => boolean;
 }
 
@@ -276,11 +252,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
-  // The remembered view and page are checked against the workspace once it has
-  // loaded, and a first launch's tutorial navigation applied. Done here, during
-  // render, because this provider owns the state it corrects: from a child it was
-  // an update to another component mid-render, which React rejects. Whether the
-  // remembered pages still exist is the database's answer, in the effect above.
+  // The remembered view and page are checked against the workspace once it has loaded, and a
+  // first launch's tutorial navigation applied. Done here, during render, because this provider
+  // owns the state it corrects: from a child it would be an update to another component
+  // mid-render, which React rejects. Whether the remembered pages still exist is the database's
+  // answer, in the effect above.
   const [checkedWorkspaceId, setCheckedWorkspaceId] = useState<string | null>(null);
   if (workspace && workspace.id !== checkedWorkspaceId) {
     // Stryker disable next-line CallExpression: checking again on every render reaches the same state

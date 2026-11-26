@@ -1,25 +1,17 @@
-//! Pool-based queries behind the desktop notification scheduler.
+//! Pool-based queries behind the desktop notification scheduler, which owns timing,
+//! quiet hours, settings and OS delivery.
 //!
-//! The scheduler (`apps/desktop/.../notifications/scheduler`) owns timing,
-//! quiet-hours logic, settings, and OS delivery. The SQLite read/write here is
-//! split out so it runs under `cargo test` against an in-memory pool without a
-//! Tauri runtime.
-//!
-//! These functions return `sqlx::Error` directly (not `AppResult`): the
-//! scheduler's run loop logs a content-free error class via `classify_sqlx`
-//! rather than the sqlx `Display` output, which can echo SQL fragments and
-//! parameter values (titles, etc.). Surfacing the raw error type preserves that
-//! discipline at the call site.
+//! These functions return `sqlx::Error`, not `AppResult`: the scheduler logs a
+//! content-free error class via `classify_sqlx`, because the sqlx `Display` output can
+//! echo SQL fragments and parameter values such as titles.
 
 use std::collections::HashSet;
 
 use pikos_recurrence::{zoned, WallClock};
 use sqlx::SqlitePool;
 
-/// Recurrence-derivation failures reach the scheduler as a content-free
-/// `sqlx::Error` (see the module doc); a real DB error carries through as itself.
-/// The derivations isolate per-series rule failures internally, so nothing else
-/// is expected here.
+/// Recurrence-derivation failures reach the scheduler as a content-free `sqlx::Error`
+/// (see the module doc); a real DB error carries through as itself.
 fn derivation_error(e: crate::error::AppError) -> sqlx::Error {
     match e {
         crate::error::AppError::Db(e) => e,
@@ -29,18 +21,15 @@ fn derivation_error(e: crate::error::AppError) -> sqlx::Error {
 
 /// The span one scheduler tick owes reminders for, half-open as `(start, end]`.
 ///
-/// Every arm reads this instead of deriving `end - 60s` for itself, because two arms
-/// disagreeing about the span is two chances to collect one reminder twice. Half-open is
-/// what matters at the edge: a reminder anchored on a whole minute — which is every
-/// reminder set through the UI — lands exactly on a tick, and a closed span puts it inside
-/// that tick's window and the next one's. A delivery survives that on its `type='reminder'`
-/// dedup row; a quiet-hours suppression writes no such row, so the same silenced reminder
-/// was listed twice.
+/// Every arm reads this rather than deriving `end - 60s`, so two arms can't disagree and
+/// collect one reminder twice. Half-open matters at the edge: a reminder on a whole minute
+/// (every UI reminder) lands exactly on a tick, and a closed span would put it in that
+/// tick's window and the next one's. A delivery survives that on its dedup row; a
+/// quiet-hours suppression writes none, so the silenced reminder would be listed twice.
 ///
-/// `start` is floored by the previous tick's end rather than fixed 60 seconds back, because
-/// ticks are not reliably a minute apart: tokio's timer does not advance while the machine
-/// sleeps, so after a wake two can land seconds apart and share most of a minute. It is
-/// still capped at 60 seconds, so waking a laptop delivers nothing for the hours it slept.
+/// `start` is floored by the previous tick's end, not fixed 60 seconds back: tokio's timer
+/// doesn't advance while the machine sleeps, so after a wake two ticks can land seconds
+/// apart. It is still capped at 60 seconds, so a wake delivers nothing for the hours slept.
 #[derive(Clone, Copy, Debug)]
 pub struct ReminderWindow {
     start_local: chrono::NaiveDateTime,
@@ -152,18 +141,15 @@ pub struct DueReminder {
 }
 
 /// Pages with explicit `page_reminders` rows whose lead time lands in
-/// `(window_start, now_ts]`. All-day events (no `T` in `scheduled_start`) are
-/// excluded — they'd fire at midnight-minus-N. Already-fired reminders are
-/// skipped via the `notification_log` dedup row.
+/// `(window_start, now_ts]`. All-day events (no `T` in `scheduled_start`) are excluded, as
+/// they'd fire at midnight minus N. Already-fired reminders are skipped by their dedup row.
 pub async fn due_explicit_reminders(
     pool: &SqlitePool,
     window: &ReminderWindow,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
     let (window_start, now_ts) = window.wall_bounds();
-    // Dedup keys per-(schedule, lead), not per-schedule — else the first lead to
-    // fire would suppress every other lead. Encoded as `<id>#<minutes>` in
-    // schedule_id, matching the recurring path's `page_id@start#lead` scheme; the
-    // scheduler logs this composite verbatim, so the NOT EXISTS below matches per-lead.
+    // Dedup keys per (schedule, lead), or the first lead to fire would suppress the rest.
+    // Encoded as `<id>#<minutes>` in schedule_id, like the recurring `page_id@start#lead`.
     sqlx::query_as(
         "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before
@@ -203,14 +189,11 @@ pub async fn due_explicit_reminders(
 /// The `page_reminders.minutes_before` value that means "the day before, at
 /// [`DAY_BEFORE_HOUR`]:00 local" rather than a lead time in minutes.
 ///
-/// An all-day page has no start time, so no number of minutes-before can anchor
-/// its reminder — every timed arm above skips it (`scheduled_start LIKE '%T%'`)
-/// for exactly that reason. This sentinel sits beside 007's `-1` ("never remind")
-/// in the same column so an all-day reminder is still one `page_reminders` row,
-/// with the same shape the UI, the adapters and the mock twin already carry;
-/// [`due_day_before_reminders`] is the arm that resolves it against the date.
-/// Every lead-time arm filters `minutes_before >= 0`, so it can never be read as
-/// a two-minute lead.
+/// An all-day page has no start time for a lead to anchor on, which is why every timed
+/// arm skips it. The sentinel sits beside `-1` ("never remind") in the same column, so an
+/// all-day reminder is still one `page_reminders` row; [`due_day_before_reminders`]
+/// resolves it against the date. Every lead-time arm filters `minutes_before >= 0`, so it
+/// is never read as a two-minute lead.
 pub const DAY_BEFORE_MINUTES: i64 = -2;
 
 /// Local hour a [`DAY_BEFORE_MINUTES`] reminder fires on the preceding day.
@@ -219,16 +202,13 @@ const DAY_BEFORE_HOUR: i64 = 9;
 /// All-day pages carrying an explicit [`DAY_BEFORE_MINUTES`] reminder whose
 /// 09:00-on-D-1 anchor lands in `(window_start, now_ts]`.
 ///
-/// Device-local wall-clock throughout, like [`due_explicit_reminders`]: the
-/// anchor is derived from the event's *date*, so there is no instant to resolve
-/// and nothing for a source zone to shift — which is also why active-synced rows
-/// stay on this path instead of being handed to the absolute arms (those exclude
-/// all-day outright, so excluding them here would leave a synced all-day event
-/// with no arm at all). Rule-backed series are out of scope for the same reason
-/// the enumeration is: it only walks timed series (`scheduled_start LIKE '%T%'`).
+/// Device-local wall-clock throughout, like [`due_explicit_reminders`]: the anchor comes
+/// from the event's date, so no source zone shifts it. Active-synced rows stay on this
+/// path because the absolute arms exclude all-day, which would leave them no arm. Rule-backed
+/// series are out of scope, as the enumeration only walks timed series.
 ///
-/// Dedups on `<id>#-2`, the same per-lead composite the explicit arm uses, so a
-/// moved all-day row re-arms through [`clear_reminder_log_tx`] like any other.
+/// Dedups on `<id>#-2`, the explicit arm's per-lead composite, so a moved all-day row
+/// re-arms through [`clear_reminder_log_tx`].
 pub async fn due_day_before_reminders(
     pool: &SqlitePool,
     window: &ReminderWindow,
@@ -312,29 +292,21 @@ pub async fn due_default_reminders(
     .await
 }
 
-// ─── Synced (absolute-time) reminders ────────────────────────────────────────
+// Synced events are absolute, not floating: `scheduled_start` is a source-zone
+// wall-clock, so a reminder must fire on the absolute instant, not when the device-local
+// clock reads the same digits. The naive `due_*` queries above read it as device-local,
+// so they exclude zoned active-synced pages and this path handles them. A zone-less
+// synced event (a floating CalDAV DTSTART) is device-local and stays on the naive path,
+// explicit and default-lead arms alike, or it would never remind.
 //
-// Synced events are absolute, not floating: their `scheduled_start` is a
-// source-zone wall-clock, so a reminder must fire on the absolute INSTANT, not
-// when the device-local wall-clock happens to read the same digits. The naive
-// `due_*` queries above interpret `scheduled_start` as device-local, so they
-// exclude *zoned* active-synced pages and this path handles them instead. A
-// zone-less synced event (a floating CalDAV DTSTART) is device-local by
-// definition and stays on the naive path — both its explicit and its
-// default-lead arm, or it would fall through every query and never remind.
+// Origin does not change the lead time: every page notifies at the global default unless
+// it carries an explicit reminder, and `-1` still means "never". Provider alarms are
+// never ingested, because the mirror is read-only and an imported lead couldn't be edited.
+// Synced recurring occurrences fire through `due_recurring_reminders` and their overrides
+// through `due_synced_override_reminders`, on the same source-zone to instant basis.
 //
-// Origin does not change the lead time: every page notifies at the user's global
-// default unless it carries an explicit reminder, and an explicit `-1` still means
-// "never". Provider alarms are deliberately never ingested — the mirror is
-// read-only, so an imported per-event lead would be one the user could not edit.
-// Synced *recurring* occurrences fire through `due_recurring_reminders` (rule
-// enumeration) and their per-instance overrides through
-// `due_synced_override_reminders` (materialized rows) — both resolve the same
-// source-zone → absolute instant.
-//
-// SQLite can't resolve IANA zones, so the SQL is only a coarse ±15h prefilter
-// (covers every real zone offset) and the exact absolute-window check runs in
-// Rust via chrono-tz.
+// SQLite can't resolve IANA zones, so the SQL is a coarse +-15h prefilter (every real
+// offset) and the exact window check runs in Rust via chrono-tz.
 
 #[derive(sqlx::FromRow)]
 struct SyncedReminderRow {
@@ -346,11 +318,9 @@ struct SyncedReminderRow {
     timezone: String,
 }
 
-/// Source-zone wall-clock + lead time → the absolute UTC instant the reminder
-/// should fire. `None` only on an unparseable zone/timestamp or a wall-clock that
-/// doesn't exist in the zone (a spring-forward gap, which never fires) — the
-/// reading [`zoned::wall_clock_instant`] states once for every layer that stores
-/// an instant, including the reconciler's zone shifts.
+/// Source-zone wall-clock plus lead time as the absolute UTC instant to fire. `None` on an
+/// unparseable zone or timestamp, or a wall-clock in a spring-forward gap (which never
+/// fires), as [`zoned::wall_clock_instant`] reads it for every layer storing an instant.
 pub(crate) fn synced_fire_instant(
     wall_clock: &str,
     timezone: &str,
@@ -364,11 +334,9 @@ pub(crate) fn synced_fire_instant(
 
 /// When a reminder fires, in whichever frame the arm that found it resolves.
 ///
-/// A native page floats: its wall clock is the device's, so its fire is a
-/// wall-clock too. A synced page is pinned to a source zone, so its fire is an
-/// instant. The desktop's tick compares each against the matching "now" and
-/// never needs the other frame; the phone, which hands the OS a calendar date
-/// to fire on, converts the instant into the device's wall clock and needs to
+/// A native page floats, so its fire is a device wall-clock; a synced page is pinned to a
+/// source zone, so its fire is an instant. The desktop tick compares each against the
+/// matching "now"; the phone converts an instant into the device's wall clock and needs to
 /// know which it was given.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FireAt {
@@ -376,19 +344,17 @@ pub enum FireAt {
     Absolute(chrono::DateTime<chrono::Utc>),
 }
 
-/// A due reminder together with when it fires — what the windowed arms return,
-/// so a caller looking forward over days can order and place them, while the
-/// tick that only asks "now?" drops the instant and keeps the row.
+/// A due reminder with when it fires, so a caller looking ahead over days can order them;
+/// the tick that only asks "now?" drops the instant.
 #[derive(Clone, Debug)]
 pub struct ReminderFire {
     pub reminder: DueReminder,
     pub fire_at: FireAt,
 }
 
-/// Synced one-off events whose absolute fire instant lands in the tick's window,
-/// at their explicit reminder lead or — when they have
-/// none — the global `default_minutes`. All-day, done, recurring, and already-fired
-/// are excluded.
+/// Synced one-off events whose absolute fire instant lands in the tick's window, at their
+/// explicit lead or the global `default_minutes`. All-day, done, recurring and
+/// already-fired are excluded.
 pub async fn due_synced_reminders(
     pool: &SqlitePool,
     window: &ReminderWindow,
@@ -398,9 +364,7 @@ pub async fn due_synced_reminders(
     Ok(fires.into_iter().map(|fire| fire.reminder).collect())
 }
 
-/// [`due_synced_reminders`] with each fire's instant kept, for a caller planning
-/// ahead over a long window. The SQL prefilter is the window widened by ±15h, which
-/// covers every real zone offset; the exact check runs in Rust via chrono-tz.
+/// [`due_synced_reminders`] with each fire's instant kept, for a caller planning ahead.
 pub async fn synced_reminders_firing_in(
     pool: &SqlitePool,
     window: &ReminderWindow,
@@ -445,8 +409,7 @@ pub async fn synced_reminders_firing_in(
     Ok(resolve_synced_fires(rows, window))
 }
 
-/// The exact absolute-window check behind both synced arms: keep the rows
-/// whose fire instant lands in the window, carrying the instant out with them.
+/// The exact window check behind both synced arms, carrying each instant out.
 fn resolve_synced_fires(
     rows: Vec<SyncedReminderRow>,
     window: &ReminderWindow,
@@ -469,19 +432,14 @@ fn resolve_synced_fires(
         .collect()
 }
 
-/// Synced recurring **per-instance overrides** (a moved instance or a
-/// single-instance edit — RECURRENCE-ID) materialize as `page_schedules` rows
-/// carrying the series `rule_id` + a source zone. They are not rule occurrences,
-/// so the recurring enumeration never emits them (it excludes their
-/// `original_date`) and every other `due_*` path drops them (rule-backed +
-/// active-synced). Fire each at its own moved instant on the same source-zone →
-/// absolute basis as a synced one-off, with the series' explicit reminders or —
-/// when it has none — the global `default_minutes` lead (matching the
-/// enumeration's synced-default). Completed/skipped occurrences are keyed on the
-/// override's `original_date`. Dedups on the real row id like
-/// `due_synced_reminders`, so it can't collide with the enumeration's synthetic
-/// keys. Zoned only — a floating synced override with a device-local reminder is
-/// already served by `due_explicit_reminders`.
+/// Synced recurring per-instance overrides (a moved instance or a RECURRENCE-ID edit) are
+/// `page_schedules` rows carrying the series `rule_id` and a source zone. They aren't rule
+/// occurrences, so the recurring enumeration excludes their `original_date` and every other
+/// `due_*` path drops them. Fires each at its own moved instant, like a synced one-off,
+/// with the series' explicit reminders or the global `default_minutes`. Completed and
+/// skipped occurrences are keyed on `original_date`. Dedups on the real row id, so it can't
+/// collide with the enumeration's synthetic keys. Zoned only: a floating override is served
+/// by `due_explicit_reminders`.
 pub async fn due_synced_override_reminders(
     pool: &SqlitePool,
     window: &ReminderWindow,
@@ -546,19 +504,13 @@ pub async fn synced_override_reminders_firing_in(
     Ok(resolve_synced_fires(rows, window))
 }
 
-// ─── Recurring occurrence reminders ──────────────────────────────────────────
-//
-// rrule-backed pages have no per-occurrence `page_schedules` row, so their
-// reminders come from enumerating the rule directly rather than off a stored row
-// (the page_schedules queries above deliberately skip a recurring page's stale
-// `rule_id IS NULL` anchor). Native series fire on device-local wall-clock, synced
-// on the source-zone → absolute instant; each occurrence dedups on a synthetic
-// `page_id@start[#lead]` id, so completing or skipping one (which lands it in the
-// exclusion union) suppresses its reminder without touching the others.
+// rrule-backed pages have no per-occurrence `page_schedules` row, so their reminders come
+// from enumerating the rule (the queries above skip a recurring page's stale
+// `rule_id IS NULL` anchor). Each occurrence dedups on a synthetic `page_id@start[#lead]`,
+// so completing or skipping one suppresses its reminder without touching the others.
 
-/// The sqlx-facing seam over [`crate::recurrence_derive::occurrences_with_open_reminder_window`]
-/// for the scheduler: owns the `max_lead` bound (an upper bound over every
-/// configured lead) and maps the enumeration's error through [`derivation_error`].
+/// The scheduler's seam over [`crate::recurrence_derive::occurrences_with_open_reminder_window`]:
+/// owns the `max_lead` bound and maps errors through [`derivation_error`].
 pub async fn due_recurring_reminders(
     pool: &SqlitePool,
     window: &ReminderWindow,
@@ -579,9 +531,9 @@ pub async fn due_recurring_reminders(
     .map_err(derivation_error)
 }
 
-/// The largest lead any reminder could have — an upper bound the recurring
-/// enumeration widens its window by, so an occurrence whose reminder fires
-/// inside the window is enumerated even when the occurrence itself is past it.
+/// The largest lead any reminder could have. The recurring enumeration widens its window
+/// by it, so an occurrence whose reminder fires inside the window is found even when the
+/// occurrence itself is past it.
 pub async fn max_reminder_lead(
     pool: &SqlitePool,
     default_minutes: i64,
@@ -593,9 +545,8 @@ pub async fn max_reminder_lead(
     Ok(default_minutes.max(max_explicit).max(0))
 }
 
-/// Whether the daily-summary marker row was already inserted on `date`
-/// (`date(fired_at) = date`). The marker is `type='overdue'` with both
-/// `page_id` and `schedule_id` NULL.
+/// Whether the daily-summary marker (`type='overdue'`, no `page_id` or `schedule_id`) was
+/// already inserted on `date`.
 pub async fn daily_summary_fired_on(pool: &SqlitePool, date: &str) -> Result<bool, sqlx::Error> {
     let count: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM notification_log
@@ -613,10 +564,8 @@ pub async fn daily_summary_fired_on(pool: &SqlitePool, date: &str) -> Result<boo
 /// Count of distinct pages scheduled on `date` (timed or all-day), not done.
 ///
 /// A recurring page counts when its rule yields an occurrence on `date`
-/// ([`crate::recurrence_derive::recurring_pages_in_window`]) or when a
-/// materialised override lands there — the two partition the series, since the
-/// override's original date is in the exclusion union. Its stale pre-rule anchor
-/// row (`rule_id IS NULL`) counts for neither.
+/// ([`crate::recurrence_derive::recurring_pages_in_window`]) or a materialised override
+/// lands there; the two partition the series. Its stale anchor row counts for neither.
 pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64, sqlx::Error> {
     // A day either side, then the viewer's day decides, as `list_pages_today` reads it.
     let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
@@ -664,27 +613,22 @@ fn to_the_second(wall: &str) -> String {
     }
 }
 
-/// A page created this recently reads as part of an import batch rather than the
-/// user's backlog — a connect lands dozens of past-dated events at once and none
-/// of them are overdue to anyone.
+/// A page created this recently is part of an import batch, not the user's backlog: a
+/// connect lands dozens of past-dated events at once, overdue to no one.
 const IMPORT_SKIP_MINUTES: i64 = 5;
 
 /// Count of distinct timed, not-done pages overdue in `[stale_cutoff, now_ts)`,
 /// excluding pages created within [`IMPORT_SKIP_MINUTES`] of `now_utc`.
 ///
-/// The window bounds are local wall-clock, matching `scheduled_start`; `now_utc`
-/// is the same instant in UTC because the recency cutoff derives from it and is
-/// compared against `created_at`, which is UTC ([`crate::now_iso`]). One `now` in
-/// both clocks swallowed real overdue pages west of UTC and never skipped an
-/// import east of it.
+/// The window bounds are local wall-clock, matching `scheduled_start`; `now_utc` is the
+/// same instant in UTC because the recency cutoff is compared against `created_at`, which
+/// is UTC ([`crate::now_iso`]). One `now` in both clocks swallowed real overdue pages west
+/// of UTC and never skipped an import east of it.
 ///
-/// Origin does not enter into it: a synced page is completable like any other, so
-/// ticking it clears the count. The mirror lock blocks rescheduling, which is not
-/// what overdue measures.
+/// Origin doesn't matter: a synced page is completable, and ticking it clears the count.
 ///
-/// Recurring occurrences are enumerated for the same reason as in
-/// [`today_scheduled_count`] — a series whose head lapsed days ago still owes the
-/// occurrences it yielded since.
+/// Recurring occurrences are enumerated as in [`today_scheduled_count`]: a series whose
+/// head lapsed days ago still owes the occurrences since.
 pub async fn overdue_count(
     pool: &SqlitePool,
     now_ts: &str,
@@ -739,8 +683,8 @@ pub async fn overdue_count(
     Ok(pages.len() as i64)
 }
 
-/// How long a calendar can go without syncing before its events may have moved or
-/// gone. The desktop banner uses the same hour (`NOT_SYNCING_AFTER_MS`).
+/// How long a calendar can go without syncing before its events may have moved or gone.
+/// The desktop banner uses the same hour (`NOT_SYNCING_AFTER_MS`).
 pub const CALENDAR_OUT_OF_DATE_AFTER: chrono::Duration = chrono::Duration::hours(1);
 
 /// Whether `page_id` mirrors a calendar Pikos may be out of date on: its account
@@ -769,12 +713,10 @@ pub async fn page_calendar_out_of_date(
     .await
 }
 
-/// Record that a per-reminder notification fired (dedup anchor for future ticks).
-///
-/// Returns the row id. The scheduler hands it to the OS as the notification's
-/// own identifier, so a click months of ticks later still names the exact row to
-/// mark opened ([`mark_notification_opened`]) and the page to open — no
-/// in-memory table of live banners to keep, and nothing lost on a restart.
+/// Records that a reminder fired, anchoring dedup for later ticks, and returns the row id.
+/// The scheduler hands the id to the OS as the notification's identifier, so a later click
+/// names the row to mark opened ([`mark_notification_opened`]) and the page to open, with
+/// nothing held in memory across a restart.
 pub async fn log_reminder_fired(
     pool: &SqlitePool,
     page_id: &str,
@@ -795,12 +737,10 @@ pub async fn log_reminder_fired(
     Ok(id)
 }
 
-/// Mark a delivered notification as opened, and answer with the page it named.
-///
-/// `None` covers every case where there is nothing to open: an id no row carries
-/// (a banner that outlived the 30-day prune), or the daily summary marker, which
-/// is deliberately page-less. `WHERE action IS NULL` keeps the first recorded
-/// outcome — a second click on the same banner is a no-op rather than a rewrite.
+/// Marks a delivered notification as opened and returns the page it named. `None` when
+/// there is nothing to open: an id no row carries (a banner that outlived the 30-day
+/// prune) or the page-less daily summary. `WHERE action IS NULL` keeps the first outcome,
+/// so a second click is a no-op.
 pub async fn mark_notification_opened(
     pool: &SqlitePool,
     id: &str,
@@ -835,11 +775,9 @@ impl NotShown {
 
 /// Record that a reminder came due and was never delivered, and why.
 ///
-/// Never `type='reminder'`: every dedup predicate reads `type = 'reminder'`, so
-/// this row is invisible to them and the reminder is dropped as it always was,
-/// with the day's summary counting the page as overdue. The row exists so the
-/// history panel can say the reminder happened and why nobody saw it, instead of
-/// leaving no trace, or claiming it was delivered.
+/// Never `type='reminder'`: every dedup predicate reads that, so this row is invisible to
+/// them and the reminder is dropped, with the day's summary counting the page as overdue.
+/// The row lets the history panel say the reminder happened and why nobody saw it.
 pub async fn log_reminder_not_shown(
     pool: &SqlitePool,
     page_id: &str,
@@ -863,10 +801,9 @@ pub async fn log_reminder_not_shown(
 
 /// One row of the notification history panel: what fired, when, for which page.
 ///
-/// `page_title` is joined in rather than stored, so a renamed page reads under
-/// its current name and a deleted one reads as `None` (the log row outlives the
-/// page — `notification_log.page_id` carries no foreign key, by design: the log
-/// is a dedup ledger first).
+/// `page_title` is joined in, so a renamed page reads under its current name and a deleted
+/// one as `None`: the log row outlives the page, since `notification_log.page_id` carries
+/// no foreign key.
 #[derive(Debug, sqlx::FromRow, serde::Serialize, PartialEq, Eq, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
@@ -876,8 +813,8 @@ pub struct NotificationHistoryEntry {
     pub page_title: Option<String>,
     pub schedule_id: Option<String>,
     /// `reminder` (delivered), `suppressed` (quiet hours ate it), `refused`
-    /// (notifications are off for Pikos) or `overdue` (the daily summary marker). Named `kind` because `type` is a Rust keyword;
-    /// the column is `type`.
+    /// (notifications are off for Pikos) or `overdue` (the daily summary marker).
+    /// Named `kind` because `type` is a Rust keyword; the column is `type`.
     pub kind: String,
     pub fired_at: String,
     /// `opened` once the user clicks the notification through; `None` otherwise.
@@ -886,16 +823,11 @@ pub struct NotificationHistoryEntry {
 
 /// The notification log, newest first, capped at `limit`.
 ///
-/// Reads the whole 30-day retention window the prune leaves behind — no separate
-/// retention for the panel, so what the user sees is exactly what the dedup
-/// ledger still holds. A soft-deleted page still names itself here: the row
-/// records something that was really delivered, and blanking it would read as a
-/// bug rather than as history.
+/// Reads the whole 30-day retention window, so the panel shows exactly what the dedup
+/// ledger holds. A soft-deleted page still names itself: the row records a real delivery.
 ///
-/// `AppResult`, not the bare `sqlx::Error` the rest of this module returns: this
-/// is the one read here that a *command* calls rather than the scheduler's run
-/// loop, so it errors the way every other command does. The run loop's
-/// content-free logging discipline (see the module doc) is unaffected.
+/// Returns `AppResult`, unlike the rest of this module, because a command calls it rather
+/// than the scheduler's run loop.
 pub async fn list_notification_history(
     pool: &SqlitePool,
     limit: i64,
@@ -913,14 +845,11 @@ pub async fn list_notification_history(
     .await?)
 }
 
-/// Drop a schedule row's already-fired dedup anchors so its reminders re-arm at
-/// the row's new time.
+/// Drops a schedule row's fired dedup anchors so its reminders re-arm at the new time.
 ///
-/// Matches both key shapes the `due_*` queries dedup on: the bare row id
-/// (default lead) and the per-lead composite `<id>#<minutes>` (explicit, synced,
-/// synced-override). Deleting only the bare id leaves every explicit and synced
-/// reminder pinned as fired, so a moved event never notifies again until the
-/// 30-day prune.
+/// Matches both key shapes: the bare row id (default lead) and the `<id>#<minutes>`
+/// composite (explicit, synced, synced-override). Deleting only the bare id leaves explicit
+/// and synced reminders pinned as fired, so a moved event never notifies until the prune.
 pub(crate) async fn clear_reminder_log_tx(
     conn: &mut sqlx::SqliteConnection,
     schedule_id: &str,
@@ -935,9 +864,8 @@ pub(crate) async fn clear_reminder_log_tx(
     Ok(())
 }
 
-/// Insert the daily-summary marker row (one per local day). Returns the row id,
-/// for the same reason [`log_reminder_fired`] does — the summary names no page,
-/// so a click on it opens the calendar rather than a page.
+/// Inserts the daily-summary marker (one per local day) and returns its id, as
+/// [`log_reminder_fired`] does. The summary names no page, so a click opens the calendar.
 pub async fn log_daily_summary(pool: &SqlitePool, fired_at: &str) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
@@ -959,15 +887,13 @@ pub async fn prune_notification_log(pool: &SqlitePool, cutoff: &str) -> Result<(
     Ok(())
 }
 
-/// Diagnostic snapshot of a page at the moment one of its reminders fires.
-///
-/// Used only for logging so we can tell *why* a reminder fired for a page the
-/// user believes is complete. The smoking-gun signals:
-/// - `has_rule = 1` with `page_scheduled_start` != the firing row's
-///   `scheduled_start` → recurring drift (the head advanced but the reminder
-///   keyed off a stale `page_schedules` row).
-/// - `status = 'done'` here should be impossible (the due queries filter it
-///   out); seeing it would point at a TOCTOU between the query and this read.
+/// A page's state when a reminder fires, for logging why one fired for a page the user
+/// believes complete:
+/// - `has_rule = 1` with `page_scheduled_start` differing from the firing row's
+///   `scheduled_start` is recurring drift: the head advanced but the reminder keyed off a
+///   stale `page_schedules` row.
+/// - `status = 'done'` should be impossible, as the due queries filter it; seeing it means
+///   a race between the query and this read.
 #[derive(sqlx::FromRow, Debug)]
 pub struct ReminderFireDiagnostics {
     pub status: String,
@@ -976,8 +902,7 @@ pub struct ReminderFireDiagnostics {
     pub has_rule: i64,
 }
 
-/// Fetch the diagnostic snapshot for `page_id`. Returns `None` if the page is
-/// gone (e.g. deleted between the due query and this read).
+/// `None` if the page was deleted between the due query and this read.
 pub async fn reminder_fire_diagnostics(
     pool: &SqlitePool,
     page_id: &str,

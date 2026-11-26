@@ -1,10 +1,6 @@
-// A failed write has to reach the person who made it.
-//
-// `pageErrors` has one consumer, the editor's MetadataHeader, and it only reads
-// the entry for the page currently open. So ticking a task done from a list, the
-// calendar or a search result rolled back in silence, and writes that carry no
-// `errorIds` at all (reorders, folder moves) had no surface whatsoever. With no
-// telemetry, a failure nobody is shown is a failure nobody can report.
+// `pageErrors` is read only for the editor's open page, so a failed write from a list, the
+// calendar or a search result, or one with no `errorIds` (reorders, folder moves), would roll
+// back in silence. With no telemetry, a failure nobody is shown is a failure nobody can report.
 
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
@@ -26,7 +22,6 @@ async function setup() {
   return hook;
 }
 
-/** Collect every toast raised while a test runs. */
 function captureNotices() {
   const seen: string[] = [];
   const off = subscribeNotices((label) => void seen.push(label));
@@ -36,8 +31,6 @@ function captureNotices() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("PagesContext — a failed write is surfaced", () => {
-  // Ticking a page done bypasses the debounce, so its only report was the editor's
-  // inline indicator for whichever page happened to be open.
   it("raises a notice when a status tick fails away from the editor", async () => {
     const hook = await setup();
     let id = "";
@@ -83,8 +76,7 @@ describe("PagesContext — a failed write is surfaced", () => {
     off();
   });
 
-  // A rethrowing write is awaited by a caller that reports it (the calendar's
-  // create path). Raising one here too is how a failure gets toasted twice.
+  // A rethrowing write is awaited by a caller that reports it; raising one here too toasts twice.
   it("stays quiet when the caller is the one reporting", async () => {
     const hook = await setup();
     let id = "";
@@ -107,9 +99,8 @@ describe("PagesContext — a failed write is surfaced", () => {
     off();
   });
 
-  // `scheduleOnce` rethrows, for the one caller that deletes a page whose schedule
-  // never landed. Every other caller drops the promise, so keying the report to
-  // `rethrow` left a failed calendar drag, date pick and date clear all silent.
+  // `scheduleOnce` rethrows for the one caller that deletes a page whose schedule never landed; keying
+  // the report to `rethrow` would leave a failed calendar drag, date pick and date clear silent.
   it("reports a failed schedule even though the write also rethrows", async () => {
     const hook = await setup();
     let id = "";

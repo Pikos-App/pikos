@@ -1,11 +1,7 @@
 // Generates golden occurrence fixtures from rrule.js for the corpus of rules
 // the Rust engine (crates/pikos-recurrence) must reproduce byte-for-byte.
 //
-// rrule.js was Pikos's production recurrence engine before the wasm engine
-// replaced it; these fixtures pin the migration. The `rrule` npm package is
-// intentionally NOT a workspace dependency anymore — run this with:
-//   cd "$(mktemp -d)" && npm install rrule@2.8.1 >/dev/null && cd -
-//   NODE_PATH=<tmpdir>/node_modules node scripts/gen-rrule-goldens.mjs
+// The `rrule` npm package is deliberately not a workspace dependency, so run this with:
 // and commit the regenerated fixtures only alongside corpus changes.
 
 import { createRequire } from "module";

@@ -2,12 +2,10 @@
 # Build the marketing site the way its host does, so a release can't publish a site that
 # won't deploy.
 #
-# CI builds it through the workspace, at the pnpm `packageManager` pins. The host checks out
-# the repo and builds `apps/marketing` on its own with the commands below, which take
-# whatever pnpm `npx` resolves: on the day 0.4.0 shipped that was a newer major that refused
-# to install while CI stayed green. The commands are copied from the host's settings, which
-# live outside the repo, so change the two together. Once the host builds through the
-# workspace, this check goes.
+# CI builds through the workspace at the pnpm `packageManager` pins, but the host builds
+# `apps/marketing` on its own with the commands below, using whatever pnpm `npx` resolves. That
+# can be a newer major that refuses to install while CI stays green. The commands are copied from
+# the host's settings, which live outside the repo, so change the two together.
 
 set -euo pipefail
 
@@ -16,7 +14,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 git clone --quiet --depth 1 "file://$ROOT" "$WORK/repo"
-# The version's notes file may be written just before the cut and committed with the version bump.
+# The version's notes file may be written just before the cut, committed with the version bump.
 cp "$ROOT"/apps/marketing/src/content/release-notes/*.md \
   "$WORK/repo/apps/marketing/src/content/release-notes/"
 

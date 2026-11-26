@@ -5,9 +5,8 @@
 #   scripts/linux-keyring-check.sh          # on Linux, or inside a container
 #   scripts/linux-keyring-check.sh --docker # from a Mac, in a Debian container
 #
-# Every other test of the keychain injects an in-memory store, so a build with no backend named
-# for the platform passes all of them and then forgets every password at runtime — which is
-# exactly what shipped. These are the tests that ask the OS.
+# Every other keychain test injects an in-memory store, so a build with no backend named for the
+# platform passes them all and then forgets every password at runtime. These tests ask the OS.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,8 +22,8 @@ fi
 
 step() { printf '\n── %s\n' "$1"; }
 
-# `cargo test` exits 0 when its filter matches nothing, so a renamed test would leave this whole
-# script green having run none of it. The expected count is the assertion.
+# `cargo test` exits 0 when its filter matches nothing, so a renamed test would leave this
+# green having run none of it. The expected count is the assertion.
 run_tests() {
   local expected=$1 log
   shift
@@ -39,7 +38,7 @@ run_tests() {
 }
 
 # gnome-keyring asks a graphical prompter to create its first collection, and a headless session
-# has none. Naming the default keyring up front is what keeps it from asking.
+# has none. Naming the default keyring up front stops it asking.
 mkdir -p "$HOME/.local/share/keyrings"
 printf 'login' > "$HOME/.local/share/keyrings/default"
 
@@ -48,10 +47,8 @@ export CRATE PREFIX
 export -f run_tests
 dbus-run-session -- bash -c '
   set -euo pipefail
-  # --replace because a daemon someone else started answers the control socket and
-  # leaves this invocation printing nothing at all. Installing gnome-keyring pulls
-  # in libpam-gnome-keyring, whose systemd user units start one, so on a machine
-  # running systemd this is the normal case rather than the odd one.
+  # --replace because a daemon someone else started (the systemd user units of libpam-gnome-keyring
+  # start one) answers the control socket and leaves this invocation printing nothing.
   #
   # Not `eval "$(…)"` on its own line: a command substitution consumed as an argument hides its
   # own failure from set -e, so a daemon that never started would read as an empty address.
@@ -68,8 +65,8 @@ dbus-run-session -- bash -c '
               "$PREFIX::a_deleted_credential_is_gone_from_the_session_keyring"
 '
 
-# Outside dbus-run-session and with any inherited address cleared, so nothing is listening —
-# which is what a minimal window manager or a headless login gives you.
+# Outside dbus-run-session with any inherited address cleared, so nothing is listening, as on a
+# minimal window manager or a headless login.
 step "with no Secret Service at all"
 env -u DBUS_SESSION_BUS_ADDRESS -u GNOME_KEYRING_CONTROL \
   bash -c 'run_tests 1 "$PREFIX::a_session_with_no_keyring_says_which_one_to_start"'

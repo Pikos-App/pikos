@@ -1,4 +1,4 @@
-//! Layer-3 sync-engine integration tests: the engine driven against a temp
+//! Sync-engine integration tests: the engine driven against a temp
 //! SQLite DB and a scripted [`CalendarProvider`] (no network).
 
 use std::cell::RefCell;
@@ -25,19 +25,14 @@ const CAL: &str = "cal1";
 const CAL_ID: &str = "https://dav.example/cal/";
 const FOLDER: &str = "f1";
 
-// ─── scripted provider ──────────────────────────────────────────────────────────
-
-/// A `CalendarProvider` whose responses are scripted per test: each method pops
-/// its next queued response in order, driving a deterministic multi-poll
-/// sequence. Single-task by construction (`tokio::join!`, not `spawn`), so the
-/// interior `RefCell`s never cross threads.
+/// Each method pops its next queued response. Single-task (`tokio::join!`, not `spawn`),
+/// so the `RefCell`s never cross threads.
 #[derive(Default)]
 struct Scripted {
     sync: RefCell<VecDeque<AppResult<SyncDelta>>>,
     fetch: RefCell<VecDeque<AppResult<EventUpsert>>>,
     bootstrap: RefCell<VecDeque<AppResult<Option<SyncToken>>>>,
     ctag: RefCell<VecDeque<AppResult<Option<String>>>>,
-    /// The `since` cursor each `sync` call received, for assertions.
     sync_since: RefCell<Vec<Option<SyncToken>>>,
 }
 
@@ -112,8 +107,6 @@ impl CalendarProvider for Scripted {
     }
 }
 
-// ─── builders ─────────────────────────────────────────────────────────────────
-
 fn account() -> SyncAccountRow {
     SyncAccountRow {
         id: ACCOUNT.into(),
@@ -126,8 +119,6 @@ fn account() -> SyncAccountRow {
     }
 }
 
-/// A single non-recurring event at an explicit date, for the full-enumerate sweep
-/// (a pre-window event's occurrence precedes the query window).
 fn dated_event(external_id: &str, uid: &str, title: &str, start: &str, end: &str) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
         core: EventCore {
@@ -148,7 +139,6 @@ fn dated_event(external_id: &str, uid: &str, title: &str, start: &str, end: &str
     })
 }
 
-/// A recurring master, returned by a scripted `fetch_event` to resolve an orphan.
 fn master(external_id: &str, uid: &str) -> EventUpsert {
     EventUpsert {
         core: EventCore {
@@ -174,7 +164,6 @@ fn master(external_id: &str, uid: &str) -> EventUpsert {
     }
 }
 
-/// A lone modified occurrence whose master is absent from the delta.
 fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
     UpsertItem::Occurrence(OccurrenceDelta {
         ical_uid: uid.into(),
@@ -188,9 +177,8 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
     })
 }
 
-/// A full authoritative enumerate: no cursor, `full_enumerate` set (drives
-/// `full_resync` + the `last_full_sync_at` stamp), `authoritative_from` set so
-/// the engine sweeps stored pages absent from `upserts`.
+/// No cursor, `full_enumerate` set, and `authoritative_from` set so the engine sweeps
+/// stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
     SyncDelta {
         upserts,
@@ -199,8 +187,6 @@ fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
         ..Default::default()
     }
 }
-
-// ─── DB setup + queries ─────────────────────────────────────────────────────────
 
 /// `link_folder: false` asserts the engine uses its `FOLDER` argument, not the
 /// stored calendar link the scheduler polls by.
@@ -307,11 +293,8 @@ async fn stored_full_sync_at(pool: &SqlitePool) -> Option<String> {
         .unwrap()
 }
 
-// ─── tests ──────────────────────────────────────────────────────────────────────
-
-/// Initial backfill carries no cursor → the engine bootstraps one via
-/// `current_sync_token` and stamps both freshness clocks. A following incremental
-/// delta applies its change and stores its own `next_token`.
+/// A backfill carries no cursor, so the engine bootstraps one via `current_sync_token`
+/// and stamps both freshness clocks.
 #[tokio::test]
 async fn incremental_loop_stores_cursor() {
     let pool = test_pool().await;
@@ -358,9 +341,6 @@ async fn incremental_loop_stores_cursor() {
     );
 }
 
-/// An empty incremental delta — the common every-poll case — reports
-/// `changed: false` so the scheduler doesn't signal a UI reload, while still
-/// advancing the cursor and stamping freshness.
 #[tokio::test]
 async fn empty_incremental_delta_reports_unchanged() {
     let pool = test_pool().await;
@@ -401,8 +381,6 @@ async fn token_reject_full_resync_converges() {
         .with_bootstrap(SyncToken("t-new".into()));
     let outcome = run(&pool, &provider).await;
 
-    // Every etag no-ops → zero writes → `changed:false`, despite a non-empty delta.
-    // Avoids a spurious frontend reload every poll.
     assert_eq!(
         outcome,
         SyncOutcome::Synced {
@@ -416,8 +394,6 @@ async fn token_reject_full_resync_converges() {
         "re-enumerate converges, no dupe"
     );
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t-new"));
-    // Idempotency invariant: unchanged etag → no write, so the re-enumerate doesn't
-    // churn updated_at and refloat the page as "recently edited".
     assert_eq!(
         page_updated_at(&pool).await,
         updated_before,
@@ -425,11 +401,9 @@ async fn token_reject_full_resync_converges() {
     );
 }
 
-/// Google's `410 Gone` recovery re-enumerates the window but, unlike CalDAV, hands
-/// back a fresh `nextSyncToken`. Deriving "was this full" from
-/// `next_token.is_none()` mislabeled it incremental — `full_resync` false,
-/// `last_full_sync_at` never stamped. The explicit `full_enumerate` marker fixes
-/// both; the cursor still comes from the delta, no bootstrap call needed.
+/// Google's `410 Gone` recovery re-enumerates but, unlike CalDAV, hands back a fresh
+/// `nextSyncToken`, so "was this full" can't be derived from `next_token.is_none()`.
+/// The cursor still comes from the delta, with no bootstrap call.
 #[tokio::test]
 async fn full_enumerate_carrying_a_cursor_labels_full_resync_and_stamps() {
     let pool = test_pool().await;
@@ -464,8 +438,6 @@ async fn full_enumerate_carrying_a_cursor_labels_full_resync_and_stamps() {
     assert_eq!(provider.sync_calls(), 1);
 }
 
-/// A transport failure is not an error — it surfaces as `Offline`, leaves the
-/// cursor untouched, and doesn't stamp the freshness clock.
 #[tokio::test]
 async fn offline_keeps_cursor() {
     let pool = test_pool().await;
@@ -479,8 +451,6 @@ async fn offline_keeps_cursor() {
     assert!(last_synced(&pool).await.is_none());
 }
 
-/// A credential failure maps to `ReconnectNeeded` (CalDAV flattens keychain-miss
-/// and 401/403 to `AppError::Invalid`).
 #[tokio::test]
 async fn reconnect_needed_on_invalid() {
     let pool = test_pool().await;
@@ -491,8 +461,6 @@ async fn reconnect_needed_on_invalid() {
     assert_eq!(run(&pool, &provider).await, SyncOutcome::ReconnectNeeded);
 }
 
-/// A reconnect-needed poll must not touch the stored cursor — the next sync after
-/// the user re-auths resumes incrementally instead of a full re-enumerate.
 #[tokio::test]
 async fn reconnect_needed_preserves_the_cursor() {
     let pool = test_pool().await;
@@ -507,9 +475,7 @@ async fn reconnect_needed_preserves_the_cursor() {
     );
 }
 
-/// A full backfill (no delta token) bootstraps the incremental cursor afterward;
-/// if that bootstrap call fails, the sync still succeeds with events committed —
-/// the cursor stays null, so the next poll re-enumerates. Best-effort, never wrong.
+/// A failed bootstrap leaves the cursor null, so the next poll re-enumerates.
 #[tokio::test]
 async fn post_backfill_bootstrap_token_failure_leaves_cursor_null() {
     let pool = test_pool().await;
@@ -535,8 +501,6 @@ async fn post_backfill_bootstrap_token_failure_leaves_cursor_null() {
     );
 }
 
-/// An occurrence delta with no stored master triggers a targeted `fetch_event`;
-/// the master is applied first, then the override lands.
 #[tokio::test]
 async fn orphan_master_fetched_and_applied() {
     let pool = test_pool().await;
@@ -562,8 +526,7 @@ async fn orphan_master_fetched_and_applied() {
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
 }
 
-/// A `404` from the orphan fetch means the master is gone: drop the occurrence
-/// delta, create nothing, and still advance the cursor (terminal, not transient).
+/// A `404` from the orphan fetch is terminal: the delta is dropped and the cursor advances.
 #[tokio::test]
 async fn orphan_master_404_dropped() {
     let pool = test_pool().await;
@@ -577,7 +540,6 @@ async fn orphan_master_404_dropped() {
         .with_fetch(Err(AppError::NotFound("gone".into())));
 
     let outcome = run(&pool, &provider).await;
-    // The orphan was dropped and nothing else applied → no real write → unchanged.
     assert_eq!(
         outcome,
         SyncOutcome::Synced {
@@ -590,10 +552,8 @@ async fn orphan_master_404_dropped() {
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
 }
 
-/// A full authoritative enumerate carrying a lone occurrence (master absent)
-/// fetches the master to resolve it, and the sweep must spare that just-created
-/// master rather than detach it in the same pass. Guards against Google, which
-/// emits lone occurrences in a full enumerate — CalDAV never does today.
+/// The sweep must spare a master just fetched to resolve a lone occurrence, not detach it
+/// in the same pass. Google emits lone occurrences in a full enumerate; CalDAV never does.
 #[tokio::test]
 async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {
     let pool = test_pool().await;
@@ -633,9 +593,8 @@ async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {
     );
 }
 
-/// A transient orphan-fetch failure must not advance the cursor; the next poll
-/// re-delivers the same delta and converges, with no duplicate of the event that
-/// did commit on the first pass.
+/// A transient orphan-fetch failure must not advance the cursor; the re-delivery
+/// converges with no duplicate of the event that committed on the first pass.
 #[tokio::test]
 async fn partial_failure_is_idempotent() {
     let pool = test_pool().await;
@@ -681,9 +640,7 @@ async fn partial_failure_is_idempotent() {
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
 }
 
-/// A reconciler mirror-write and a user editor-write hitting the DB concurrently
-/// both land with no `SQLITE_BUSY` surfaced — exercised on a real multi-connection
-/// WAL pool (the `:memory:` single-connection pool can't reproduce contention).
+/// Needs a real multi-connection WAL pool: `:memory:` can't reproduce the contention.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn write_contention_converges() {
     let db = wal_db().await;
@@ -713,7 +670,6 @@ async fn write_contention_converges() {
     let mirror_pool = pool.clone();
     let mirror = tokio::spawn(async move {
         let d = delta(vec![event("/e1.ics", "u1", "v2", "New Title")], None);
-        // Model the engine's retry-safe mirror write.
         pikos_db::tx::retry_on_busy(|| reconcile(&mirror_pool, &ctx, &d)).await
     });
     let edit_pool = pool.clone();
@@ -747,9 +703,7 @@ async fn write_contention_converges() {
     assert_eq!(body.as_deref(), Some("my notes"));
 }
 
-/// A one-off-heavy backfill (~5k events) ingests in one poll and creates every
-/// page. Asserts completion + count; render stays windowed elsewhere, so only the
-/// write path is exercised here.
+/// Only the write path; render stays windowed elsewhere.
 #[tokio::test]
 async fn backfill_throughput() {
     let pool = test_pool().await;
@@ -774,17 +728,14 @@ async fn backfill_throughput() {
     assert_eq!(page_count(&pool).await, N as i64);
 }
 
-/// The >200 tail sub-delta `backfill_throughput` skips (it has 0
-/// occurrences/removals, so it hits `reconcile_batched`'s early return) — a real
-/// poll can deliver >200 mixed changes. Here the tail's orphan occurrence's master
-/// sits in an earlier, already-committed batch, so it resolves from storage with no
-/// cross-delta fetch; a removal in the same tail detaches its owned page.
+/// The >200 tail sub-delta that `backfill_throughput` skips (it has no occurrences or
+/// removals, so it hits `reconcile_batched`'s early return). The tail's orphan occurrence
+/// resolves from a master in an earlier committed batch, with no fetch.
 #[tokio::test]
 async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_removal() {
     let pool = test_pool().await;
     seed(&pool, None).await;
 
-    // A pre-existing owned page the big delta removes → detach, not hard-delete.
     let provider = Scripted::default().with_sync(Ok(delta(
         vec![event("/rm.ics", "u-rm", "v1", "Old")],
         Some("t1"),
@@ -842,7 +793,6 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
         Some("detached"),
         "owned page removed in the tail detached, not deleted",
     );
-    // 249 plain + 1 master + 1 detached-but-kept owned page.
     assert_eq!(page_count(&pool).await, N as i64 + 2);
 }
 
@@ -850,8 +800,8 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
 /// instead of waiting for the whole run. The backfill pauses after its first batch and the
 /// edit lands there; a backfill in one transaction never pauses, and fails here.
 ///
-/// An ordering, not a race: an earlier version compared the edit's duration with the
-/// backfill's, and a loaded CI runner failed it with nothing blocked.
+/// An ordering, not a race: comparing the edit's duration with the backfill's fails
+/// on a loaded CI runner with nothing blocked.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn backfill_does_not_block_interactive_writes() {
     let db = wal_db().await;
@@ -923,10 +873,6 @@ async fn backfill_does_not_block_interactive_writes() {
     assert_eq!(page_count(pool).await, N as i64 + 1);
 }
 
-// ─── removals ───────────────────────────────────────────────────────────────────
-
-/// A removal in the delta runs through the lifecycle path (here: a bare mirror →
-/// hard delete), confirming the engine carries removals through to the reconciler.
 #[tokio::test]
 async fn removal_flows_through() {
     let pool = test_pool().await;
@@ -949,18 +895,13 @@ async fn removal_flows_through() {
     assert_eq!(page_count(&pool).await, 0, "bare mirror hard-deleted");
 }
 
-/// A backfill carries no per-event removals, so a stale-token gap (or a server
-/// without `sync-collection`) would otherwise leave an upstream-deleted event as a
-/// permanent ghost. The full-enumerate sweep fixes that: an event absent from the
-/// authoritative set is removed, but a pre-window event — legitimately outside the
-/// time-bounded query — must survive.
+/// A backfill carries no removals, so without the sweep an upstream-deleted event is a
+/// permanent ghost. A pre-window event, legitimately outside the query, must survive it.
 #[tokio::test]
 async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     let pool = test_pool().await;
     seed(&pool, None).await;
 
-    // Initial backfill: an in-window event that later vanishes upstream, plus a
-    // pre-window event the query window (start 2026-06-24) never covers.
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(
             vec![
@@ -985,17 +926,11 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 2);
 
-    // Stale-token gap: the event was deleted upstream, so the re-enumerate returns
-    // neither it (deleted) nor the pre-window event (out of range). Only the
-    // deleted one should be swept.
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
         .with_bootstrap(SyncToken("tok-B".into()));
     let outcome = run(&pool, &provider).await;
 
-    // Sweep-only pass: no upserts, no explicit removals, yet a page was deleted →
-    // `changed:true` so the scheduler emits the reload (else a ghost until an
-    // unrelated resync).
     assert_eq!(
         outcome,
         SyncOutcome::Synced {
@@ -1020,9 +955,6 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     );
 }
 
-/// The sweep runs the normal own-vs-delete lifecycle: an owned page (here
-/// user-modified) detaches rather than hard-deletes, keeping its dormant identity
-/// for a later resync re-link.
 #[tokio::test]
 async fn full_resync_sweep_detaches_owned_page() {
     let pool = test_pool().await;
@@ -1059,10 +991,8 @@ async fn full_resync_sweep_detaches_owned_page() {
     );
 }
 
-/// A resource present upstream but unparseable this pass (tracked in
-/// `unresolved_present`) must survive the authoritative sweep — treating it as
-/// absent would permanently delete a live event's mirror, since incremental sync
-/// never re-delivers an unchanged event.
+/// An unparseable-but-present resource (`unresolved_present`) must survive the sweep:
+/// incremental sync never re-delivers an unchanged event, so deleting it is permanent.
 #[tokio::test]
 async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
     let pool = test_pool().await;
@@ -1083,8 +1013,6 @@ async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 1);
 
-    // Re-enumerate: the event is still live but its body failed to parse, so it's
-    // absent from upserts yet listed in unresolved_present.
     let mut enumerate = full_enumerate(vec![], "2026-06-24");
     enumerate.unresolved_present = vec!["/ev.ics".into()];
     let provider = Scripted::default()
@@ -1111,10 +1039,8 @@ async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
     );
 }
 
-/// A full authoritative enumerate whose single event is unchanged (same etag) and
-/// whose sweep removes nothing → zero real writes → `changed:false`. The delta is
-/// non-empty, so the old delta-size heuristic would have fired a spurious reload
-/// on this pass — every poll of a token-less server hits exactly this shape.
+/// The delta is non-empty, so a delta-size heuristic would reload spuriously; every poll of a
+/// token-less server has this shape.
 #[tokio::test]
 async fn all_etag_noop_full_enumerate_reports_unchanged() {
     let pool = test_pool().await;
@@ -1146,8 +1072,6 @@ async fn all_etag_noop_full_enumerate_reports_unchanged() {
     );
     assert_eq!(page_count(&pool).await, 1, "no dupe, no churn");
 }
-
-// ─── ctag precheck (token-less servers) ─────────────────────────────────────────
 
 #[tokio::test]
 async fn unchanged_ctag_skips_the_enumerate() {
@@ -1252,11 +1176,6 @@ async fn first_poll_without_a_stored_ctag_enumerates_and_captures_it() {
     );
 }
 
-// ─── temp WAL pool ──────────────────────────────────────────────────────────────
-
-/// A real on-disk WAL pool (production pragmas, multiple connections) for the
-/// contention test — the only place a `SQLITE_BUSY` can actually arise. The file
-/// (+ `-wal`/`-shm`) is removed when the guard drops.
 struct TempDb {
     pool: SqlitePool,
     path: PathBuf,

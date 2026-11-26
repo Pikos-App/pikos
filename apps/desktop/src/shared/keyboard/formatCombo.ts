@@ -1,6 +1,4 @@
-// Combo strings ("Mod+Shift+K") → the key tokens a UI renders as badges.
-// Shared by the shortcuts settings page and the command palette so one combo
-// never reads two ways in the same app.
+// Shared by the shortcuts settings page and the command palette so one combo never reads two ways.
 
 import { IS_MACOS } from "@/shared/constants/platform";
 

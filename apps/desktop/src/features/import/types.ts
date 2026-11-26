@@ -17,7 +17,6 @@ export interface ImportBatchItem {
   updatedAt: string | null;
   sourceId: string | null;
   sourceParentId: string | null;
-  /** Per-page reminder lead times in minutes (from TickTick import). */
   reminderMinutes: number[];
   /** iCal RRULE string (no "RRULE:" prefix). When set with scheduledStart, creates a recurrence rule. */
   rrule: string | null;

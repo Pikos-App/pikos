@@ -3,15 +3,10 @@ import PikosSupport
 
 /// How many days the calendar shows at once, and which days those are.
 ///
-/// The same grid draws one day or seven. A seven-column grid is offered only in the three-panel
-/// split: on a phone each column is a few points wide and titles wrap a letter to a line, so it
-/// showed only colour, which the month already shows better, and Upcoming answers "what is this
-/// week". A phone turned sideways has the width but about 400 points of height, and its calendar
-/// is half the screen beside the list.
-///
-/// Pure value logic, kept apart from the views so the date arithmetic — which
-/// is the part that can be wrong across a month boundary or a DST weekend — can
-/// be read on its own.
+/// A seven-column grid is offered only in the three-panel split: on a phone each column is a
+/// few points wide and titles wrap a letter to a line. A phone turned sideways has the width
+/// but little height, and its calendar is half the screen beside the list. Kept apart from
+/// the views so month-boundary and DST arithmetic can be read on its own.
 enum CalendarSpan: String, CaseIterable, Identifiable, Hashable {
     case day
     case threeDays
@@ -39,14 +34,8 @@ enum CalendarSpan: String, CaseIterable, Identifiable, Hashable {
         layout == .split ? allCases : [.day, .threeDays, .month]
     }
 
-    /// The days to show, given the day the user is anchored on.
-    ///
-    /// A week starts on the user's own first weekday — Sunday in the US, Monday
-    /// across most of Europe — which `Calendar.current` already knows. Shorter
-    /// spans start on the anchor itself: someone who has navigated to Thursday
-    /// and asked for three days means Thursday onwards, not the Thursday of
-    /// some enclosing block.
-    /// A month is the whole month padded to whole weeks.
+    /// The days to show. A week starts on the user's first weekday; shorter spans start on the
+    /// anchor, so three days from Thursday means Thursday onwards. A month is padded to whole weeks.
     func days(anchoredOn anchor: Date, calendar: Calendar = .current) -> [Date] {
         let start: Date
         let count: Int
@@ -85,16 +74,10 @@ enum CalendarSpan: String, CaseIterable, Identifiable, Hashable {
 
 /// A `Date` as the wall-clock string the workspace speaks.
 ///
-/// Built from date components rather than a `DateFormatter`, for three reasons
-/// that all point the same way. A formatter is a reference type, so holding one
-/// in a `static let` is shared mutable state the compiler is right to object
-/// to. It costs about a hundred microseconds to construct. And it formats in
-/// the reader's own calendar unless told otherwise — a device set to the
-/// Buddhist calendar would write year 2569 into a column that only ever holds
-/// Gregorian dates.
-///
-/// No time zone conversion in either direction: the stored value is a wall
-/// clock, and the user's current zone is the one their day is happening in.
+/// Built from components, not a `DateFormatter`: a formatter is shared mutable state in a
+/// `static let`, costly to build, and follows the reader's calendar, so a Buddhist-calendar
+/// device would write 2569. No time zone conversion: the stored value is a wall clock in the
+/// user's current zone.
 enum WallClockDay {
     private static var gregorian: Calendar {
         var calendar = Calendar(identifier: .gregorian)

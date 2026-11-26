@@ -29,17 +29,13 @@ use crate::engine::expand_range;
 use crate::rule::rewrite_until_with;
 use crate::WallClock;
 
-/// One occurrence of a zone-aware recurrence, expressed for a viewer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZonedOccurrence {
     /// Occurrence date (YYYY-MM-DD) in the EVENT's zone — the stable identity
     /// used for exdates/overrides, matching the source calendar.
     pub original_date: String,
-    /// Start as viewer-zone wall-clock ISO.
     pub scheduled_start: String,
-    /// End as viewer-zone wall-clock ISO, when the rule has one.
     pub scheduled_end: Option<String>,
-    /// Exact UTC instant of the start ('YYYY-MM-DDTHH:MM:SSZ').
     pub utc_start: String,
 }
 
@@ -55,17 +51,14 @@ fn offset_seconds_at(tz: &Tz, utc: NaiveDateTime) -> i64 {
     tz.offset_from_utc_datetime(&utc).fix().local_minus_utc() as i64
 }
 
-/// Converts a wall-clock datetime in `zone` to its UTC instant, applying the
-/// DST edge policy above. None when the zone name is unknown.
+/// None when the zone name is unknown.
 pub fn wall_clock_to_utc(zone: &str, wall: NaiveDateTime) -> Option<NaiveDateTime> {
     let tz: Tz = zone.parse().ok()?;
     Some(match tz.from_local_datetime(&wall) {
         LocalResult::Single(dt) => dt.naive_utc(),
         // Fall-back repeat: earliest instant (first time the clock shows it).
         LocalResult::Ambiguous(a, b) => a.naive_utc().min(b.naive_utc()),
-        // Spring-forward gap: interpret with the pre-transition offset — the
-        // offset in effect at the earlier of the two candidate instants —
-        // which shifts the wall clock forward by the gap.
+        // Spring-forward gap: the offset in effect at the earlier candidate instant.
         LocalResult::None => {
             let cand1 = wall - Duration::seconds(offset_seconds_at(&tz, wall));
             let cand2 = wall - Duration::seconds(offset_seconds_at(&tz, cand1));
@@ -75,21 +68,16 @@ pub fn wall_clock_to_utc(zone: &str, wall: NaiveDateTime) -> Option<NaiveDateTim
     })
 }
 
-/// Wall-clock datetime shown in `zone` at a UTC instant. None when the zone
-/// name is unknown.
 pub fn utc_to_wall_clock(zone: &str, utc: NaiveDateTime) -> Option<NaiveDateTime> {
     let tz: Tz = zone.parse().ok()?;
     Some(wall_clock_at(tz, Utc.from_utc_datetime(&utc)))
 }
 
-// ─── stored instants (native only) ──────────────────────────────────────────────
 //
-// The renderer above may shift a wall clock the zone never had, because *some*
-// row has to be drawn. A layer that stores or fires on an instant may not: it
-// hands the undecidable case back to its caller instead. These two are the one
-// home for that reading — the reconciler's zone shifts and the notification
-// log's fire instants both resolve through them, so the fall-back/gap policy is
-// stated once rather than re-derived per call site.
+// The renderer above may shift a wall clock the zone never had, because *some* row has
+// to be drawn. A layer that stores or fires on an instant hands that case back to its
+// caller instead; the reconciler's zone shifts and the notification log both resolve
+// through these two.
 
 /// The absolute instant of a wall clock in `zone`, or `None` when the zone never
 /// had it (spring-forward gap) — the caller keeps the original rather than
@@ -106,34 +94,24 @@ pub fn wall_clock_instant(zone: Tz, wall: NaiveDateTime) -> Option<DateTime<Utc>
     )
 }
 
-/// The wall clock `zone` shows at an absolute instant. Total, unlike
-/// [`wall_clock_instant`]: every instant has exactly one rendering in a zone.
 pub fn wall_clock_at(zone: Tz, instant: DateTime<Utc>) -> NaiveDateTime {
     instant.with_timezone(&zone).naive_local()
 }
 
-/// RFC 5545 expresses a timed UNTIL in UTC when DTSTART carries a TZID. The
-/// engine compares occurrences in event-zone wall-clock, so rewrite the UNTIL
-/// bound into that frame before expansion. Date-only UNTILs and rules without
-/// UNTIL pass through unchanged, as does an unknown zone.
-///
-/// Edited in place through [`rewrite_until_with`] — every other field of the
-/// rule survives byte-for-byte, which a parse round-trip would not manage.
+/// RFC 5545 expresses a timed UNTIL in UTC when DTSTART carries a TZID, but the
+/// engine compares in event-zone wall-clock, so the bound is rewritten into that
+/// frame. Date-only UNTILs, rules without UNTIL and unknown zones pass through.
 pub fn normalize_until_to_zone(rrule: &str, event_zone: &str) -> String {
     let Ok(tz) = event_zone.parse::<Tz>() else {
         return rrule.to_string();
     };
     rewrite_until_with(rrule, |value| {
-        // Only the UTC datetime form ('YYYYMMDDTHHMMSS' + optional Z) converts.
         let utc = parse_compact_datetime(value)?;
         let wall = wall_clock_at(tz, Utc.from_utc_datetime(&utc));
         Some(format!("{}Z", wall.format("%Y%m%dT%H%M%S")))
     })
 }
 
-/// `20260701T035959`, with or without a trailing `Z`, → the datetime it spells.
-/// `None` for the date-only and otherwise-shaped values that carry no time to
-/// convert — they are already in the frame the caller wants.
 fn parse_compact_datetime(value: &str) -> Option<NaiveDateTime> {
     let compact = value.strip_suffix(['Z', 'z']).unwrap_or(value);
     let (date, time) = compact.split_once(['T', 't'])?;
@@ -152,13 +130,9 @@ fn parse_compact_datetime(value: &str) -> Option<NaiveDateTime> {
     parse_naive(&iso)
 }
 
-/// Expands a zone-aware recurrence (an externally synced event) into
-/// occurrences expressed in the viewer's zone. Mirrors the TS
-/// `expandRecurrenceInZone` exactly; see that function for the pipeline.
-///
-/// `range_start`/`range_end` are viewer-zone wall-clock ISO strings, end
-/// exclusive. `exdates` are YYYY-MM-DD dates in the event's zone. All-day
-/// rules are zone-less and pass through unconverted.
+/// Mirrors the TS `expandRecurrenceInZone` exactly. `range_start`/`range_end` are
+/// viewer-zone wall-clock ISO strings, end exclusive; `exdates` are YYYY-MM-DD in
+/// the event's zone. All-day rules are zone-less and pass through unconverted.
 #[allow(clippy::too_many_arguments)]
 pub fn expand_range_in_zone(
     rrule: &str,
@@ -234,9 +208,7 @@ pub fn expand_range_in_zone(
 mod tests {
     use super::*;
 
-    // Mirrors packages/core/src/utils/zoned.test.ts — same zones, same
-    // instants, same expected outputs, so TS/Rust parity is pinned by CI on
-    // both sides.
+    // Mirrors packages/core/src/utils/zoned.test.ts, so TS/Rust parity is pinned on both sides.
 
     const NY: &str = "America/New_York";
     const LA: &str = "America/Los_Angeles";
@@ -303,8 +275,7 @@ mod tests {
         );
     }
 
-    // Native-only: the strict reading stored instants take. No TS counterpart —
-    // the renderer never has to refuse a value.
+    // Native-only: the renderer never has to refuse a value.
     #[test]
     fn stored_instants_refuse_a_wall_clock_the_zone_never_had() {
         let ny: Tz = NY.parse().unwrap();

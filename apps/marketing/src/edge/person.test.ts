@@ -21,7 +21,7 @@ describe("isPerson", () => {
     expect(agent("Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0")).toBe(true);
   });
 
-  // In October 2026 Chrome is at 154 by the release reckoning, so 142 is the oldest still a person.
+  // 154 is current by the release reckoning, so 142 is the oldest still a person.
   it("draws the Chrome line a year behind the current release", () => {
     expect(agent(chrome(142))).toBe(true);
     expect(agent(chrome(141))).toBe(false);

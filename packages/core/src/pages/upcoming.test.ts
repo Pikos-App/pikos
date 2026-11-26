@@ -22,10 +22,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   };
 }
 
-// Wednesday. Window runs 2026-03-25 … 2026-03-31 inclusive.
 const TODAY = "2026-03-25";
-
-// ─── Membership ──────────────────────────────────────────────────────────────
 
 describe("belongsToView — upcoming", () => {
   it("spans today through today+6, seven days in total", () => {
@@ -38,8 +35,7 @@ describe("belongsToView — upcoming", () => {
   });
 
   it("includes a timed page earlier today, even though it has already passed", () => {
-    // Overdue-within-today is the Today view's split to make, not a reason to
-    // drop the page out of the day group it is scheduled in.
+    // Splitting overdue within today is Today's job, not a reason to drop the page from its day.
     const page = makePage({ scheduledStart: "2026-03-25T01:00:00" });
     expect(belongsToView(page, "upcoming", TODAY)).toBe(true);
   });
@@ -87,7 +83,6 @@ describe("belongsToView — upcoming", () => {
   });
 
   it("crosses a month boundary correctly", () => {
-    // Window from 2026-03-30 runs to 2026-04-05.
     expect(upcomingWindowEnd("2026-03-30")).toBe("2026-04-05");
     const page = makePage({ scheduledStart: "2026-04-05" });
     expect(belongsToView(page, "upcoming", "2026-03-30")).toBe(true);
@@ -96,8 +91,6 @@ describe("belongsToView — upcoming", () => {
     ).toBe(false);
   });
 });
-
-// ─── Grouping ────────────────────────────────────────────────────────────────
 
 describe("groupUpcomingPages", () => {
   it("labels today, tomorrow, then weekday + date", () => {

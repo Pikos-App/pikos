@@ -2,7 +2,6 @@ import { isPerson } from "./person";
 
 const RELEASE = "https://github.com/pikos-app/pikos/releases/latest/download/";
 
-/** Each installer the download page offers, by the name its /get/ link uses. */
 const INSTALLERS: Record<string, string> = {
   appimage: "Pikos-linux-x86_64.AppImage",
   deb: "Pikos-linux-x86_64.deb",
@@ -10,9 +9,8 @@ const INSTALLERS: Record<string, string> = {
 };
 
 /**
- * The response to a /get/ link: a redirect to the installer on GitHub, recording the download first
- * when a person asked for it. GitHub's own count includes every scraper that follows the link, so
- * this is the human figure and GitHub's is the ceiling.
+ * Redirects a /get/ link to the installer on GitHub, recording the download first when a person
+ * asked. GitHub's own count includes scrapers, so this is the human figure and GitHub's the ceiling.
  */
 export function downloadResponse(
   request: Request,

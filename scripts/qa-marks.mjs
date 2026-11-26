@@ -21,7 +21,7 @@
 //
 // With `--owed`, it also fails on a row that is neither claimed nor manual for good, unless
 // `qa-owed-tests.json` lists it, and on a listed row that is claimed now or gone, so the list
-// only shrinks (`PKOS-0193`). `pnpm verify` runs it that way.
+// only shrinks. `pnpm verify` runs it that way.
 //
 // Reads the master from the working tree, so it runs where the release is cut,
 // not in CI.

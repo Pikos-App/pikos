@@ -1,24 +1,13 @@
-//! Today and Upcoming, graded against the TypeScript they replace.
+//! Today and Upcoming, graded against `pageFilters.ts` and `upcoming.ts`.
 //!
-//! `tests/corpus/views.json` is the output of `pageFilters.ts` and
-//! `upcoming.ts` over one fixture set at each of the suite's seven reference
-//! times — regenerate with `pnpm --filter @pikos/core gen:parity`. Each case
-//! records three things: which view every page belongs to, the last day the
-//! Upcoming window reaches, and the sections each view is actually built from.
+//! Each case records which view every page belongs to, the last day the Upcoming window
+//! reaches, and the sections each view is built from. Sections are graded because the
+//! predicates would pass a port with the ordering wrong. An all-day item dated today sorts at
+//! the current moment, not midnight, and the sort is stable so pages sharing a moment keep
+//! the user's order.
 //!
-//! Grading the *sections* rather than only the predicates is the point. The
-//! predicates are three string comparisons and would pass a port that had the
-//! ordering entirely wrong; what a reader sees is the order, and two of its
-//! rules are easy to get plausibly wrong. An all-day item dated today sorts at
-//! the current moment rather than at midnight, so "sometime today" lands
-//! between what has passed and what has not instead of at the top of the list.
-//! And the sort is stable, so two pages sharing a moment keep the order the
-//! user arranged them in rather than swapping on every redraw.
-//!
-//! The generator freezes the clock to capture any of this: the TypeScript reads
-//! `new Date()` in three places and takes no reference parameter, which is also
-//! why the Rust takes `today` and `now` as arguments instead of reading the
-//! clock itself.
+//! The generator freezes the clock because the TypeScript reads `new Date()` with no
+//! reference parameter; the Rust takes `today` and `now` as arguments.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -119,8 +108,7 @@ fn load() -> Corpus {
     serde_json::from_str(&raw).expect("views.json parses")
 }
 
-/// The reference instant for a case, which is what the generator froze the
-/// clock to.
+/// The reference instant for a case, which the generator froze the clock to.
 fn now_for(corpus: &Corpus, case: &ViewCase) -> NaiveDateTime {
     let iso = &corpus
         .meta
@@ -159,9 +147,8 @@ fn the_window_reaches_the_same_last_day() {
     }
 }
 
-/// Membership for the two date views. The folder and inbox arms are the
-/// TypeScript's alone — those are a SQL `WHERE` clause here, not a predicate —
-/// so what is graded is `today` and `upcoming`.
+/// Membership for the two date views. The folder and inbox arms are SQL here, so only `today`
+/// and `upcoming` are graded.
 #[test]
 fn every_page_lands_in_the_same_date_views() {
     let corpus = load();
@@ -197,17 +184,9 @@ fn every_page_lands_in_the_same_date_views() {
 
 /// Upcoming never shows anything that has already slipped.
 ///
-/// Derived from the corpus as a property rather than read out of it. The upper
-/// bound is arithmetic and obvious; the *lower* bound is the one carrying a
-/// decision, and it is the half a port is likely to get wrong by reaching for
-/// "everything from here on".
-///
-/// Note what this deliberately does **not** assert. A page dated today is in
-/// both views at once, and the first draft of this test claimed it could not
-/// be — the corpus disagreed, which is what a corpus is for. Today lists what
-/// is due, Upcoming opens at today because a window starting tomorrow leaves a
-/// reader wondering where today went. The overlap is one page answering two
-/// different questions, not a page with two homes.
+/// Derived from the corpus as a property. The lower bound carries the decision. A page dated
+/// today is in both views at once: Today lists what is due, and Upcoming opens at today so a
+/// reader doesn't wonder where today went.
 #[test]
 fn upcoming_reaches_forward_only() {
     let corpus = load();
@@ -295,9 +274,7 @@ fn upcoming_groups_the_same_days_holding_the_same_pages() {
     }
 }
 
-/// A corpus that never exercises the interesting cases would pass whatever the
-/// port did. These are the three the ordering rules are about, asserted against
-/// the fixture rather than assumed to be in it.
+/// The corpus must reach the three cases the ordering rules are about.
 #[test]
 fn the_corpus_reaches_the_cases_worth_grading() {
     let corpus = load();
@@ -308,8 +285,7 @@ fn the_corpus_reaches_the_cases_worth_grading() {
         .find(|c| c.r#ref == "sun_noon")
         .expect("the suite's primary reference is in the corpus");
 
-    // An all-day item dated today, sorted against timed items on both sides of
-    // the current moment — the rule that would look fine if it were wrong.
+    // An all-day item dated today, sorted against timed items on both sides of now.
     let today_day = sun_noon
         .upcoming_days
         .days
@@ -322,7 +298,7 @@ fn the_corpus_reaches_the_cases_worth_grading() {
         today_day.pages
     );
 
-    // Two pages sharing a moment, which is what pins the sort's stability.
+    // Two pages sharing a moment pin the sort's stability.
     let tie_day = sun_noon
         .upcoming_days
         .days
@@ -337,15 +313,13 @@ fn the_corpus_reaches_the_cases_worth_grading() {
         tie_day.pages
     );
 
-    // Both of Today's sections populated. A corpus where everything is overdue
-    // grades only half the split.
+    // Both of Today's sections populated.
     assert!(
         !sun_noon.today_groups.overdue.is_empty() && !sun_noon.today_groups.today.is_empty(),
         "both sections should be exercised"
     );
 
-    // A finished page that would otherwise be in range, so "open only" is
-    // actually tested rather than vacuously true.
+    // A finished page that would otherwise be in range, so "open only" is tested.
     assert!(
         corpus.pages.iter().any(|p| p.status == "done"),
         "the fixture needs a completed page in range"

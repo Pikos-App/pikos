@@ -4,52 +4,37 @@ import Foundation
 ///
 /// Pikos stores dates two ways, and they are not interchangeable:
 ///
-///   - **UTC instants** — `created_at`, `updated_at`, `deleted_at`. Rust's
-///     `now_iso()` formats `%Y-%m-%dT%H:%M:%S%.3fZ`: milliseconds, `Z` suffix.
-///     These are moments in time and must be read as UTC. This type reads them.
-///   - **Local wall clocks** — `scheduled_start` and friends, written by
-///     `now_local_iso()` with no zone suffix at all. 09:00 means 09:00 wherever
-///     the reader is, so these must *not* be converted. `wallClock(_:in:)`
-///     below reads those; `utc(_:)` must not be pointed at them.
+///   - **UTC instants** (`created_at`, `updated_at`, `deleted_at`), written by
+///     Rust's `now_iso()` with milliseconds and a `Z` suffix. `utc(_:)` reads them.
+///   - **Local wall clocks** (`scheduled_start` and friends), written with no
+///     zone suffix. 09:00 means 09:00 wherever the reader is, so they must not
+///     be converted. `wallClock(_:in:)` reads them; `utc(_:)` must not be
+///     pointed at them.
 ///
-/// Confusing the two fails quietly in the worst way: a wall clock read as UTC
-/// shifts by the reader's offset, which is invisible in London and wrong by a
-/// day near midnight in Auckland. Hence one named place for the instant format
-/// rather than a format string copied into every view that shows one.
-///
-/// Here rather than in the app target so it can be tested without a simulator —
-/// the same reason `CalendarGeometry` lives here.
+/// A wall clock read as UTC shifts by the reader's offset: invisible in London,
+/// a day off near midnight in Auckland.
 public enum StorageTimestamp {
     /// Parses a UTC instant column.
     ///
-    /// Returns nil rather than a substitute for anything it cannot read, so the
-    /// caller can fall back to showing the raw value. A malformed stamp is
-    /// worth seeing; a plausible wrong date is not.
+    /// Returns nil for anything unreadable so the caller can show the raw value:
+    /// a malformed stamp is worth seeing; a plausible wrong date is not.
     public static func utc(_ stamp: String) -> Date? {
-        // Fractional seconds are not optional within one style: a style that
-        // requires them rejects a stamp without, and one that forbids them
-        // rejects a stamp with. Only `now_iso()` writes these columns today and
-        // it always emits milliseconds, but a stamp arriving from an import or
-        // a future writer should still read as a date.
+        // Each style rejects the other's shape, so try both.
         (try? withMillis.parse(stamp)) ?? (try? wholeSeconds.parse(stamp))
     }
 
     /// Parses a local wall-clock column, in either of its shapes: `yyyy-MM-dd`
     /// for an all-day value, `yyyy-MM-ddTHH:mm:ss` for a timed one.
     ///
-    /// Resolved in `calendar`'s time zone — the reader's own by default, which
-    /// is what makes 09:00 mean 09:00 everywhere — and always on the Gregorian
-    /// calendar, because that is the one the stored string is written in.
+    /// Resolved in `calendar`'s time zone (the reader's by default, which is what
+    /// makes 09:00 mean 09:00 everywhere) on the Gregorian calendar, which is
+    /// what the stored string is written in.
     ///
-    /// An all-day value lands on noon rather than midnight. Midnight is the one
-    /// instant a spring-forward can delete, and in a zone that moves at 00:00
-    /// asking for it yields either nil or the previous day.
+    /// An all-day value lands on noon, since a spring-forward can delete midnight.
     ///
-    /// Field ranges are checked; validity beyond that is left to `Calendar`. A
-    /// timed value inside a DST gap — 02:30 on a day that jumps from 02:00 to
-    /// 03:00 — is a real stored value that no instant matches, and having
-    /// `Calendar` shift it forward is a better answer than refusing to show the
-    /// page at all.
+    /// Field ranges are checked; the rest is left to `Calendar`. A timed value
+    /// inside a DST gap matches no instant, and `Calendar` shifting it forward
+    /// beats refusing to show the page.
     public static func wallClock(_ stamp: String, in calendar: Calendar = .current) -> Date? {
         let halves = stamp.split(separator: "T", maxSplits: 1, omittingEmptySubsequences: false)
         guard let day = halves.first.map(String.init),

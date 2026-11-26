@@ -5,15 +5,9 @@ import UIKit
 
 /// Preferences, and what the app can tell you about itself.
 ///
-/// Deliberately shorter than the desktop's. That one has five tabs, and three
-/// of them describe things a phone does not have: keyboard shortcuts, window
-/// state, and an editor line width for a column that is always the screen's.
-/// What is here is what changes something on this device — and every row that
-/// is here is wired to something, because a settings screen is the one place a
-/// control that does nothing is indistinguishable from one that is broken.
-///
-/// `apps/ios/README.md` records what was left out and why, so the next person
-/// to notice a missing preference finds a decision rather than an oversight.
+/// Shorter than the desktop's: keyboard shortcuts, window state and editor line width don't
+/// exist on a phone. Every row is wired to something, since a control that does nothing
+/// reads as broken.
 struct SettingsScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(WorkspaceStore.self) private var store
@@ -101,9 +95,8 @@ struct SettingsScreen: View {
                     exportSection
 
                     Section {
-                        // Not decoration: a page written by a newer build cannot be
-                        // saved over by this one, and when somebody hits that the
-                        // first useful question is which version each device is on.
+                        // Not decoration: a page written by a newer build can't be saved over by this one, so
+                        // the version on each device is the first thing to ask.
                         LabeledContent("Version", value: Self.version)
                         Link(destination: URL(string: "mailto:hello@pikos.app")!) {
                             LabeledContent {
@@ -123,12 +116,8 @@ struct SettingsScreen: View {
                     }
 
                     #if DEBUG
-                        // The first device run's checklist, answered on screen.
-                        // Not in a release
-                        // build: a container path is nobody's business but the
-                        // developer's, and the attribute read behind it would
-                        // need a privacy declaration the shipped binary should
-                        // not have to make.
+                        // Debug only: a container path is the developer's business, and the attribute read
+                        // behind it would need a privacy declaration the shipped binary shouldn't make.
                         Section {
                             ForEach(Diagnostics.report()) { row in
                                 VStack(alignment: .leading, spacing: 2) {
@@ -165,9 +154,8 @@ struct SettingsScreen: View {
                             }
                         }
                     } footer: {
-                        // Said before the tap. The trash makes an ordinary delete
-                        // recoverable, and somebody who has learned that will
-                        // reasonably expect the same here.
+                        // Said before the tap: the trash makes an ordinary delete recoverable, so people expect
+                        // the same here.
                         Text(
                             "Removes every page, folder and calendar connection from this device. There is no trash to recover from, so back up first if you want a copy."
                         )
@@ -214,15 +202,9 @@ struct SettingsScreen: View {
         }
     }
 
-    // MARK: - Reminders
-
-    /// The two switches a reminder passes through — ours and the system's —
-    /// and the one lead that applies when a page never asked for its own.
-    ///
-    /// The system's state is shown here rather than discovered, because a
-    /// reminder that never arrives looks the same whether it was never
-    /// planned or never allowed, and only one of those is fixed on this
-    /// screen. Denied permission gets a link to where it is fixed.
+    /// The two switches a reminder passes through, ours and the system's, and the lead for pages
+    /// without their own. The system's state is shown because a reminder that never arrives looks
+    /// the same whether never planned or never allowed, and only one is fixed on this screen.
     @ViewBuilder
     private var remindersSection: some View {
         @Bindable var settings = settings
@@ -251,9 +233,7 @@ struct SettingsScreen: View {
                         Task { await reminders.requestAuthorization() }
                     }
                 default:
-                    // The next one, not a count: "Dentist, today at 2:30 PM"
-                    // is a claim the reader can check against their day, and
-                    // "7 reminders" is not.
+                    // The next one, not a count: a named time can be checked against the day.
                     if let next = reminders.nextPlanned {
                         LabeledContent("Next") {
                             VStack(alignment: .trailing, spacing: 1) {
@@ -290,19 +270,8 @@ struct SettingsScreen: View {
         )
     }
 
-    // MARK: - Export
-
-    /// The promise, made checkable.
-    ///
-    /// The marketing site says the data is a file on your device. On a
-    /// desktop that is something a person can go and look at; on a phone the
-    /// container is hidden, and the claim has to be taken on faith. This
-    /// section is the faith made visible: how big the file is, and a button
-    /// that puts a copy of it where the Files app shows it.
-    ///
-    /// Above Export rather than folded into it, because it answers a
-    /// different question. Export is "get this into another app"; this is
-    /// "where is my data, and can I hold a copy of it".
+    /// Makes "your data is a file on this device" checkable: its size, and a copy where Files
+    /// shows it. Apart from Export, which is for getting data into another app.
     private var yourDataSection: some View {
         Section {
             LabeledContent("On this device") {
@@ -339,10 +308,6 @@ struct SettingsScreen: View {
     }
 
     /// "Last backup Today at 9:41" or "Never backed up".
-    ///
-    /// The date is relative through the same wording the list uses for a
-    /// schedule, so a backup taken this morning says "Today" and not a date
-    /// the reader has to compare with the clock.
     private var lastBackupLabel: String {
         guard let date = exports.lastBackup else { return String(localized: "Never backed up") }
         let day = DayLabel.relative(DayLabel.today(now: date), today: DayLabel.today())
@@ -350,11 +315,6 @@ struct SettingsScreen: View {
         return String(localized: "Last backup \(day) at \(time)")
     }
 
-    /// Three formats, each saying what it is for before it is tapped.
-    ///
-    /// They are not interchangeable, and the difference only becomes visible
-    /// once the file is somewhere else: a CSV that imports back, a Markdown
-    /// tree that opens anywhere, and a calendar file.
     @ViewBuilder
     private var exportSection: some View {
         Section {
@@ -379,8 +339,6 @@ struct SettingsScreen: View {
                 .disabled(exports.isExporting != nil)
             }
 
-            // Only when there is a calendar to include. Without one the toggle
-            // is a question about something the reader does not have.
             if hasCalendars {
                 Toggle("Include calendar events", isOn: $includeSyncedInExport)
                     .tint(.interactiveFill)
@@ -412,31 +370,20 @@ struct SettingsScreen: View {
         isDeleting = true
         defer { isDeleting = false }
         await store.deleteAllData()
-        // The home screen's search must forget the titles too: a phone wiped
-        // of its notes that keeps offering them from Spotlight has not been
-        // wiped.
         await SpotlightIndexer.clear()
         dismiss()
     }
 
-    /// How many calendars are mirroring, so the row says something without
-    /// being opened.
-    ///
-    /// Counts enabled calendars rather than accounts: an account with every
-    /// calendar switched off is connected and syncing nothing, and "1 account"
-    /// would describe that as working.
+    /// Counts enabled calendars, not accounts: an account with every calendar off syncs
+    /// nothing, and "1 account" would call that working.
     private var calendarSummary: String {
         let enabled = sync.accounts.flatMap(\.calendars).filter(\.enabled).count
         if sync.accounts.isEmpty { return String(localized: "None") }
         return String(localized: "\(enabled) syncing")
     }
 
-    /// Says out loud when the stored folder no longer exists.
-    ///
-    /// The id outlives the folder — deleting one does not reach into settings
-    /// to clear it — so the picker falls back to showing Inbox. Without this
-    /// sentence that looks like the preference silently reset itself, which is
-    /// the one reading that would send somebody looking for a bug.
+    /// Says when the stored folder no longer exists. The id outlives the folder, so the picker
+    /// shows Inbox, which would read as the preference silently resetting.
     private var defaultFolderFooter: String {
         let base = String(localized: "Where a new page lands when you create one from a widget or a link.")
         guard let id = settings.defaultFolderID,
@@ -452,11 +399,7 @@ struct SettingsScreen: View {
         return components.url!
     }
 
-    /// The marketing version and build, as Xcode stamped them.
-    ///
-    /// Read from the bundle rather than from a constant in the source: a
-    /// constant is a second place to remember on every release, and the one
-    /// that gets forgotten is always the one the user is reading.
+    /// Read from the bundle, not a constant that would be a second place to update each release.
     private static var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "—"

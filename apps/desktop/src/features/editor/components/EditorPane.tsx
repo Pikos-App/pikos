@@ -45,18 +45,11 @@ import { SaveStatus } from "./SaveStatus";
 import { SlashMenuExtension } from "./SlashMenu";
 import { TableToolbar } from "./TableToolbar";
 
-// Schema first, then behaviour.
-//
-// The schema half comes from @pikos/editor-schema and is shared with the iOS
-// webview — it decides what `getJSON()` produces, so the two platforms have to
-// agree on it exactly or documents stop round-tripping. PikosImage is the
-// shared image node with the desktop's Tauri node view and drop handling
-// layered on; the shared package supplies its attributes.
-//
-// The behaviour half below is desktop's own and intentionally not shared. A
-// slash menu, a placeholder, smart-quote input rules, markdown paste and a tab
-// keymap all belong to a keyboard-driven app, and none of them can change a
-// stored document.
+// Schema first, then behaviour. The schema half comes from @pikos/editor-schema, shared with the iOS
+// webview: it decides what `getJSON()` produces, so both platforms must agree exactly or documents
+// stop round-tripping. PikosImage layers the desktop's Tauri node view and drop handling on the shared
+// node. The behaviour half below is desktop's own: a slash menu, placeholder, smart-quote rules,
+// markdown paste and a tab keymap can't change a stored document.
 export const editorExtensions = [
   ...createDocumentExtensions({
     codeBlock: PikosCodeBlock,
@@ -74,13 +67,11 @@ export const editorExtensions = [
   PageLinkPicker,
 ];
 
-// tiptap-markdown only converts pasted markdown when the clipboard has no
-// text/html, which is rarely the case (VS Code, browsers, ChatGPT all attach
-// HTML). Intercept paste and force markdown conversion when the plain text
-// looks like markdown — see utils/markdownPaste for the why.
+// tiptap-markdown converts pasted markdown only when the clipboard has no text/html, which VS Code,
+// browsers and ChatGPT all attach. Intercept paste and force conversion when the text looks like
+// markdown (see utils/markdownPaste).
 function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): boolean {
   if (!editor) return false;
-  // Inside a code block, raw text is intended — leave it untouched.
   if (editor.state.selection.$from.parent.type.spec.code) return false;
   const text = event.clipboardData?.getData("text/plain");
   if (!text || !looksLikeMarkdown(text)) return false;
@@ -88,7 +79,6 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   return editor.chain().setMeta("paste", true).insertContent(text).run();
 }
 
-/** Load a newer body into the page already open, keeping the caret and the scroll where they were. */
 function reloadInPlace(editor: Editor, doc: JSONContent, scroller: HTMLElement | null): void {
   const { from, to } = editor.state.selection;
   const scrollTop = scroller?.scrollTop ?? 0;
@@ -141,7 +131,6 @@ export function EditorPane() {
 
   const restOfPageRef = useRef<RestOfPage | null>(null);
 
-  /** Draw what a long page has left before anything that edits it or moves to its end. */
   function finishOpening(): void {
     restOfPageRef.current?.finish();
     restOfPageRef.current = null;
@@ -152,7 +141,6 @@ export function EditorPane() {
     restOfPageRef.current = null;
   }
 
-  /** An input handler that lets ProseMirror handle the event, on the whole page. */
   function finishOpeningFirst(): boolean {
     finishOpening();
     return false;
@@ -215,7 +203,6 @@ export function EditorPane() {
       const pageId = currentPageIdRef.current;
       if (pageId === null) return;
 
-      // An edit from a command rather than input, such as the toolbar, still saves the whole page.
       finishOpening();
       pendingEditRef.current = { doc: e.state.doc, pageId };
       schedule(saveDelayFor(e.state.doc.content.size));
@@ -226,7 +213,6 @@ export function EditorPane() {
     editorRef.current = editor;
   }, [editor]);
 
-  /** Show a body newer than the one on screen, if this page is still open with nothing typed. */
   function showNewerBody(pageId: string, content: string): void {
     const isClean = currentPageIdRef.current === pageId && pendingEditRef.current === null;
     if (!editor || editor.isDestroyed || !isClean) return;
@@ -257,7 +243,6 @@ export function EditorPane() {
     return registerActiveEditor(editor);
   }, [editor]);
 
-  // Page switch: all mutations here are refs or external system calls (Tiptap) — no setState.
   useEffect(() => {
     if (!editor || editor.isDestroyed || isLoading) return;
 
@@ -344,14 +329,9 @@ export function EditorPane() {
 
   const [isAddingLink, setIsAddingLink] = useState(false);
 
-  // Only with a selection, which is what a link is made out of. Without one the
-  // registry falls through to the global binding and the command palette opens —
-  // the same split Notion, Linear and Docs give Cmd+K. Before the gate the editor
-  // took the combo outright, so the palette was unreachable from the one place
-  // you are most likely to reach for it, and nothing said why.
-  //
-  // The gate reads `editor.state` at key-press time rather than a rendered value,
-  // because a selection changes without re-rendering this component.
+  // Only with a selection, which is what a link is made from. Without one the registry falls through
+  // to the global binding and the command palette opens (as Notion, Linear and Docs do for Cmd+K). The
+  // gate reads `editor.state` at key-press time, since a selection changes without re-rendering.
   useKeyboardShortcut(
     "Mod+Shift+K",
     () => {
@@ -369,10 +349,8 @@ export function EditorPane() {
   );
 
   if (!page) {
-    // While a new active page is loading (debounce + getPage round-trip),
-    // render a blank surface instead of the "Select a page" empty state.
-    // Otherwise switching pages briefly flashes the empty state before the
-    // new content arrives.
+    // While a new page loads (debounce + getPage round-trip), render a blank surface so the "Select a
+    // page" empty state doesn't flash.
     if (isLoading) {
       return <div className="flex flex-1 flex-col bg-surface-primary" />;
     }
@@ -420,7 +398,6 @@ export function EditorPane() {
         />
       )}
       <div className="relative flex-1 overflow-y-auto" ref={scrollContainerRef}>
-        {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- padding around the editor; clicks delegate focus to the ProseMirror surface which is the real keyboard target */}
         <div
           className={`mx-auto min-h-full w-full ${LINE_WIDTH_CLASS[lineWidth]} cursor-text px-8 pt-3 pb-8`}
@@ -428,7 +405,6 @@ export function EditorPane() {
             // Only focus editor on direct clicks on the empty padding area,
             // not after drag-selections that end outside text bounds.
             if (e.target === e.currentTarget && !editor?.isFocused) {
-              // Defer so the mousedown doesn't interfere with ProseMirror's own handling
               requestAnimationFrame(() => {
                 if (!editor || editor.isDestroyed) return;
 

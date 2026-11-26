@@ -1,50 +1,38 @@
 //! Write-transaction resilience for the multi-connection WAL pool.
 //!
-//! `busy_timeout` (set on the pool) makes a writer WAIT when another writer holds
-//! the write lock — but ONLY when the waiting connection isn't already holding a
-//! read. Two cases slip past it, both handled by [`retry_on_busy`]:
+//! `busy_timeout` makes a writer wait for the write lock, but only when its connection isn't
+//! already holding a read. Two cases slip past it, both handled by [`retry_on_busy`]:
 //!
-//! - `SQLITE_BUSY_SNAPSHOT` (extended code 517): a *deferred* transaction reads —
-//!   taking a read snapshot — another connection commits a write, and the first
-//!   transaction's later write is rejected because its snapshot is stale.
-//! - Plain `SQLITE_BUSY` (5) on a lock *upgrade*: a deferred transaction that has
-//!   already read (holding a read lock) then tries to write while another
-//!   connection holds the write lock. SQLite returns BUSY **immediately without
-//!   invoking the busy handler** — waiting could deadlock — so `busy_timeout`
-//!   never kicks in. Measured: a 200-row recompute batch holds the write lock
-//!   ~20ms, but a completion racing it burns all 8 retries in microseconds if
-//!   they don't back off. Hence the backoff below.
+//! - `SQLITE_BUSY_SNAPSHOT` (517): a deferred transaction reads, another connection commits,
+//!   and the first's later write is rejected because its snapshot is stale.
+//! - Plain `SQLITE_BUSY` (5) on a lock upgrade: a deferred transaction that has read then
+//!   writes while another connection holds the write lock. SQLite returns BUSY immediately
+//!   without invoking the busy handler, since waiting could deadlock. A 200-row recompute
+//!   batch holds the lock about 20 ms, but a racing completion burns all 8 retries in
+//!   microseconds without a backoff.
 //!
-//! The retry is bounded by [`WRITE_TX_DEADLINE`], so a writer that reads first and loses
-//! the lock to a longer hold still fails. One that opens with `BEGIN IMMEDIATE` takes the
-//! write lock before its first read, which `busy_timeout` does wait for.
+//! The retry is bounded by [`WRITE_TX_DEADLINE`], so a writer that reads first and loses to a
+//! longer hold still fails. One opening with `BEGIN IMMEDIATE` takes the write lock before its
+//! first read, which `busy_timeout` does wait for.
 //!
-//! This is the systemic counterpart to "fold concurrent writes into one
-//! transaction": every user-facing writer goes through [`retry_on_busy`] so a
-//! lost snapshot race self-heals instead of surfacing as a dropped write. No
-//! command is exempt — none of them owns the write lock alone, and a sync poll or
-//! a calendar teardown can commit between any two of its statements.
+//! Every user-facing writer goes through [`retry_on_busy`], none exempt: none owns the write
+//! lock alone, and a sync poll or calendar teardown can commit between any two statements.
 
 use crate::error::{AppError, AppResult};
 
-/// How long a write may keep losing the WAL write race before giving up. The
-/// budget is wall-clock, not a retry count, because the thing being waited out is
-/// a *duration* — another writer's lock hold. An attempt count is a proxy that
-/// fails exactly backwards: on a loaded machine, holds stretch while a fixed
-/// number of backoffs still elapses in the same ~190ms, so the retry gets weakest
-/// precisely when contention is worst. Sized well past a reconcile-sized batch
-/// (200 recomputes, ~20ms idle) with headroom for a saturated machine.
+/// How long a write may keep losing the WAL write race before giving up. Wall-clock, not a
+/// retry count: holds stretch on a loaded machine while a fixed number of backoffs still
+/// elapses in about 190 ms, so a count is weakest exactly when contention is worst. Sized well
+/// past a reconcile-sized batch (200 recomputes, about 20 ms idle).
 const WRITE_TX_DEADLINE: std::time::Duration = std::time::Duration::from_millis(750);
 
-/// Livelock backstop only — the deadline above is the real bound. High enough
-/// that it never binds first under the capped backoff, so a pathological spin
-/// still surfaces as an error instead of hanging.
+/// A livelock backstop; the deadline is the real bound. High enough never to bind first under
+/// the capped backoff.
 const WRITE_TX_MAX_ATTEMPTS: u32 = 32;
 
-/// True for the transient busy/locked conditions a retry can clear: SQLITE_BUSY
-/// (5) and SQLITE_LOCKED (6), including their extended variants (e.g. 517
-/// BUSY_SNAPSHOT, 262 LOCKED_SHAREDCACHE). sqlx surfaces the *extended* result
-/// code as a decimal string; the primary code is its low byte.
+/// True for the transient busy and locked conditions a retry can clear: SQLITE_BUSY (5) and
+/// SQLITE_LOCKED (6) with their extended variants. sqlx surfaces the extended code as a decimal
+/// string; the primary code is its low byte.
 pub fn is_retryable_busy(err: &AppError) -> bool {
     let AppError::Db(sqlx::Error::Database(db)) = err else {
         return false;
@@ -54,33 +42,24 @@ pub fn is_retryable_busy(err: &AppError) -> bool {
         .is_some_and(|code| matches!(code & 0xFF, 5 | 6))
 }
 
-/// Base backoff before the first retry; doubles each attempt, capped at
-/// [`RETRY_BACKOFF_CAP`]. An immediate upgrade-BUSY (see module docs) returns with
-/// no I/O wait, so without an explicit sleep the retries spin through faster than
-/// the lock-holder can commit.
+/// Base backoff before the first retry; doubles each attempt, capped at [`RETRY_BACKOFF_CAP`].
+/// An upgrade-BUSY returns without waiting, so retries would otherwise spin faster than the
+/// lock-holder can commit.
 const RETRY_BACKOFF_BASE: std::time::Duration = std::time::Duration::from_millis(2);
 const RETRY_BACKOFF_CAP: std::time::Duration = std::time::Duration::from_millis(64);
 
-/// Run a self-contained write attempt, retrying from scratch on a transient
-/// busy/snapshot conflict.
+/// Runs a self-contained write attempt, retrying from scratch on a transient busy or snapshot
+/// conflict until [`WRITE_TX_DEADLINE`] elapses or [`WRITE_TX_MAX_ATTEMPTS`] trips.
+/// Non-retryable errors, and the final busy error once the budget is spent, propagate.
 ///
-/// `attempt` MUST open and commit its own transaction on each call so a retry
-/// re-reads fresh state (a stale snapshot is exactly what we're recovering
-/// from). It is retried, backing off between tries so the racing writer can
-/// commit and release the lock, until [`WRITE_TX_DEADLINE`] elapses (or the
-/// [`WRITE_TX_MAX_ATTEMPTS`] backstop trips). Non-retryable errors, and the final
-/// busy error once the budget is spent, propagate.
-///
-/// The deadline is checked *before* sleeping, so a retry is only scheduled when
-/// there is budget left to complete it — never sleeping past the deadline just to
-/// fail on return.
+/// `attempt` must open and commit its own transaction each call, so a retry re-reads fresh
+/// state. The deadline is checked before sleeping, so no sleep runs past it just to fail.
 pub async fn retry_on_busy<F, Fut, T>(mut attempt: F) -> AppResult<T>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = AppResult<T>>,
 {
-    // tokio's clock, not std's, so the deadline honours a paused test clock and
-    // stays consistent with the `sleep` below.
+    // tokio's clock, so the deadline honours a paused test clock like the `sleep` below.
     let started = tokio::time::Instant::now();
     let mut tries = 0u32;
     loop {

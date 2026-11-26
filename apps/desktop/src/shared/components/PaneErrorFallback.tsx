@@ -1,9 +1,6 @@
-// Renders inside the failed pane only — the rest of the app shell stays interactive.
-
 import { Button } from "@/components/ui/button";
 
 interface PaneErrorFallbackProps {
-  /** What the user thinks of as the failed surface ("Editor", "Calendar", "Settings"). */
   label: string;
   error: Error;
   onReset: () => void;

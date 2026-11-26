@@ -15,11 +15,9 @@ use quick_xml::NsReader;
 
 /// Decodes a text event's bytes, and does nothing else.
 ///
-/// Not `xml_content`, which looks like the replacement for the old `unescape`
-/// and is the wrong one: it normalizes end-of-line sequences, and a
-/// `calendar-data` body is an ICS whose CRLF endings RFC 5545 line unfolding
-/// depends on. Entities are not this function's job either — see
-/// [`resolve_entity`].
+/// Not `xml_content`, which normalizes end-of-line sequences: a `calendar-data`
+/// body is an ICS whose CRLF endings RFC 5545 line unfolding depends on. Entities
+/// are not this function's job either; see [`resolve_entity`].
 pub(super) fn decode_text(t: &quick_xml::events::BytesText<'_>) -> Result<String, CaldavError> {
     Ok(t.decode()
         .map_err(|e| CaldavError::Protocol(e.to_string()))?
@@ -47,14 +45,10 @@ const NS_CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 const NS_APPLE: &[u8] = b"http://apple.com/ns/ical/";
 const NS_CALSRV: &[u8] = b"http://calendarserver.org/ns/";
 
-/// One `<response>`, reduced to the props the discovery chain reads.
 #[derive(Default)]
 struct RawResponse {
-    /// Response-level href (the resource the entry describes).
     href: String,
-    /// `<current-user-principal><href>` — present only on the principal query.
     principal_href: Option<String>,
-    /// `<calendar-home-set><href>` — present only on the home query.
     home_href: Option<String>,
     is_calendar: bool,
     display_name: Option<String>,
@@ -65,15 +59,12 @@ struct RawResponse {
     display_name_seen: bool,
     color: Option<String>,
     components: Vec<String>,
-    /// `<cs:getctag>` — the collection change-tag, present only on a ctag PROPFIND.
     ctag: Option<String>,
 }
 
-/// A calendar collection discovered in an enumeration, before VEVENT filtering.
 pub(crate) struct RawCalendar {
     pub href: String,
     pub display_name: Option<String>,
-    /// See [`RawResponse::display_name_seen`].
     pub display_name_seen: bool,
     pub color: Option<String>,
     /// `supported-calendar-component-set` comp names; empty when the server omits

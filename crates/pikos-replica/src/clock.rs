@@ -44,7 +44,6 @@ impl Hlc {
         self.counter
     }
 
-    /// The clock for a local write made at `now_ms`.
     pub fn next(self, now_ms: u64) -> Hlc {
         let now_ms = now_ms.min(WALL_MAX);
         if now_ms > self.wall_ms {

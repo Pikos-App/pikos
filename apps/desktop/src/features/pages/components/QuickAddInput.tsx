@@ -12,7 +12,6 @@ const KIND_CLASS: Record<Exclude<QuickAddHighlightKind, "priority">, string> = {
 };
 
 interface QuickAddInputProps extends React.ComponentProps<"input"> {
-  /** The colour of the priority the line parses to, which a `!` word takes. */
   priorityClass: string;
   tokens: QuickAddHighlightToken[];
   value: string;

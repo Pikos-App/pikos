@@ -4,7 +4,7 @@ import type { Folder } from "../types";
 import { buildSearchFilter, parseSearchQuery } from "./searchQuery";
 
 // Fixed reference so `due:today` and friends resolve deterministically.
-const REF = new Date(2026, 2, 16); // 2026-03-16, a Monday
+const REF = new Date(2026, 2, 16);
 
 function folder(id: string, name: string): Folder {
   return {

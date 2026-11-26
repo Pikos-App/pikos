@@ -66,14 +66,10 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
 const pikosImagePluginKey = new PluginKey("pikosImage");
 
 /**
- * The desktop image node: the shared schema (from @pikos/editor-schema) plus
- * the Tauri-specific half — a node view that renders through the asset
- * protocol, and a drop handler that copies dropped files into the workspace.
- *
- * The attribute set deliberately lives in the shared package instead of here.
- * Attributes are what `getJSON()` serialises, so they are the part a second
- * client must agree on byte-for-byte; node views and drop handling are free to
- * differ per platform because they cannot change a stored document.
+ * The desktop image node: the shared schema plus the Tauri half, a node view rendering through the
+ * asset protocol and a drop handler copying files into the workspace. Attributes live in the shared
+ * package because they are what `getJSON()` serialises and a second client must agree on them
+ * byte-for-byte; node views and drop handling can differ per platform.
  */
 export const PikosImage = createPikosImageNode(assetUrl).extend({
   addNodeView() {
@@ -108,7 +104,6 @@ export const PikosImage = createPikosImageNode(assetUrl).extend({
           dom.classList.add("pikos-image-selected");
         },
         stopEvent: (event: Event) => {
-          // Block double-click and select events to prevent text selection inside image
           return event.type === "dblclick" || event.type === "selectstart";
         },
       };
@@ -187,7 +182,6 @@ export async function insertImageFromDialog(view: EditorView): Promise<void> {
       view.dispatch(tr);
     }
   } catch (e) {
-    // Tauri command error may echo the user's source path. Log class only.
     log.error("Failed to upload from dialog", e instanceof Error ? e.name : "unknown");
     postNotice(IMAGE_SAVE_FAILED_NOTICE);
   }

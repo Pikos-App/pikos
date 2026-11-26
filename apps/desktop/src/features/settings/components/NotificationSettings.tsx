@@ -63,11 +63,8 @@ export function NotificationSettings() {
     summaryTime,
   } = useAppSettings();
 
-  // Permission state. `permissionError` becomes truthy when the OS-level
-  // request itself fails (Tauri command throws) — distinct from "denied",
-  // which is a successful response with `granted=false`. The denied case
-  // falls through to the existing "blocked" banner; this state covers the
-  // throw path that previously left the UI silent.
+  // `permissionError` is truthy when the OS permission request itself throws, distinct from "denied"
+  // (a successful response with granted=false), which falls through to the "blocked" banner.
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [permissionError, setPermissionError] = useState(false);
 
@@ -75,11 +72,9 @@ export function NotificationSettings() {
   const ui = useUI();
   const [history, setHistory] = useState<NotificationHistoryEntry[]>([]);
 
-  /** The scheduler writes the log from Rust on its own tick, so the panel can
-   *  only ever show a snapshot — hence the explicit refresh alongside the load.
-   *  Written as a promise chain, not `await`: the mount effect below calls it,
-   *  and the state update has to land in a callback rather than in the effect
-   *  body for react-compiler to accept it. */
+  /** The scheduler writes the log from Rust on its own tick, so the panel only shows a snapshot; hence
+   *  the explicit refresh. A promise chain, not `await`: the mount effect calls it, and react-compiler
+   *  needs the state update in a callback rather than the effect body. */
   function loadHistory(): Promise<void> {
     if (!storage) return Promise.resolve();
     return storage
@@ -92,10 +87,8 @@ export function NotificationSettings() {
       });
   }
 
-  /** `null` is the platform's "can't tell you" — no host shell (browser
-   *  preview) or an OS with no notion of the permission. Surfaced as warn since
-   *  the user expected notifications to work. Promise chain for the same reason
-   *  as loadHistory above. */
+  /** `null` is the platform's "can't tell you" (browser preview, or an OS with no such permission),
+   *  surfaced as a warning since the user expected notifications to work. Promise chain as above. */
   function checkPermission(): Promise<boolean | null> {
     return getPlatform()
       .checkNotificationPermission()
@@ -146,7 +139,6 @@ export function NotificationSettings() {
     }
   }
 
-  /** Enabling notifications also requests OS permission if not already granted. */
   async function handleToggleEnabled(enabled: boolean) {
     setNotificationsEnabled(enabled);
     if (enabled) {
@@ -168,7 +160,6 @@ export function NotificationSettings() {
           device.
         </p>
 
-        {/* Permission request failed (Tauri command threw) */}
         {permissionError && (
           <div className="mb-4 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -197,7 +188,6 @@ export function NotificationSettings() {
           </div>
         )}
 
-        {/* Permission blocked warning */}
         {permissionGranted === false && (
           <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -219,7 +209,6 @@ export function NotificationSettings() {
         )}
 
         <div className="rounded-lg border border-border bg-card px-4">
-          {/* Global toggle */}
           <div className="flex items-center justify-between border-b border-border py-3">
             <div>
               <label className="text-sm font-medium" htmlFor="notifications-enabled">
@@ -236,7 +225,6 @@ export function NotificationSettings() {
             />
           </div>
 
-          {/* Default lead time */}
           <div
             className={cn(
               "border-b border-border py-3 transition-opacity",
@@ -267,7 +255,6 @@ export function NotificationSettings() {
             </div>
           </div>
 
-          {/* Daily summary */}
           <div
             className={cn(
               "border-b border-border py-3 transition-opacity",
@@ -304,7 +291,6 @@ export function NotificationSettings() {
             )}
           </div>
 
-          {/* Quiet hours */}
           <div
             className={cn("py-3 transition-opacity", disabled && "pointer-events-none opacity-40")}
           >
@@ -345,7 +331,6 @@ export function NotificationSettings() {
         </div>
       </section>
 
-      {/* Recent notifications */}
       <section className="mb-8">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-base font-semibold">Recent notifications</h2>

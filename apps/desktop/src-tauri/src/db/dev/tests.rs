@@ -11,11 +11,9 @@ use pikos_db::{
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
-// ── Local insert helpers ──────────────────────────────────────────────────────
 // `insert_test_page` always writes content='{}', priority=0, no completed_at /
 // parent_id. These helpers reach the columns the dev queries actually read.
 
-/// Insert a page with explicit content JSON, plain text, priority and tags.
 async fn insert_rich_page(
     pool: &SqlitePool,
     id: &str,
@@ -44,8 +42,6 @@ async fn insert_rich_page(
     .unwrap();
 }
 
-/// A minimal `NewPage` for the round-trip tests, which need the real
-/// `create_page_impl` writer (not the raw-SQL `insert_rich_page` above).
 fn bare_page(title: &str) -> NewPage {
     NewPage {
         folder_id: None,
@@ -152,16 +148,11 @@ async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, durati
     .unwrap();
 }
 
-// ── get_usage_stats_impl ───────────────────────────────────────────────────────
-
-/// SQLite's weekday numbering, which the frontend's `WeekStart` shares.
 const SUNDAY: i64 = 0;
 const MONDAY: i64 = 1;
 
-/// The card and its producer, end to end. Every other stats test here inserts the
-/// rows by hand, which measures the query and not the path a user's session takes;
-/// the "Focus time" card read zero for the whole life of the table, so the writer
-/// reaching it is the fact worth pinning.
+/// Every other stats test inserts rows by hand, which measures the query and not the path a
+/// session takes; the "Focus time" card once read zero because the writer never reached it.
 #[tokio::test]
 async fn usage_stats_count_sessions_written_by_the_focus_writer() {
     let pool = test_pool().await;
@@ -217,7 +208,6 @@ async fn usage_stats_empty_db_is_all_zeros() {
     assert!(!s.has_reminders);
     assert!(!s.has_calendar_sync);
     assert!(s.first_page_date.is_none());
-    // Always 12 weeks of buckets, regardless of data.
     assert_eq!(s.weekly_activity.len(), 12);
 }
 
@@ -226,7 +216,6 @@ async fn usage_stats_counts_totals_and_adoption() {
     let pool = test_pool().await;
     insert_test_folder(&pool, "f1", "Work").await.unwrap();
 
-    // p1: parent task, 2 words, priority 1, a tag
     insert_rich_page(
         &pool,
         "p1",
@@ -237,11 +226,9 @@ async fn usage_stats_counts_totals_and_adoption() {
         "[\"urgent\"]",
     )
     .await;
-    // p2: child of p1 (subtask), done, 3 words
     insert_rich_page(&pool, "p2", "Child", "{}", "one two three", 0, "[]").await;
     set_parent(&pool, "p2", "p1").await;
     set_status(&pool, "p2", "done").await;
-    // p3: empty content_text contributes 0 words
     insert_rich_page(&pool, "p3", "Empty", "{}", "", 0, "[]").await;
 
     insert_schedule(&pool, "s1", "p1", "2026-05-22T09:00:00").await;
@@ -268,7 +255,6 @@ async fn usage_stats_counts_totals_and_adoption() {
     assert!(s.has_priorities);
     assert!(s.first_page_date.is_some());
 
-    // Status breakdown: 2 not_started, 1 done.
     let by: std::collections::HashMap<_, _> = s
         .pages_by_status
         .iter()
@@ -277,15 +263,14 @@ async fn usage_stats_counts_totals_and_adoption() {
     assert_eq!(by.get("not_started"), Some(&2));
     assert_eq!(by.get("done"), Some(&1));
 
-    // All three pages were created "now", so they land in the current week.
     let created: i64 = s.weekly_activity.iter().map(|w| w.created).sum();
     assert_eq!(created, 3);
 }
 
 /// SQLite's `weekday` modifier does nothing when the date already is that
 /// weekday, so the obvious "next Monday, then back a week" reads a Monday as
-/// belonging to the week before. Everything logged on a Monday used to land in
-/// the previous bucket.
+/// belonging to the week before, so everything logged on a Monday lands in the
+/// previous bucket.
 #[tokio::test]
 async fn usage_stats_count_monday_in_its_own_week() {
     let pool = test_pool().await;
@@ -314,10 +299,8 @@ async fn usage_stats_count_monday_in_its_own_week() {
     );
 }
 
-/// The Data page was the last surface ignoring `weekStart`, so the same day's work
-/// fell in a different column than the calendar it came from. Sunday is the day
-/// that moves: it opens its own week for a Sunday-start user and closes the
-/// previous one for a Monday-start user.
+/// The same day's work must fall in the same column as the calendar's. Sunday is the day that
+/// moves: it opens its own week for a Sunday-start user and closes the previous one for a Monday-start user.
 #[tokio::test]
 async fn usage_stats_bucket_weeks_on_the_users_week_start() {
     let pool = test_pool().await;
@@ -371,8 +354,7 @@ async fn usage_stats_reject_a_week_start_outside_the_week() {
     assert!(get_usage_stats_impl(&pool, -1).await.is_err());
 }
 
-/// The chart sums a week's sessions into whole minutes, truncating like the
-/// running total does — 90s + 90s is 3 minutes, not two rounded-up ones.
+/// Truncates like the running total: 90s + 90s is 3 minutes, not two rounded-up ones.
 #[tokio::test]
 async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
     let pool = test_pool().await;
@@ -394,8 +376,7 @@ async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
     );
 }
 
-/// Both flags read a table the other adoption queries never touch, and a
-/// connected-but-empty calendar still counts as having used sync.
+/// A connected-but-empty calendar still counts as having used sync.
 #[tokio::test]
 async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     let pool = test_pool().await;
@@ -447,8 +428,6 @@ async fn usage_stats_excludes_soft_deleted_pages() {
     assert!(s.has_tags);
     assert!(s.has_priorities);
 }
-
-// ── reset_db_impl ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn reset_db_wipes_all_user_tables() {
@@ -512,8 +491,6 @@ async fn reset_db_removes_connected_calendar_accounts() {
     }
 }
 
-// ── build_export_json_impl ─────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn export_json_shapes_tables_and_parses_json_columns() {
     let pool = test_pool().await;
@@ -529,10 +506,8 @@ async fn export_json_shapes_tables_and_parses_json_columns() {
 
     let pages = export["pages"].as_array().unwrap();
     assert_eq!(pages.len(), 1);
-    // content/tags are embedded as parsed JSON, not strings.
     assert!(pages[0]["content"].is_object());
     assert_eq!(pages[0]["tags"], serde_json::json!(["a", "b"]));
-    // priority comes back as a number.
     assert_eq!(pages[0]["priority"], 1);
 }
 
@@ -551,18 +526,11 @@ async fn export_json_excludes_soft_deleted_and_collects_assets() {
     assert_eq!(export["assets"], serde_json::json!(["/abs/img.png"]));
 }
 
-// ── export → re-import round-trip ──────────────────────────────────────────────
-// import-export.md calls out two gaps explicitly: "no dedicated export test
-// suite" and "no export→re-import round-trip test". Production re-import is the
-// TS `WorkspaceContext.importBatch()`, which fans out to the same `create_*`
-// commands these tests drive directly — so this exercises the real export
-// builder and the real page/folder writers end to end. It proves the JSON export
-// is a faithful, re-importable snapshot: content (incl. image asset references)
-// and tags survive a round trip into a fresh workspace.
+// Production re-import is the TS `WorkspaceContext.importBatch()`, which fans out to the
+// same `create_*` commands these tests drive directly, so this exercises the real export
+// builder and page/folder writers end to end: content (incl. image asset references) and
+// tags survive a round trip into a fresh workspace.
 
-/// Rebuild a `NewPage` from one exported page object, resolving the old folder id
-/// to the freshly-created one. Mirrors what `importBatch` does field-for-field
-/// (parent resolution aside — not relevant to these fixtures).
 fn page_from_export(v: &serde_json::Value, folder_map: &HashMap<String, String>) -> NewPage {
     let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
     let str_array = |k: &str| {
@@ -600,8 +568,6 @@ fn page_from_export(v: &serde_json::Value, folder_map: &HashMap<String, String>)
     }
 }
 
-/// Replay an export JSON into a fresh pool the way importBatch would: create
-/// folders first (remapping ids), then pages against the new folder ids.
 async fn reimport(pool: &SqlitePool, export: &serde_json::Value) {
     let mut folder_map: HashMap<String, String> = HashMap::new();
     for f in export["folders"].as_array().unwrap() {
@@ -627,8 +593,6 @@ async fn reimport(pool: &SqlitePool, export: &serde_json::Value) {
 
 #[tokio::test]
 async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
-    // Source workspace: a folder with a page that has body text, a tag, and an
-    // image node carrying an absolute asset path.
     let src = test_pool().await;
     let folder = create_folder_impl(
         &src,
@@ -642,9 +606,6 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     .await
     .unwrap();
 
-    // Absolute asset path, matching the `/abs/img.png` fixture style used above
-    // (a real path would be under the OS app-data dir; the value is opaque to the
-    // round trip, which only asserts it survives verbatim).
     let image_path = "/abs/pikos/assets/abc123.png";
     let content = format!(
         r#"{{"type":"doc","content":[
@@ -660,12 +621,10 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     };
     page.priority = 2;
     create_page_impl(&src, page).await.unwrap();
-    // A second, plain page to confirm multi-row export/import.
     create_page_impl(&src, bare_page("Plain note"))
         .await
         .unwrap();
 
-    // Export, then replay into a brand-new workspace.
     let export = build_export_json_impl(&src).await.unwrap();
     assert_eq!(
         export["assets"],
@@ -676,7 +635,6 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     let dst = test_pool().await;
     reimport(&dst, &export).await;
 
-    // Folders + pages came across.
     assert_eq!(list_folders_impl(&dst).await.unwrap().len(), 1);
     let pages = list_pages_impl(&dst, None).await.unwrap();
     assert_eq!(pages.len(), 2);
@@ -689,8 +647,6 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
         "image asset reference must survive the round trip"
     );
 
-    // The image page kept its tags (normalized), priority, and the asset path
-    // embedded in content.
     let imported = re_export["pages"]
         .as_array()
         .unwrap()
@@ -705,14 +661,12 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     );
 }
 
-// ── write_markdown_export ──────────────────────────────────────────────────────
-
 const NEW_IMAGE: &str = "3f2b8c1e-5d4a-4b6f-9e2d-7a1c0b9f8e6d.png";
 const OLD_IMAGE: &str = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.jpg";
 const IMPORTED_IMAGE: &str = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d.gif";
 
 /// One image node per way a page has stored its file: the stored path the editor
-/// writes now, a full path saved on another machine, and an import's bare `src`.
+/// writes, a full path saved on another machine, and an import's bare `src`.
 fn page_with_images() -> String {
     serde_json::json!({
         "type": "doc",
@@ -930,7 +884,6 @@ async fn a_trashed_page_does_not_export() {
     );
 }
 
-/// The UTC stamp inside `<stem>-<stamp>.<ext>`, or a panic naming the file.
 fn stamp_of(file: &std::path::Path, stem: &str, ext: &str) -> chrono::NaiveDateTime {
     let name = file.file_name().unwrap().to_string_lossy();
     let stamp = name
@@ -1000,14 +953,8 @@ async fn a_sqlite_export_is_one_stamped_database_that_opens_whole() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// ── vacuum_into ────────────────────────────────────────────────────────────────
-
-/// Open a file-based SQLite pool with migrations applied. `VACUUM INTO` is a
-/// no-op from a `:memory:` source under sqlx, so the backup tests must mirror
-/// the production path (a real DB file) to exercise vacuum_into honestly.
+/// `VACUUM INTO` is a no-op from a `:memory:` source under sqlx, so backup tests need a real file.
 async fn file_pool(path: &str) -> SqlitePool {
-    // Routes through the production opener so this stays on the same
-    // migration tree (pikos-db's) as the app proper.
     pikos_db::open_pool(path).await.unwrap()
 }
 
@@ -1031,11 +978,7 @@ async fn count(pool: &SqlitePool, table: &str) -> i64 {
         .unwrap()
 }
 
-/// The guarantee `backup_db_before_import` exists to provide: the VACUUM INTO
-/// copy is a complete, faithful snapshot that survives a full wipe of the
-/// source DB — so a user can recover by hand from the `.sqlite` file even after
-/// the live workspace is gone. (There is no programmatic restore command; undo
-/// is soft-delete, the backup file is the manual safety net.)
+/// The VACUUM INTO copy is a complete snapshot that survives a full wipe of the source DB.
 #[tokio::test]
 async fn backup_preserves_all_data_after_source_wipe() {
     let src = std::env::temp_dir().join(format!("pikos-src-{}.sqlite", uuid::Uuid::new_v4()));
@@ -1062,11 +1005,9 @@ async fn backup_preserves_all_data_after_source_wipe() {
     vacuum_into(&pool, &dest_str).await.unwrap();
     assert!(dest.exists());
 
-    // Wipe the source completely — the backup must stand on its own.
     reset_db_impl(&pool).await.unwrap();
     assert_eq!(count(&pool, "pages").await, 0);
 
-    // Re-open the backup and confirm every table round-tripped intact.
     let copy = open_existing(&dest_str).await;
     assert_eq!(count(&copy, "pages").await, 2);
     assert_eq!(count(&copy, "folders").await, 1);
@@ -1104,12 +1045,9 @@ async fn vacuum_into_escapes_single_quotes_in_path() {
     let _ = std::fs::remove_file(&src);
 }
 
-// ── wipe_app_data pool-drop ────────────────────────────────────────────────────
-// `wipe_app_data` can't be called directly (it needs a `tauri::AppHandle`, and
-// invoking it would `remove_dir_all` the real app-data dir). Its data-safety
-// contract is the *ordering*: it `take_pool()`s first so SQLite releases its
-// file handles before the on-disk DB is removed — without this the directory
-// removal fails on Windows. We test that mechanism on `DbState` directly.
+// `wipe_app_data` can't be called directly (it needs an AppHandle and would remove the real
+// app-data dir). Its contract is the *ordering*: `take_pool()` first, so SQLite releases its
+// file handles before removal, which otherwise fails on Windows. Tested on `DbState` directly.
 
 #[tokio::test]
 async fn wipe_drops_pool_so_handles_release_before_file_removal() {
@@ -1118,24 +1056,19 @@ async fn wipe_drops_pool_so_handles_release_before_file_removal() {
     let pool = file_pool(&src_str).await;
     let state = DbState::with_pool(pool);
 
-    // Pool is live before the wipe.
     assert!(state.get_pool().await.is_ok());
 
-    // The first thing wipe_app_data does: take the pool out of shared state.
     let taken = state.take_pool().await;
     assert!(taken.is_some(), "take_pool must yield the live pool");
 
-    // State no longer hands out a pool — a stray query now fails fast instead
-    // of racing the file removal.
+    // State hands out no pool, so a stray query fails fast instead of racing the
+    // file removal.
     assert!(state.get_pool().await.is_err());
 
-    // Closing the taken pool releases the file handle; only then is removal safe.
     taken.unwrap().close().await;
     std::fs::remove_file(&src).unwrap();
     assert!(!src.exists());
 }
-
-// ── backdate_page_impl ─────────────────────────────────────────────────────────
 
 async fn timestamps(pool: &SqlitePool, id: &str) -> (String, String, Option<String>) {
     sqlx::query_as("SELECT created_at, updated_at, completed_at FROM pages WHERE id = ?")
@@ -1214,13 +1147,8 @@ async fn backdate_with_no_fields_is_a_noop() {
     assert_eq!(before, after);
 }
 
-// ── dev_seed_synced_calendar ───────────────────────────────────────────────────
-
-/// The seed's whole point is exercising surfaces no unit test reaches, so what it
-/// *contains* is the contract — and its TS twin (`apps/desktop/seeds/syncedCalendar.ts`)
-/// claims to mirror it. The recurring half drifted apart unnoticed once already.
-/// Each series below is the only way to reach some synced or detached behavior by
-/// hand, so dropping one costs a QA check silently.
+/// Each series is the only way to reach some synced or detached behavior by hand, so dropping
+/// one costs a QA check silently; its TS twin (`apps/desktop/seeds/syncedCalendar.ts`) mirrors it.
 #[tokio::test]
 async fn seed_synced_calendar_carries_every_recurring_shape_qa_needs() {
     let pool = test_pool().await;
@@ -1257,23 +1185,19 @@ async fn seed_synced_calendar_carries_every_recurring_shape_qa_needs() {
         ]
     );
 
-    // The edit lock is derived from a round-trip, so QA needs one rule of each
-    // verdict: a mid-day UNTIL locks the chip, BYMONTHDAY=-1 stays editable.
+    // The edit lock is derived from a round-trip: a mid-day UNTIL locks the chip, BYMONTHDAY=-1 stays editable.
     assert!(by_title("Swim class (term ends)").3.contains("T113000"));
     assert_eq!(by_title("Month-end close").1, "detached");
     assert!(by_title("Month-end close").3.contains("BYMONTHDAY=-1"));
     // Finite, so the series can actually be driven to its terminal state.
     assert!(by_title("Release countdown").3.contains("COUNT="));
 
-    // Timed, not date-only: a date-only exdate matches whether or not the render
-    // layer day-keys, so it would pin nothing.
+    // Timed: a date-only exdate matches whether or not the render layer day-keys.
     let exdates: Vec<String> = serde_json::from_str(&by_title("Recurring review").2).unwrap();
     assert_eq!(exdates.len(), 1);
     assert!(exdates[0].contains("T10:00:00"), "{}", exdates[0]);
 
-    // A provider-moved instance keyed to an occurrence of its rule — in the rule's
-    // own basis, so the all-day series' key is date-only where the timed ones carry
-    // a time of day.
+    // Keyed in the rule's own basis: date-only for the all-day series.
     let moved: Vec<(String, String)> = sqlx::query_as(
         "SELECT p.title, s.original_date FROM page_schedules s
          JOIN pages p ON p.id = s.page_id
@@ -1291,9 +1215,8 @@ async fn seed_synced_calendar_carries_every_recurring_shape_qa_needs() {
     assert!(moved[2].1.contains("T10:00:00"), "{}", moved[2].1);
 }
 
-/// The head floor and the render floor both key on `page_sync.created_at`, so a
-/// series seeded with the run's own timestamp can never read as overdue — and the
-/// synced arm of the gap dialog has no other way to be reached on a dev machine.
+/// The head and render floors key on `page_sync.created_at`, so a series seeded with the run's
+/// own timestamp can never read as overdue, and the gap dialog's synced arm is unreachable.
 #[tokio::test]
 async fn seed_synced_calendar_backdates_the_countdown_series_connect_day() {
     let pool = test_pool().await;
@@ -1322,10 +1245,8 @@ async fn seed_synced_calendar_backdates_the_countdown_series_connect_day() {
     assert!(base.starts_with(&expected), "{base}");
 }
 
-/// A detached row is one the product could have produced: detaching spends the
-/// source stamp, so the schedule rows carry no zone and the rule carries the
-/// device's. A row left on its source zone converts on every read that follows —
-/// invisible on a machine in that zone, an hour out everywhere else.
+/// Detaching spends the source stamp, so schedule rows carry no zone and the rule the device's.
+/// A row left on its source zone converts on every read: invisible in that zone, an hour out elsewhere.
 #[tokio::test]
 async fn seed_synced_calendar_detaches_rows_the_way_the_reconciler_does() {
     let pool = test_pool().await;
@@ -1342,8 +1263,7 @@ async fn seed_synced_calendar_detaches_rows_the_way_the_reconciler_does() {
     .unwrap();
     assert!(stranded.is_empty(), "{stranded:?}");
 
-    // All-day is the carve-out: date-only has nothing to convert, so detaching
-    // returns before it reaches the rule and the zone-less sentinel stands.
+    // All-day is the carve-out: detaching returns before it reaches the rule.
     let rules: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT p.title, r.timezone, r.scheduled_start FROM page_recurrence_rules r
          JOIN pages p ON p.id = r.page_id
@@ -1364,9 +1284,8 @@ async fn seed_synced_calendar_detaches_rows_the_way_the_reconciler_does() {
     }
 }
 
-/// Two one-off shapes with no other source: a multi-day all-day span (whose
-/// inclusive end is what a double-decrement would shorten) and a zone-less timed
-/// mirror (which floats, and whose reminders come from a third query).
+/// A multi-day all-day span (a double-decrement would shorten its inclusive end) and a zone-less
+/// timed mirror (which floats, with reminders from a third query).
 #[tokio::test]
 async fn seed_synced_calendar_carries_the_all_day_span_and_a_zoneless_mirror() {
     let pool = test_pool().await;
@@ -1397,8 +1316,7 @@ async fn seed_synced_calendar_carries_the_all_day_span_and_a_zoneless_mirror() {
     assert_eq!(zone, None);
 }
 
-/// Re-seeding drops the prior mock account and everything it owns — the dev
-/// workflow is "seed, poke at it, seed again", so a second run must not double up.
+/// The dev workflow is "seed, poke at it, seed again", so a second run must not double up.
 #[tokio::test]
 async fn seed_synced_calendar_is_idempotent() {
     let pool = test_pool().await;
@@ -1416,9 +1334,8 @@ async fn seed_synced_calendar_is_idempotent() {
     assert_eq!(after_first, after_second);
 }
 
-/// The figure sits beside Pages, Folders and Completed, so it has to be a page count.
-/// Counting `page_schedules` rows read 271 against 324 real ones: a trashed page keeps its
-/// rows, and a recurring page has none at all.
+/// The figure sits beside Pages, Folders and Completed, so it must be a page count: a trashed
+/// page keeps its `page_schedules` rows and a recurring page has none.
 #[tokio::test]
 async fn usage_stats_count_scheduled_pages_not_schedule_rows() {
     let pool = test_pool().await;

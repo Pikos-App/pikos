@@ -10,7 +10,10 @@ appTest(
   "tags added and removed in the tag picker update the chip and persist",
   { tag: ["@TASK-03"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "TASK-03 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "TASK-03 reloads, and the mock keeps nothing across a reload"
+    );
     await quickAdd(app, "Field research");
     const row = app.locator("[data-page-list-item]").filter({ hasText: "Field research" });
     await row.click();
@@ -49,7 +52,10 @@ appTest(
   "a page's status changes from the byline, both ways, and persists",
   { tag: ["@TASK-01"] },
   async ({ app, storage }) => {
-    appTest.skip(storage !== "bridge", "TASK-01 reloads, and the mock keeps nothing across a reload");
+    appTest.skip(
+      storage !== "bridge",
+      "TASK-01 reloads, and the mock keeps nothing across a reload"
+    );
     await quickAdd(app, "Send the invoice");
     const row = app.locator("[data-page-list-item]").filter({ hasText: "Send the invoice" });
     const completed = app.getByRole("button", { exact: true, name: "Completed" });

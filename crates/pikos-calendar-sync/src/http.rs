@@ -8,10 +8,10 @@ use rustls_platform_verifier::BuilderVerifierExt;
 
 const USER_AGENT: &str = concat!("Pikos-CalendarSync/", env!("CARGO_PKG_VERSION"));
 
-/// Certificates are checked by the OS, as Safari and the app's updater do, not against a root list
-/// compiled into the binary. A bundled list rejects any certificate authority the user's Mac
-/// trusts and Mozilla doesn't: a work network that inspects TLS, or the proxy that records
-/// provider fixtures, failed every connect as "error sending request".
+/// Certificates are checked by the OS, not against a root list compiled into the binary:
+/// a bundled list rejects any authority the user's Mac trusts and Mozilla doesn't (a work
+/// network that inspects TLS, the fixture-recording proxy), failing every connect as
+/// "error sending request".
 fn tls() -> rustls::ClientConfig {
     let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::ring::default_provider(),
@@ -61,10 +61,9 @@ pub fn client() -> reqwest::Client {
         .expect("reqwest rustls client should always build")
 }
 
-/// Like [`client`] but never auto-follows redirects. CalDAV discovery follows the
-/// `.well-known` redirect by hand, so it can re-apply the original scheme/host when
-/// a server's `Location` downgrades https→http — reqwest also turns a 301/302 on a
-/// PROPFIND into a bodyless GET, which would silently break discovery.
+/// Never auto-follows redirects: CalDAV discovery follows `.well-known` by hand to
+/// re-apply the original scheme when a `Location` downgrades https→http, and reqwest
+/// turns a 301/302 on a PROPFIND into a bodyless GET.
 pub fn client_no_redirect() -> reqwest::Client {
     builder()
         .redirect(reqwest::redirect::Policy::none())

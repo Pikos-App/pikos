@@ -4,9 +4,9 @@
 #
 #   scripts/check-sync-pairing.sh [phone.app] [mac.app]
 #
-# Defaults to the phone build `ios-device.sh --staging` leaves and the Mac app `qa-build.sh --icloud`
-# installs. Reads only their signatures, so it runs offline, and passes with a note when one of the
-# two isn't built.
+# Defaults to the phone build `ios-device.sh --staging` leaves and the Mac app `qa-build.sh
+# --icloud` installs. Reads only their signatures, so it runs offline, and passes with a note when
+# one isn't built.
 
 set -euo pipefail
 
@@ -21,7 +21,6 @@ for app in "$PHONE" "$MAC"; do
   fi
 done
 
-# "<container> <environment>" from an app's signed entitlements.
 icloud() {
   codesign -d --entitlements - --xml "$1" 2>/dev/null | python3 -I -c '
 import plistlib, sys

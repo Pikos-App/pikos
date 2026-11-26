@@ -1,18 +1,12 @@
-//! Workspace maintenance: resetting the data, wiping the app's on-disk
-//! footprint, taking backups, and the dev-only timestamp backdating the seed
-//! scripts drive.
+//! Workspace maintenance: reset, wipe, backups, and dev-only timestamp backdating.
 
 use tauri::Manager;
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 
-/// Delete all user data from the workspace (keeps the DB file and schema).
-/// FK order: focus_sessions → page_schedules → page_recurrence_rules → pages → folders
-///
-/// Sync accounts are disconnected first, through the same path the settings panel
-/// uses — see `disconnect_all_accounts` for what that has to reach before the rows
-/// their keychain blobs are keyed to are gone.
+/// Keeps the DB file and schema. Sync accounts are disconnected first, before the rows
+/// their keychain blobs are keyed to are gone (see `disconnect_all_accounts`).
 #[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
@@ -29,9 +23,8 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
 
 /// Empty every table the workspace owns.
 ///
-/// The deletes themselves moved to `pikos_db::export::reset_workspace` when the
-/// phone needed the same button; what stays here is the logging, which counts
-/// what went so the line in the log says how much was lost.
+/// The deletes are `pikos_db::export::reset_workspace`, shared with the phone; this
+/// adds the logging, which counts what went so the log says how much was lost.
 // The e2e bridge resets workspaces through this in any build it's part of.
 #[cfg(any(debug_assertions, test, feature = "e2e-bridge"))]
 pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
@@ -67,11 +60,8 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
-/// User-facing "Delete All Data": wipes the entire on-disk footprint of the
-/// app — SQLite files (DB, WAL, SHM), workspace assets, backups, the
-/// tauri-plugin-store registry, and the rotating log directory. The frontend
-/// is expected to call `relaunch()` immediately after this resolves so the
-/// app starts fresh as if newly installed.
+/// "Delete All Data": the whole on-disk footprint (SQLite files, assets, backups, the store
+/// registry, logs). The frontend must `relaunch()` immediately after this resolves.
 #[tauri::command]
 pub async fn wipe_app_data(
     app: tauri::AppHandle,
@@ -79,12 +69,9 @@ pub async fn wipe_app_data(
 ) -> AppResult<()> {
     log::info!("wipe_app_data action=drop_pool_remove_disk");
 
-    // close_pool, not just drop: SqlitePool's Drop hands cleanup to a
-    // background task, so connections can outlive the wipe and the WAL can
-    // stay uncheckpointed — the next launch would then race WAL recovery
-    // across StrictMode's double-mount and hit SQLITE_BUSY. The test
-    // `wipe_drops_pool_so_handles_release_before_file_removal` asserts this
-    // close-before-unlink ordering.
+    // close_pool, not just drop: SqlitePool's Drop hands cleanup to a background task, so
+    // connections can outlive the wipe and leave the WAL uncheckpointed, and the next launch
+    // would race WAL recovery and hit SQLITE_BUSY.
     if let Some(pool) = state.take_pool().await {
         pikos_db::close_pool(&pool).await;
     }
@@ -97,9 +84,8 @@ pub async fn wipe_app_data(
         std::fs::remove_dir_all(&app_data)?;
     }
 
-    // Best-effort: tauri-plugin-log may still hold the current log file open.
-    // The directory removal can fail on Windows; on Unix it succeeds and the
-    // open handle continues writing to the now-unlinked inode until relaunch.
+    // Best-effort: tauri-plugin-log may still hold the log file open, which fails the
+    // removal on Windows; on Unix the handle keeps writing to the unlinked inode until relaunch.
     if let Ok(app_log) = app.path().app_log_dir() {
         if app_log.exists() {
             let _ = std::fs::remove_dir_all(&app_log);
@@ -109,8 +95,6 @@ pub async fn wipe_app_data(
     Ok(())
 }
 
-/// Copy the live database to ~/Downloads/pikos-backup-<timestamp>.sqlite.
-/// Uses SQLite's VACUUM INTO so the copy is clean (no separate WAL file needed).
 #[tauri::command]
 pub async fn backup_db(state: tauri::State<'_, DbState>) -> AppResult<String> {
     let pool = state.get_pool().await?;
@@ -124,8 +108,6 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> AppResult<String> {
     Ok(dest)
 }
 
-/// The SQLite export written into `dir`, split from [`backup_db`] so it runs against a
-/// temp directory.
 pub(crate) async fn write_sqlite_export(
     pool: &sqlx::SqlitePool,
     dir: &std::path::Path,
@@ -135,18 +117,12 @@ pub(crate) async fn write_sqlite_export(
     Ok(dest)
 }
 
-/// VACUUM INTO a destination path — a defragmented single-file copy made while
-/// the DB stays open.
-///
-/// Delegates to `pikos_db::export::backup_to`: the phone takes the same backup,
-/// and the escaping this used to do inline is the kind of detail that is wrong
-/// in exactly one of two copies.
+/// Delegates to `pikos_db::export::backup_to`, which the phone shares, so the path
+/// escaping lives in one copy.
 pub(crate) async fn vacuum_into(pool: &sqlx::SqlitePool, dest: &str) -> AppResult<()> {
     pikos_db::export::backup_to(pool, dest).await
 }
 
-/// Pre-import safety backup — copies the DB to {appDataDir}/backups/ before a batch import.
-/// Uses VACUUM INTO for a clean, single-file copy.
 #[tauri::command]
 pub async fn backup_db_before_import(
     app: tauri::AppHandle,
@@ -172,8 +148,6 @@ pub async fn backup_db_before_import(
     Ok(dest)
 }
 
-// ── Seed helpers ─────────────────────────────────────────────────────────────
-
 #[cfg(any(debug_assertions, test))]
 #[derive(serde::Deserialize)]
 pub struct BackdateParams {
@@ -183,7 +157,6 @@ pub struct BackdateParams {
     pub completed_at: Option<String>,
 }
 
-/// Overwrite timestamps on a page for realistic seed data, from the seed scripts.
 #[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn backdate_page(
@@ -227,9 +200,6 @@ pub async fn backdate_page_impl(pool: &sqlx::SqlitePool, params: BackdateParams)
     Ok(())
 }
 
-// ── Backups ──────────────────────────────────────────────────────────────────
-
-/// Every snapshot sitting beside the workspace, newest first.
 #[tauri::command]
 pub async fn list_backups(
     state: tauri::State<'_, DbState>,
@@ -251,17 +221,11 @@ pub async fn close_damaged_workspace(state: tauri::State<'_, DbState>) -> AppRes
     Ok(())
 }
 
-/// Put a snapshot back and restart into it.
+/// Restarts into the snapshot rather than swapping the file under a live pool, which would
+/// mean reasoning about every open connection, the WAL, and a React tree holding vanished
+/// rows. The pool is dropped, the file replaced, and the process re-execs.
 ///
-/// The restart is the whole design. Swapping the file under a live pool means
-/// reasoning about every open connection, the WAL, and a React tree holding rows
-/// that no longer exist; restarting means none of that is true, and the app comes
-/// up through the same path a normal launch takes. So the pool is dropped first,
-/// the file is replaced, and the process re-execs — there is no window in which
-/// the app is running against a workspace it did not open.
-///
-/// Only reached on success: a refused or damaged backup returns its error with
-/// the pool still open and nothing on disk touched.
+/// A refused or damaged backup returns its error with the pool open and nothing on disk touched.
 #[tauri::command]
 pub async fn restore_backup(
     app: tauri::AppHandle,

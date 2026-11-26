@@ -1,15 +1,15 @@
 /**
- * The newest Pikos version anyone can download, read once per build, so notes and posts for a
- * version not yet published stay out of the site. A release merges to `main`, which the host
- * builds on every push, before it is tagged, built and published; the release workflow's publish
- * then rebuilds the site with them in.
+ * The newest Pikos version anyone can download, read once per build, so notes and posts for an
+ * unpublished version stay out of the site: a release merges to `main` and builds before it is
+ * tagged and published.
  *
- * Read from where the download buttons point, `/releases/latest`, whose redirect names the tag.
- * Not the REST API: unauthenticated it allows 60 requests an hour per address, and a build host
- * shares its address. `PIKOS_PUBLISHED_VERSION` stands in for it in a local build or a test.
+ * Read from `/releases/latest`, whose redirect names the tag, not the REST API, which allows an
+ * unauthenticated address 60 requests an hour and a build host shares its address.
+ * `PIKOS_PUBLISHED_VERSION` stands in for it locally and in tests.
  *
- * A build that can't find out fails rather than guessing. Guessing low hides a published release's
- * notes; guessing high is the leak this exists to stop. A failed build leaves the last deploy up.
+ * A build that can't find out fails rather than guessing: guessing low hides a published
+ * release's notes, and guessing high leaks an unpublished one. A failed build leaves the last
+ * deploy up.
  */
 const LATEST = "https://github.com/pikos-app/pikos/releases/latest";
 
@@ -39,7 +39,6 @@ export function publishedVersion(): Promise<string> {
   return cached;
 }
 
-/** Whether `version` (X.Y.Z) is at or below the published one, so its notes and post can show. */
 export function isOut(version: string, published: string): boolean {
   const parts = (v: string) => v.split(".").map(Number);
   const [a, b] = [parts(version), parts(published)];

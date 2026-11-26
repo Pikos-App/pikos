@@ -3,20 +3,17 @@
 #
 #   scripts/check-log-clean.sh [--since YYYY-MM-DD] path-to-log
 #
-# Not part of `pnpm verify`: the log only exists where the app has actually run,
-# and CI never runs it. This is a release-time gate, run against a machine that
-# has been using the build.
+# Not part of `pnpm verify`: the log only exists where the app has run, and CI never runs it.
+# It is a release-time gate, run against a machine that has been using the build.
 #
-# The path is required: the installed app's log is a real workspace's, personal
-# data no session may read, and it records the previous version, not the build under test.
+# The path is required: the installed app's log is a real workspace's, personal data no session
+# may read, and it records the previous version, not the build under test.
 #
-# The premise is that a WARN the app emits about itself is either a defect or a
-# line that should not be there. Both are worth a decision. Left ungated, a log
-# fills with warnings nobody acts on, which trains everyone to scroll past the
-# next one — and the next one is the render loop.
+# A WARN the app emits about itself is either a defect or a line that should not be there.
+# Left ungated, warnings nobody acts on train everyone to scroll past the next one.
 #
-# EXPECTED below holds patterns that are known and accounted for. An entry is a
-# claim that the line is understood, not that it is harmless.
+# EXPECTED holds patterns that are known and accounted for. An entry claims the line is
+# understood, not that it is harmless.
 
 set -uo pipefail
 
@@ -64,12 +61,9 @@ done
 
 hits=$(printf '%s\n' "$hits" | sed '/^$/d')
 
-# A second Pikos against one profile is two notification schedulers and two sync
-# loops over one SQLite file, and it announces itself here rather than on screen:
-# the reminder arrives twice and nothing says why. The single-instance guard makes
-# this unreachable, so a mismatch means the guard did not hold — which is worth a
-# release gate, because the symptom is otherwise indistinguishable from a bug in
-# the scheduler.
+# A second Pikos against one profile means two schedulers and two sync loops over one SQLite
+# file, and it shows up only as a doubled reminder. The single-instance guard should make this
+# unreachable, so a mismatch means the guard did not hold.
 starts=$(grep -cE 'Pikos .* starting on' "$filtered" || true)
 schedulers=$(grep -cF 'Notification scheduler started' "$filtered" || true)
 versions=$(grep -oE 'Pikos [^ ]+ starting on' "$filtered" | sort -u | wc -l | tr -d ' ')
@@ -98,8 +92,7 @@ if [ -z "$hits" ]; then
   exit 1
 fi
 
-# Collapse ids and timestamps so one recurring line reports as one finding with
-# a count, rather than as the 320 copies that make a log unreadable.
+# Collapse ids and timestamps so a recurring line reports once with a count.
 echo
 echo "[log-check] unaccounted warnings and errors${SINCE:+ since $SINCE}:"
 echo

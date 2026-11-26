@@ -45,8 +45,7 @@ describe("formatClockTime", () => {
     expect(formatClockTime(23, 15)).toBe("11:15pm");
   });
 
-  // The page list chip, the editor trigger and the picker's own slot list each
-  // had their own formatter. Nothing but this may write a clock time again.
+  // Nothing but `formatClockTime` may write a clock time.
   it("is the format every non-grid surface uses", () => {
     expect(formatCompactTime(new Date(2026, 5, 15, 14, 0))).toBe("2:00pm");
     expect(TIME_SLOTS[56]?.label).toBe("2:00pm");

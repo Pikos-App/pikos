@@ -1,10 +1,3 @@
-// useRecurringActions — routes recurring-page interactions on calendar blocks.
-//
-// Verifies the branches the hook's caller (PageBlock, AllDayBar) cares about:
-// a status toggle with and without a rule; which blocks offer a checkbox at all;
-// and where the delete gesture lands — one occurrence for anything rendered as
-// one, the page trash for a real page.
-
 import type { PageSummary, VirtualOccurrence } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
@@ -26,9 +19,8 @@ afterEach(() => {
 });
 
 /**
- * Render the workspace + actions hook in the same provider tree so they
- * share the same WorkspaceContext instance. `targetPage` is set after the
- * workspace seeds a page so useRecurringActions sees the real one.
+ * Renders the workspace and actions hooks in one provider tree so they share a
+ * WorkspaceContext. `targetPage` is set after the workspace seeds a page.
  */
 function setup() {
   let setTargetPage!: (p: PageSummary) => void;
@@ -208,7 +200,6 @@ describe("useRecurringActions", () => {
 
     await act(async () => {
       hook.result.current.actions.toggleStatus();
-      // Allow completeRecurringPage's awaited adapter calls to settle.
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -268,7 +259,6 @@ describe("useRecurringActions", () => {
 
     const page = hook.result.current.pages.pages.find((p) => p.id === pageId);
     expect(page?.skippedOccurrences).toEqual(["2099-01-12"]);
-    // The toast queue holds the undo action so the user can dismiss-or-undo.
     expect(hook.result.current.undo.toastItems.length).toBeGreaterThan(0);
   });
 
@@ -310,8 +300,6 @@ describe("useRecurringActions", () => {
       await Promise.resolve();
     });
 
-    // Routed as synced: the one unified command is called with the client-supplied
-    // occurrence, not the bare native shape.
     expect(completeSpy).toHaveBeenCalledWith(
       expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
     );
@@ -336,7 +324,6 @@ describe("useRecurringActions", () => {
       });
     });
 
-    // Complete once so the head carries a completed occurrence to rewind.
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId);
     });
@@ -389,7 +376,6 @@ describe("useRecurringActions", () => {
       await Promise.resolve();
     });
 
-    // No completed occurrence to rewind → the plain-flip fallback runs instead.
     expect(uncompleteSpy).not.toHaveBeenCalled();
     expect(hook.result.current.pages.pages.find((p) => p.id === pageId)?.status).toBe(
       "not_started"

@@ -69,7 +69,6 @@ export function ImportPreviewModal({ onCancel, onConfirm, plan }: ImportPreviewM
     else grouped.set(key, [page]);
   }
 
-  // Filter out empty folders when skipping completed, sort alphabetically
   const visibleFolders = plan.folders
     .filter((f) => grouped.has(f.key))
     .sort((a, b) => emojiAwareCompare(a.name, b.name));

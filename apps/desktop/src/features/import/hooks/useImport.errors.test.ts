@@ -1,7 +1,5 @@
-// Error-path coverage for useImport. The audit replaced raw err.message with
-// storageErrorUserMessage at four sites; these tests assert that wiring by
-// (a) making each underlying call throw with a leaky message, and
-// (b) verifying state.message contains the friendly verb but not the raw text.
+// Error-path coverage for useImport: each underlying call throws with a leaky message, and
+// state.message must carry the friendly verb but not the raw text.
 
 import type { CSVMappingConfig } from "@pikos/core";
 import { applyMappings, prepareCSVRows } from "@pikos/core";
@@ -26,9 +24,6 @@ vi.mock("@pikos/core", async () => {
   };
 });
 
-// useImport reads two contexts. We provide minimal stubs so the hook
-// constructs without spinning up the full provider tree.
-
 const importBatchMock = vi.fn();
 vi.mock("@/shared/context/ImportContext", () => ({
   useImportBatch: () => ({
@@ -39,8 +34,6 @@ vi.mock("@/shared/context/ImportContext", () => ({
   }),
 }));
 
-// PagesContext — mock with no-op delete helpers (only used in undoImport,
-// which these tests don't exercise).
 vi.mock("@/shared/context/PagesContext", () => ({
   usePages: () => ({
     softDeleteFolder: vi.fn(),
@@ -48,7 +41,6 @@ vi.mock("@/shared/context/PagesContext", () => ({
   }),
 }));
 
-// WorkspaceContext — the hook only reads `storage` for the pre-import backup.
 vi.mock("@/shared/context/WorkspaceContext", () => ({
   useWorkspace: () => ({ storage: { backupBeforeImport: vi.fn() } }),
 }));

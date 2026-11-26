@@ -3,15 +3,9 @@ import { format, isSameMonth, isSameYear } from "date-fns";
 import { parseLocalISO } from "../utils/dates";
 
 /**
- * Formats an all-day date range as a compact chip label.
- *
- * - Same month, same year: "May 2 – 10"
- * - Different months, same year: "May 2 – Jun 3"
- * - Different years: "May 2, 2026 – Jan 3, 2027"
- *
- * Both inputs must be local 'YYYY-MM-DD' strings. If `end` is missing, equal
- * to `start`, or earlier than `start`, returns the start date alone
- * ("May 2", "May 2, 2025" when not the current year).
+ * An all-day range as a chip label: "May 2 – 10", "May 2 – Jun 3", or across years "May 2, 2026 –
+ * Jan 3, 2027". Inputs are local 'YYYY-MM-DD'. A missing, equal or earlier `end` gives the start
+ * alone ("May 2", with the year when not the current one).
  */
 export function formatDateRange(start: string, end: string | null | undefined): string {
   const now = new Date();

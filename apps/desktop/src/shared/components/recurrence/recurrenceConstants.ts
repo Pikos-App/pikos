@@ -8,7 +8,6 @@ export const FREQ_UNIT_LABELS: Record<RecurrenceFreq, { singular: string; plural
   YEARLY: { plural: "Years", singular: "Year" },
 };
 
-/** rrule.js convention: 0 = Monday, 6 = Sunday. */
 export const WEEKDAYS: {
   value: RecurrenceWeekday;
   short: string;
@@ -39,19 +38,17 @@ const MONTH_NAMES_SHORT = [
   "Dec",
 ];
 
-/** Convert JS Date.getDay() (0=Sun) to rrule.js index (0=Mon). */
 function jsDayToRrule(jsDay: number): RecurrenceWeekday {
   return ((jsDay + 6) % 7) as RecurrenceWeekday;
 }
 
 /**
- * The anchor's BYDAY ordinal — `2` for a second Tuesday, `-1` for a last one.
+ * The anchor's BYDAY ordinal: `2` for a second Tuesday, `-1` for a last one.
  *
- * An anchor in the final seven days of its month takes `-1` rather than its cardinal
- * position: that late in the month it almost always means "month end", and a
- * 5th-position rule would skip every month holding only four of that weekday. The cost
- * is a genuine "4th Monday" that happens to also be the last one, which the preset
- * can't author — its detail text says which reading it took before it's clicked.
+ * An anchor in the final seven days of its month takes `-1` rather than its cardinal position:
+ * that late it almost always means "month end", and a 5th-position rule would skip every month
+ * holding only four of that weekday. The cost is a genuine "4th Monday" that is also the last,
+ * which the preset can't author; its detail text says which reading it took.
  */
 function byweekdayOrdinal(anchor: Date): number {
   const dayOfMonth = anchor.getDate();
@@ -74,17 +71,13 @@ function ordinalSuffix(n: number): string {
 export interface Preset {
   id: string;
   label: string;
-  /** Optional parenthetical detail shown muted after the label. */
   detail?: string;
   options: RecurrenceOptions;
-  /** True to render with a divider *above* this row. */
   startsGroup?: boolean;
 }
 
-/**
- * Every pattern term, normalised for comparison. WKST defaults to Monday so an
- * imported rule that spells it out still matches a preset that omits it.
- */
+/** Every pattern term, normalised for comparison. WKST defaults to Monday so an imported rule that
+ * spells it out still matches a preset that omits it. */
 function shapeKey(o: RecurrenceOptions): string {
   return JSON.stringify([
     o.freq,
@@ -99,12 +92,9 @@ function shapeKey(o: RecurrenceOptions): string {
 }
 
 /**
- * Shape-compare two RecurrenceOptions, ignoring end conditions (count/until).
- *
- * Comparing every pattern term, not just freq/interval/byweekday: a partial
- * compare made a richer rule ("monthly on the last day") light up the plain
- * Monthly preset as already-active, and clicking that highlighted row then
- * flattened the rule to the preset.
+ * Shape-compare two RecurrenceOptions, ignoring end conditions. Every pattern term is compared: a
+ * partial compare would let a richer rule ("monthly on the last day") light up the plain Monthly
+ * preset as active, and clicking it would flatten the rule.
  */
 export function shapesMatch(a: RecurrenceOptions, b: RecurrenceOptions): boolean {
   return shapeKey(a) === shapeKey(b);

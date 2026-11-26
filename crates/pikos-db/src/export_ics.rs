@@ -1,32 +1,22 @@
 //! The workspace's scheduled pages as one RFC 5545 `.ics` calendar.
 //!
-//! Scope matches the other exports: a page the user owns, which for a mirror is
-//! the [`fetch_export_pages`] predicate the Markdown and CSV exports already
-//! share — an un-actioned calendar mirror is the calendar's own copy, and
-//! re-importing it somewhere else would duplicate the event it came from.
-//! Unscheduled pages are left out entirely: iCalendar has no home for a page
-//! that never claimed a moment.
+//! Scope is the [`fetch_export_pages`] predicate the other exports share: an un-actioned
+//! calendar mirror is the calendar's own copy, and re-importing it elsewhere would duplicate
+//! its event. Unscheduled pages are left out, as iCalendar has no home for them.
 //!
 //! ## Timed events carry a TZID, not a UTC instant
 //!
-//! The two candidate spellings for a timed `DTSTART` are `TZID=<zone>` plus a
-//! `VTIMEZONE`, or a `…Z` UTC instant with no zone at all. This export emits the
-//! first, because the second cannot state a recurring event correctly: Pikos
-//! stores a series as wall-clock plus a zone (a 09:00 standup stays 09:00 across
-//! a DST boundary), while `DTSTART:…Z;RRULE:…` fixes one UTC instant and repeats
-//! *that*, so every occurrence on the far side of a transition lands an hour
-//! wrong. Recurring pages are most of what this export exists to carry, and a
-//! format that is right for one-offs but silently shifts a weekly meeting twice
-//! a year is not the correct-by-default choice.
+//! A timed `DTSTART` is either `TZID=<zone>` plus a `VTIMEZONE`, or a `…Z` UTC instant. This
+//! export emits the first, because the second can't state a recurring event: Pikos stores a
+//! series as wall-clock plus a zone (a 09:00 standup stays 09:00 across DST), while
+//! `DTSTART:…Z;RRULE:…` repeats one UTC instant, so every occurrence past a transition lands
+//! an hour wrong.
 //!
-//! The `VTIMEZONE` that obligation implies is generated rather than tabulated:
-//! [`vtimezone`] probes the zone through [`zoned::utc_to_wall_clock`] (the same
-//! chrono-tz data every other layer resolves against) and writes each real
-//! transition out as its own observance. No rule is *inferred* — inferring
-//! `BYDAY=-1SU` from one transition is the step that gets a hand-rolled
-//! `VTIMEZONE` wrong — so the emitted zone is exact within
-//! [`VTIMEZONE_FUTURE_YEARS`] of the events it covers, and beyond that a
-//! consumer extrapolates from the last observance.
+//! The `VTIMEZONE` is generated: [`vtimezone`] probes the zone through
+//! [`zoned::utc_to_wall_clock`] and writes each real transition as its own observance. No
+//! rule is inferred, since inferring `BYDAY=-1SU` from one transition is what gets a
+//! hand-rolled `VTIMEZONE` wrong. The zone is exact within [`VTIMEZONE_FUTURE_YEARS`] of the
+//! events; beyond that a consumer extrapolates from the last observance.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -42,20 +32,15 @@ use crate::export::fetch_export_pages;
 /// the edge past the horizon anyone plans against, at ~60 observances per zone.
 const VTIMEZONE_FUTURE_YEARS: i32 = 30;
 
-/// Cap on the `DESCRIPTION` a page's body contributes. A Pikos page can hold a
-/// whole document; a calendar entry that carried one would fold into thousands
-/// of lines and be truncated by the receiving client anyway.
+/// Cap on the `DESCRIPTION` a page's body contributes: a whole document would fold into
+/// thousands of lines and be truncated by the receiving client anyway.
 const MAX_DESCRIPTION_CHARS: usize = 4000;
 
 /// RFC 5545 §3.1: content lines are folded at 75 **octets**, excluding the CRLF.
 const FOLD_OCTETS: usize = 75;
 
-// ─── Text primitives ──────────────────────────────────────────────────────────
-
-/// RFC 5545 §3.3.11 TEXT escaping: `\`, `;`, `,` and newline. A colon is
-/// deliberately *not* escaped — it is only special in a property's name/value
-/// split, which has already happened by the time a value gets here. A lone `\r`
-/// is dropped rather than doubled so a CRLF in a page body becomes one `\n`.
+/// RFC 5545 §3.3.11 TEXT escaping: `\`, `;`, `,` and newline. A colon isn't escaped, as it
+/// is special only in the name/value split. A lone `\r` is dropped so a CRLF becomes one `\n`.
 fn escape_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -71,13 +56,9 @@ fn escape_text(s: &str) -> String {
     out
 }
 
-/// Append one content line, folded to [`FOLD_OCTETS`] and CRLF-terminated.
-///
-/// Continuation lines open with a single space, which counts against the octet
-/// budget — hence the narrower limit after the first. Folds land on a character
-/// boundary: splitting a multi-byte character across a fold would hand the
-/// consumer two invalid fragments, and RFC 5545 §3.1 requires the boundary to be
-/// respected even though the count is in octets.
+/// Appends one content line, folded to [`FOLD_OCTETS`] and CRLF-terminated. A continuation
+/// line's leading space counts against the budget. Folds land on a character boundary, since
+/// splitting a multi-byte character would hand the consumer two invalid fragments.
 fn push_folded(out: &mut String, line: &str) {
     let mut start = 0;
     let mut limit = FOLD_OCTETS;
@@ -94,8 +75,6 @@ fn push_folded(out: &mut String, line: &str) {
     out.push_str(&line[start..]);
     out.push_str("\r\n");
 }
-
-// ─── Placement ────────────────────────────────────────────────────────────────
 
 /// Where one VEVENT sits in time, in the value type its `DTSTART` will use.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,22 +94,18 @@ enum Placement {
 }
 
 impl Placement {
-    /// One stored `(scheduled_start, scheduled_end, timezone)` triple → a VEVENT
-    /// placement. `None` when the start is unparseable or absent.
+    /// A stored `(scheduled_start, scheduled_end, timezone)` triple as a VEVENT placement.
+    /// `None` when the start is unparseable or absent.
     ///
-    /// **All-day ends invert the reconciler.** Providers send an exclusive
-    /// `DTEND` (a single Jun 15 event ends Jun 16) and
-    /// `reconciler::allday_end::InclusiveEnd::from_provider` decrements it once
-    /// on the way in, so `page_schedules.scheduled_end` holds the **inclusive**
-    /// last covered day. Going back out is the same step in reverse: add a day.
-    /// A missing end is a one-day event, so it lands on `start + 1` too.
+    /// All-day ends invert the reconciler: it decrements a provider's exclusive `DTEND` on the
+    /// way in (`InclusiveEnd::from_provider`), so `scheduled_end` holds the inclusive last
+    /// day and going out adds a day. A missing end is a one-day event, landing on `start + 1`.
     fn build(start: &str, end: Option<&str>, zone: Option<&str>, device: &str) -> Option<Self> {
         let start_wc = WallClock::parse(start)?;
         let end_wc = end.filter(|e| !e.is_empty()).and_then(WallClock::parse);
 
         if start_wc.is_all_day() {
-            // `.max` guards a stored end that predates its start; the exclusive
-            // end must stay strictly after DTSTART for the event to have a day.
+            // `.max` guards a stored end before its start; the exclusive end must follow DTSTART.
             let last = end_wc
                 .map(|w| w.date)
                 .unwrap_or(start_wc.date)
@@ -144,13 +119,11 @@ impl Placement {
         Some(Placement::Timed {
             zone: resolve_zone(zone, device),
             start: start_wc.as_datetime(),
-            // An all-day end on a timed start is contradictory storage; drop it
-            // rather than emit a DTEND whose value type fights its DTSTART.
+            // A contradictory all-day end on a timed start is dropped, not emitted against DTSTART's type.
             end: end_wc.filter(|w| !w.is_all_day()).map(|w| w.as_datetime()),
         })
     }
 
-    /// The parameter every value of this event's start/end/exdates carries.
     fn value_param(&self) -> String {
         match self {
             Placement::AllDay { .. } => ";VALUE=DATE".to_string(),
@@ -158,11 +131,9 @@ impl Placement {
         }
     }
 
-    /// Render an occurrence key — a stored `original_date` or exdate, either a
-    /// bare `YYYY-MM-DD` or a full wall clock — in this event's value type, so
-    /// `EXDATE`/`RECURRENCE-ID` match `DTSTART` as RFC 5545 §3.8.5.1 requires.
-    /// A date-only key on a timed series takes the series' own time of day,
-    /// which is the instant the expansion would have produced for that day.
+    /// An occurrence key (a stored `original_date` or exdate, a bare date or a full wall clock)
+    /// in this event's value type, so `EXDATE` and `RECURRENCE-ID` match `DTSTART` as RFC 5545
+    /// §3.8.5.1 requires. A date-only key on a timed series takes the series' time of day.
     fn occurrence_value(&self, key: &str) -> Option<String> {
         let wall = WallClock::parse(key)?;
         Some(match self {
@@ -174,7 +145,6 @@ impl Placement {
         })
     }
 
-    /// The zone a timed placement lives in, for VTIMEZONE collection.
     fn zone(&self) -> Option<&str> {
         match self {
             Placement::AllDay { .. } => None,
@@ -183,10 +153,9 @@ impl Placement {
     }
 }
 
-/// The IANA id a timed value is expressed in: the row's own zone when it names
-/// one chrono-tz knows, else the device zone, else UTC. A row that stores no
-/// zone is device-local by construction (the reschedule writer clears the zone
-/// precisely to say "the user just asserted a device-local time").
+/// The IANA id a timed value is expressed in: the row's own zone if chrono-tz knows it, else
+/// the device zone, else UTC. A row with no zone is device-local (the reschedule writer
+/// clears it to say so).
 fn resolve_zone(stored: Option<&str>, device: &str) -> String {
     for candidate in [stored.unwrap_or_default(), device] {
         if !candidate.is_empty() && zone_is_known(candidate) {
@@ -208,10 +177,8 @@ fn datetime_value(dt: NaiveDateTime) -> String {
     dt.format("%Y%m%dT%H%M%S").to_string()
 }
 
-// ─── VTIMEZONE ────────────────────────────────────────────────────────────────
-
-/// Seconds east of UTC that `zone` shows at a UTC instant. An unknown zone
-/// answers 0 — [`resolve_zone`] has already refused to emit one.
+/// Seconds east of UTC that `zone` shows at a UTC instant; 0 for an unknown zone, which
+/// [`resolve_zone`] already refused.
 fn offset_at(zone: &str, utc: NaiveDateTime) -> i64 {
     zoned::utc_to_wall_clock(zone, utc)
         .map(|local| (local - utc).num_seconds())
@@ -225,10 +192,9 @@ struct Transition {
     to: i64,
 }
 
-/// Every offset change `zone` makes in `[from, to)`, found by walking UTC in
-/// six-hour strides and bisecting the stride that straddles a change. Six hours
-/// is under the shortest gap between two real transitions in any zone tzdb
-/// carries for the modern era, so no change is stepped over.
+/// Every offset change `zone` makes in `[from, to)`, walking UTC in six-hour strides and
+/// bisecting the one that straddles a change. Six hours is under the shortest gap between
+/// real modern transitions, so none is stepped over.
 fn transitions(zone: &str, from: NaiveDateTime, to: NaiveDateTime) -> Vec<Transition> {
     const STRIDE_SECONDS: i64 = 6 * 3600;
     let mut out = Vec::new();
@@ -259,8 +225,7 @@ fn transitions(zone: &str, from: NaiveDateTime, to: NaiveDateTime) -> Vec<Transi
     out
 }
 
-/// RFC 5545 `UTC-OFFSET`: `+HHMM`, widened to `+HHMMSS` for the pre-1970-style
-/// zones whose offset is not a whole minute.
+/// RFC 5545 `UTC-OFFSET`: `+HHMM`, widened to `+HHMMSS` for an offset that isn't a whole minute.
 fn utc_offset(seconds: i64) -> String {
     let sign = if seconds < 0 { '-' } else { '+' };
     let abs = seconds.abs();
@@ -274,19 +239,16 @@ fn utc_offset(seconds: i64) -> String {
 
 /// A `VTIMEZONE` for `zone` covering `[from, to)`.
 ///
-/// The first observance anchors the window — a consumer resolves a time by the
-/// latest observance at or before it, so without one, anything before the first
-/// transition has no offset. Each transition then becomes its own observance,
-/// with `DTSTART` in the *outgoing* offset's local time per §3.6.5.
+/// The first observance anchors the window: a consumer uses the latest observance at or
+/// before a time, so nothing before the first transition would have an offset. Each
+/// transition is then its own observance, with `DTSTART` in the outgoing offset's local
+/// time per §3.6.5.
 ///
-/// STANDARD vs DAYLIGHT is read off the direction of the change (a step up is
-/// into daylight). A zone that permanently moves its standard offset is labelled
-/// as if it were a DST step, which is cosmetic: consumers resolve times from
-/// `TZOFFSETTO`, not from which subcomponent it sits in.
+/// STANDARD vs DAYLIGHT is read off the direction of the change. A zone permanently moving its
+/// standard offset is labelled as a DST step, which is cosmetic: consumers read `TZOFFSETTO`.
 fn vtimezone(zone: &str, from: NaiveDateTime, to: NaiveDateTime) -> String {
     let changes = transitions(zone, from, to);
     let base_offset = offset_at(zone, from);
-    // In daylight already if the next thing the zone does is fall back.
     let base_name = match changes.first() {
         Some(first) if first.to < first.from => "DAYLIGHT",
         _ => "STANDARD",
@@ -337,20 +299,14 @@ fn vtimezone(zone: &str, from: NaiveDateTime, to: NaiveDateTime) -> String {
     out
 }
 
-// ─── RRULE ────────────────────────────────────────────────────────────────────
-
 /// The stored rule, with its `UNTIL` moved into the value type `DTSTART` forces.
 ///
-/// Everything else goes out byte for byte — the stored string is already the
-/// RFC's own spelling, and a parse round-trip would drop the fields
-/// `RecurrenceOptions` doesn't carry. `UNTIL` is the one token that cannot: RFC
-/// 5545 §3.3.10 requires it to match `DTSTART`'s value type, and to be UTC when
-/// `DTSTART` carries a `TZID`. Pikos stores it as event-zone wall clock (the
-/// reconciler rewrites a provider's `…Z` inbound, and `build_rrule` writes
-/// `T235959` local), so both readings need the conversion here.
+/// Everything else goes out byte for byte, since a parse round-trip would drop fields
+/// `RecurrenceOptions` doesn't carry. `UNTIL` can't: RFC 5545 §3.3.10 requires it to match
+/// `DTSTART`'s value type, and be UTC when `DTSTART` has a `TZID`. Pikos stores it as
+/// event-zone wall clock, so both readings need the conversion here.
 fn export_rrule(rrule: &str, placement: &Placement) -> String {
     rewrite_until_with(rrule, |value| match placement {
-        // Date-valued DTSTART: keep the day, drop any time.
         Placement::AllDay { .. } => Some(
             value
                 .split(['T', 't'])
@@ -359,7 +315,6 @@ fn export_rrule(rrule: &str, placement: &Placement) -> String {
                 .to_string(),
         ),
         Placement::Timed { zone, .. } => {
-            // Already UTC — the frame the RFC wants — so leave it alone.
             if value.ends_with('Z') || value.ends_with('z') {
                 return None;
             }
@@ -370,9 +325,8 @@ fn export_rrule(rrule: &str, placement: &Placement) -> String {
     })
 }
 
-/// `20260701` or `20260701T235959` → the wall clock it spells. A date-only bound
-/// on a timed series means "through the end of that day", which is the reading
-/// `build_rrule` writes out explicitly anyway.
+/// The wall clock a bound spells. A date-only bound on a timed series means through the end
+/// of that day, as `build_rrule` writes it.
 fn parse_compact(value: &str) -> Option<NaiveDateTime> {
     let date = NaiveDate::parse_from_str(value.get(0..8)?, "%Y%m%d").ok()?;
     match value.len() {
@@ -382,20 +336,16 @@ fn parse_compact(value: &str) -> Option<NaiveDateTime> {
     }
 }
 
-// ─── VEVENT ───────────────────────────────────────────────────────────────────
-
-/// Everything one VEVENT needs. Overrides reuse it with `recurrence_id` set and
-/// no rule of their own, which is exactly the RFC's shape for a moved instance.
+/// Everything one VEVENT needs. An override reuses it with `recurrence_id` set and no rule,
+/// the RFC's shape for a moved instance.
 struct Vevent<'a> {
     uid: String,
     summary: &'a str,
     description: &'a str,
     placement: Placement,
-    /// The `RECURRENCE-ID` tail (`;PARAM:value`) for an override, already
-    /// rendered in the **series'** value type. It identifies an occurrence of
-    /// the master rule, so it is stated in the master's frame — not in the zone
-    /// the moved instance happens to land in, which may differ (the reschedule
-    /// writer clears the zone to say "device-local" whenever a user moves one).
+    /// The `RECURRENCE-ID` tail (`;PARAM:value`) for an override, rendered in the series'
+    /// value type: it identifies an occurrence of the master rule, so it uses the master's
+    /// frame, not the zone the moved instance lands in.
     recurrence_id: Option<String>,
     rrule: Option<&'a str>,
     exdates: Vec<String>,
@@ -455,8 +405,8 @@ fn push_vevent(out: &mut String, dtstamp: &str, event: &Vevent<'_>) {
     push_folded(out, "END:VEVENT");
 }
 
-/// A page body clipped to [`MAX_DESCRIPTION_CHARS`], on a character boundary,
-/// with an ellipsis so the clip is visible rather than a body that just stops.
+/// A page body clipped to [`MAX_DESCRIPTION_CHARS`] on a character boundary, with an
+/// ellipsis so the clip is visible.
 fn truncate(text: &str) -> String {
     match text.char_indices().nth(MAX_DESCRIPTION_CHARS) {
         None => text.to_string(),
@@ -464,9 +414,6 @@ fn truncate(text: &str) -> String {
     }
 }
 
-// ─── Assembly ─────────────────────────────────────────────────────────────────
-
-/// A recurrence rule row, keyed by page.
 struct RuleRow {
     rrule: String,
     exdates_json: String,
@@ -475,8 +422,7 @@ struct RuleRow {
     timezone: String,
 }
 
-/// A materialized occurrence override — a `page_schedules` row pointing back at
-/// a rule.
+/// A materialized occurrence override: a `page_schedules` row pointing back at a rule.
 struct OverrideRow {
     original_date: String,
     start: String,
@@ -485,8 +431,7 @@ struct OverrideRow {
     status: String,
 }
 
-/// Build the whole calendar. Split from [`export_ics`] so the folding, escaping
-/// and value-type rules are testable without touching the disk.
+/// Builds the whole calendar, split from [`export_ics`] so it is testable without the disk.
 pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> AppResult<String> {
     let device = crate::device_zone().name().to_string();
     let now = chrono::Utc::now();
@@ -499,8 +444,7 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
     )
     .await?;
 
-    // Recurrence, exclusions and overrides each hang off their own table; read
-    // once and key by page rather than joining, exactly as the CSV export does.
+    // Read once and keyed by page rather than joined, as the CSV export does.
     let rules: HashMap<String, RuleRow> =
         sqlx::query_as::<_, (String, String, String, String, Option<String>, String)>(
             "SELECT page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone \
@@ -523,9 +467,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         })
         .collect();
 
-    // A completed or skipped occurrence is not on the calendar: the skip
-    // dismissed it, and a completion moves it onto its own done clone page,
-    // which exports as its own VEVENT — emitting both would double it.
+    // A skip dismissed its occurrence, and a completion moved it onto a done clone page that
+    // exports as its own VEVENT, so emitting both would double it.
     let mut exclusions: HashMap<String, Vec<String>> = HashMap::new();
     for (page_id, occurrence_date) in sqlx::query_as::<_, (String, String)>(
         "SELECT page_id, occurrence_date FROM completed_set \
@@ -565,9 +508,7 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         });
     }
 
-    // A one-off page's zone lives on its schedule row, not on the page's denorm
-    // columns; key by (page, start) so the row matching the denormalized start
-    // is the one that answers.
+    // A one-off's zone lives on its schedule row, keyed by (page, start) to match the denorm.
     let mut schedule_zones: HashMap<(String, String), String> = HashMap::new();
     for (page_id, start, timezone) in sqlx::query_as::<_, (String, String, String)>(
         "SELECT page_id, scheduled_start, timezone FROM page_schedules \
@@ -595,10 +536,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         let content_text: String = row.try_get("content_text").unwrap_or_default();
         let rule = rules.get(&id);
 
-        // A recurring page anchors on its rule's base occurrence, never on the
-        // page's denormalized `scheduled_start` — that column holds the *next*
-        // occurrence, and anchoring an RRULE there would drop every occurrence
-        // already behind the head.
+        // Anchors on the rule's base occurrence: `scheduled_start` holds the next occurrence, and
+        // anchoring an RRULE there would drop every occurrence behind the head.
         let placement = match rule {
             Some(rule) => Placement::build(
                 &rule.start,
@@ -622,8 +561,6 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
                 })
             }
         };
-        // No schedule, no VEVENT — iCalendar has nowhere to put a page that
-        // never claimed a moment.
         let Some(placement) = placement else { continue };
 
         let page_overrides = overrides
@@ -632,10 +569,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
             .filter(|_| rule.is_some())
             .unwrap_or_default();
 
-        // A materialized override replaces its occurrence through
-        // RECURRENCE-ID, so it must not also be excluded — an EXDATE would
-        // delete the instance the override is there to redefine. A `skipped`
-        // row has no instance to redefine, so it excludes instead.
+        // An override replaces its occurrence through RECURRENCE-ID, so an EXDATE would delete
+        // the instance it redefines. A `skipped` row redefines nothing, so it excludes instead.
         let mut exdates: BTreeSet<String> = BTreeSet::new();
         if let Some(rule) = rule {
             let stored: Vec<String> = serde_json::from_str(&rule.exdates_json).unwrap_or_default();
@@ -696,8 +631,6 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
             let Some(recurrence_id) = placement.occurrence_value(&over.original_date) else {
                 continue;
             };
-            // The moved instance keeps the series' value type by construction:
-            // it is the same event, so a timed series' override stays timed.
             let Some(moved) = Placement::build(
                 &over.start,
                 over.end.as_deref(),
@@ -738,8 +671,7 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
     );
     push_folded(&mut out, "CALSCALE:GREGORIAN");
 
-    // The window the generated zones must cover: every timed instant the export
-    // emitted, widened to whole years and out past any unbounded rule's horizon.
+    // The generated zones must cover every timed instant emitted, out past an unbounded rule's horizon.
     if let Some((lo, hi)) = span {
         let from = january_first(lo.date().year());
         let to =
@@ -760,9 +692,7 @@ fn january_first(year: i32) -> NaiveDateTime {
         .and_time(NaiveTime::MIN)
 }
 
-// A child module (rather than a sibling in `dev/tests.rs`) because the folding,
-// escaping and offset helpers it pins are private to this file — testing them
-// through a sibling would mean widening them for the tests' benefit.
+// A child module because the helpers it pins are private to this file.
 #[cfg(test)]
 #[path = "export_ics_tests.rs"]
 mod tests;

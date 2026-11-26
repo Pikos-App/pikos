@@ -30,7 +30,6 @@ const MAX_EMPTY_PERIODS: u32 = 1200;
 struct OccurrenceIter<'a> {
     rule: &'a ParsedRule,
     dtstart: NaiveDate,
-    /// Anchor time-of-day; drives the datetime used for UNTIL comparison.
     anchor_time: NaiveTime,
     period: i64,
     buffer: std::collections::VecDeque<NaiveDate>,
@@ -113,9 +112,6 @@ impl Iterator for OccurrenceIter<'_> {
     }
 }
 
-/// Rule-matching dates within period index `m`, sorted, deduped, and
-/// BYSETPOS-filtered; the iterator applies the `>= dtstart` / COUNT / UNTIL
-/// constraints.
 fn candidates_for(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let mut dates = match rule.freq {
         Freq::Daily => daily_candidates(rule, dtstart, m),
@@ -180,9 +176,7 @@ fn weekly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naive
         .collect()
 }
 
-/// Dates one month contributes under the BY* parts — shared by MONTHLY periods
-/// and YEARLY periods with BYMONTH. BYDAY+BYMONTHDAY together intersect
-/// (RFC 5545: BYMONTHDAY limits BYDAY).
+/// BYDAY+BYMONTHDAY together intersect (RFC 5545: BYMONTHDAY limits BYDAY).
 fn month_candidates(rule: &ParsedRule, year: i32, month: u32, anchor_day: u32) -> Vec<NaiveDate> {
     if !rule.byday.is_empty() {
         let mut expanded: Vec<NaiveDate> = rule
@@ -222,8 +216,6 @@ fn monthly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naiv
 fn yearly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let year = dtstart.year() + (m * rule.interval as i64) as i32;
     if !rule.byday.is_empty() && rule.bymonth.is_empty() {
-        // BYDAY over the whole year ("last Sunday of the year"), optionally
-        // limited by BYMONTHDAY.
         let mut expanded: Vec<NaiveDate> = rule
             .byday
             .iter()
@@ -249,8 +241,6 @@ fn yearly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naive
         .collect()
 }
 
-/// Picks BYSETPOS positions (1-based; negative from the end) out of the sorted
-/// period candidates.
 fn apply_setpos(sorted: &[NaiveDate], setpos: &[i32]) -> Vec<NaiveDate> {
     let len = sorted.len() as i32;
     let mut picked: Vec<NaiveDate> = setpos
@@ -265,8 +255,6 @@ fn apply_setpos(sorted: &[NaiveDate], setpos: &[i32]) -> Vec<NaiveDate> {
     picked
 }
 
-/// Filters weekday-matching dates to the BYDAY ordinal when one is set
-/// (`1MO` = first, `-1FR` = last, counted over the containing period).
 fn select_ordinal(all: Vec<NaiveDate>, ordinal: Option<i32>) -> Vec<NaiveDate> {
     match ordinal {
         None => all,
@@ -282,8 +270,6 @@ fn select_ordinal(all: Vec<NaiveDate>, ordinal: Option<i32>) -> Vec<NaiveDate> {
     }
 }
 
-/// All dates in `(year, month)` whose weekday matches `b`, filtered to the
-/// ordinal if one is set.
 fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
     let mut all = Vec::new();
     let mut day = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
@@ -299,8 +285,6 @@ fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
     select_ordinal(all, b.ordinal)
 }
 
-/// All dates in `year` whose weekday matches `b`, with the ordinal counted over
-/// the whole year (`-1SU` = the year's last Sunday).
 fn byday_in_year(year: i32, b: &ByDay) -> Vec<NaiveDate> {
     let Some(start) = NaiveDate::from_ymd_opt(year, 1, 1) else {
         return vec![];
@@ -321,10 +305,6 @@ fn resolve_monthday(year: i32, month: u32, md: i32) -> Option<NaiveDate> {
         .flatten()
 }
 
-// ─── Public operations (mirrors of recurrence.ts) ────────────────────────────
-
-/// Expands a rule into occurrences within `[range_start, range_end)`, skipping
-/// `exdates`. Mirrors `expandRecurrenceForRange`.
 pub fn expand_range(
     rrule: &str,
     start: &str,
@@ -368,8 +348,6 @@ pub fn expand_range(
     Ok(out)
 }
 
-/// Next occurrence strictly after the end of `after`'s day, skipping `exdates`.
-/// Mirrors `nextOccurrenceAfter` (which always returns a null end).
 pub fn next_occurrence_after(
     rrule: &str,
     start: &str,
@@ -387,8 +365,6 @@ pub fn next_occurrence_after(
     Ok(occ.map(|o| (o.format(), None)))
 }
 
-/// Snaps `anchor` to the first occurrence the rule permits on or after it,
-/// preserving the anchor's time. Mirrors `snapAnchorToRule`.
 pub fn snap_anchor_to_rule(rrule: &str, anchor: &str) -> String {
     let (Ok(rule), Some(wc)) = (ParsedRule::parse(rrule), WallClock::parse(anchor)) else {
         return anchor.to_string();
@@ -401,13 +377,10 @@ pub fn snap_anchor_to_rule(rrule: &str, anchor: &str) -> String {
 }
 
 /// Snaps `start` onto the rule and carries `end` the same whole-day distance, so
-/// the span the user described survives the snap. Mirrors `snapScheduleToRule`.
+/// the span the user described survives the snap.
 ///
-/// Shifting by whole days rather than rebuilding the end from the new start is
-/// what keeps a multi-day range intact — [`compute_next_end`] puts the end's time
-/// on the start's date, which is right for advancing an occurrence and wrong
-/// here, where it would collapse "Mon to Wed" into a single day. Without any
-/// shift the end stays where it was parsed and can precede the snapped start.
+/// [`compute_next_end`] would put the end's time on the start's date, collapsing
+/// "Mon to Wed" into one day; with no shift at all the end can precede the start.
 pub fn snap_schedule_to_rule(
     rrule: &str,
     start: &str,
@@ -431,8 +404,8 @@ pub fn snap_schedule_to_rule(
     (snapped, shifted)
 }
 
-/// Realigns a single-BYDAY weekly rule's weekday to a moved anchor. Mirrors
-/// `alignWeeklyRuleToAnchor` — returns the input verbatim when not applicable.
+/// Realigns a single-BYDAY weekly rule's weekday to a moved anchor; the input
+/// comes back verbatim when not applicable.
 pub fn align_weekly_rule_to_anchor(rrule: &str, anchor_start: &str) -> String {
     let Some(opts) = parse_rrule(rrule) else {
         return rrule.to_string();
@@ -458,8 +431,6 @@ pub fn align_weekly_rule_to_anchor(rrule: &str, anchor_start: &str) -> String {
     })
 }
 
-/// `YYYY-MM-DD` for every occurrence strictly after `after` and strictly before
-/// `before`, skipping `exdates`. Mirrors `missedOccurrencesBetween`.
 pub fn missed_occurrences_between(
     rrule: &str,
     start: &str,
@@ -501,15 +472,12 @@ pub fn missed_occurrences_between(
 }
 
 /// First occurrence from the anchor not in `exclusions` (day-keyed, see
-/// [`date_key`]); `None` once a finite series is exhausted. Enumeration walks
-/// forward from the base, so it may land in the past (an overdue head) — the
-/// exclusion set, not `now`, decides where the head sits.
+/// [`date_key`]); `None` once a finite series is exhausted. It may land in the
+/// past (an overdue head): the exclusion set, not `now`, decides where it sits.
 ///
 /// `floor` bounds the head's date for a synced series whose `DTSTART` predates
-/// the connected window: the provider still returns the original start if it
-/// yields instances in the window, but nothing before the connection was ever
-/// the user's to complete. Moves the head only forward, so real completion
-/// history still advances past it. `None` for native series, which own their base.
+/// the connected window, since nothing before the connection was the user's to
+/// complete. It only moves the head forward. `None` for native series.
 pub fn oldest_open_occurrence(
     rrule: &str,
     start: &str,
@@ -546,10 +514,9 @@ pub fn oldest_open_occurrence(
 }
 
 /// Occurrences whose start wall-clock lands in the inclusive `[lo, hi]` range,
-/// skipping `exclusions`. Unlike [`expand_range`], this seeks near `lo` (no COUNT
-/// to preserve) since the reminder window sits near `now`, arbitrarily far from a
-/// synced series' base. Runs to COUNT/UNTIL, so a far-future occurrence in range
-/// is never dropped by a cap.
+/// skipping `exclusions`. Seeks near `lo` (the reminder window sits near `now`,
+/// arbitrarily far from a synced series' base) and runs to COUNT/UNTIL, so no cap
+/// drops a far-future occurrence.
 pub fn occurrences_in_window(
     rrule: &str,
     start: &str,
@@ -601,10 +568,8 @@ fn date_key(s: &str) -> &str {
     &s[..s.len().min(10)]
 }
 
-/// First `limit` occurrences anchored at `dtstart`, as wall-clock strings.
-/// Empty on an invalid or out-of-envelope rule — consumers (the NL parser's
-/// finite expansion, the rrule.js goldens) treat that the same as an exhausted
-/// series.
+/// First `limit` occurrences anchored at `dtstart`, as wall-clock strings. Empty on
+/// an invalid or out-of-envelope rule, the same as an exhausted series.
 pub fn list_occurrences(rrule: &str, dtstart: &str, limit: u32) -> Vec<String> {
     let (Ok(rule), Some(anchor)) = (ParsedRule::parse(rrule), WallClock::parse(dtstart)) else {
         return vec![];
@@ -617,7 +582,7 @@ pub fn list_occurrences(rrule: &str, dtstart: &str, limit: u32) -> Vec<String> {
 }
 
 /// Applies the base occurrence's duration to `next_start`, rolling an overnight
-/// end to the following day. Mirrors `computeNextEnd`; `None` for all-day.
+/// end to the following day. `None` for all-day.
 pub fn compute_next_end(base_end: &str, next_start: &str) -> Option<String> {
     let base = WallClock::parse(base_end)?;
     let next = WallClock::parse(next_start)?;
@@ -635,10 +600,6 @@ pub fn compute_next_end(base_end: &str, next_start: &str) -> Option<String> {
     )
 }
 
-// ─── Enumeration helpers ─────────────────────────────────────────────────────
-
-/// First occurrence whose datetime is `>`/`>=` (per `inclusive`) `cursor`,
-/// skipping `excluded`. Seeks near the cursor when there's no COUNT to preserve.
 fn seek_after(
     rule: &ParsedRule,
     anchor: &WallClock,
@@ -666,8 +627,6 @@ fn seek_after(
     None
 }
 
-/// The occurrence on `date` carrying the anchor's time (or all-day when the
-/// anchor is date-only).
 fn occ_wallclock(anchor: &WallClock, date: NaiveDate) -> WallClock {
     WallClock {
         date,
@@ -681,15 +640,13 @@ fn occ_wallclock(anchor: &WallClock, date: NaiveDate) -> WallClock {
 /// minutes and rebuilding the end as a datetime is what collapsed a seven-day
 /// series into one bar per occurrence, and minted a done clone with no end at
 /// all. The day count is the difference between the two stored dates, so it holds
-/// whichever end convention the caller stores — carrying the delta reproduces the
-/// base either way.
+/// whichever end convention the caller stores.
 #[derive(Clone, Copy)]
 enum BaseSpan {
     Minutes(i64),
     Days(i64),
 }
 
-/// The base's span, or `None` when it has no end to carry.
 fn base_span(anchor: &WallClock, end: Option<&str>) -> Option<BaseSpan> {
     let end = WallClock::parse(end?)?;
     if anchor.is_all_day() {
@@ -728,8 +685,6 @@ fn parse_dt(s: &str) -> Result<NaiveDateTime, RecurrenceError> {
         .map(|w| w.as_datetime())
         .ok_or_else(|| RecurrenceError::Parse(s.to_string()))
 }
-
-// ─── Date arithmetic (rrule.js weekday convention: 0 = Monday) ───────────────
 
 fn weekday_index(date: NaiveDate) -> u8 {
     date.weekday().num_days_from_monday() as u8
@@ -773,7 +728,6 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     first_next.pred_opt().unwrap().day()
 }
 
-/// Where a moved anchor lands, and the rule that follows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnchorMove {
     /// The rule realigned to the new weekday, or `None` when the rule is one the editor is
@@ -783,9 +737,8 @@ pub struct AnchorMove {
     pub end: Option<String>,
 }
 
-/// Mirrors `resolveAnchorMove`, whose doc says why each of its two corrections is needed:
-/// realign a single-weekday weekly rule to the moved day, then snap an off-pattern drop onto a
-/// day the rule yields, carrying the end across.
+/// Realigns a single-weekday weekly rule to the moved day, then snaps an off-pattern
+/// drop onto a day the rule yields, carrying the end across. Mirrors `resolveAnchorMove`.
 pub fn resolve_anchor_move(rrule: &str, start: &str, end: Option<&str>) -> AnchorMove {
     let aligned = (!crate::rule::rrule_edit_would_degrade(rrule))
         .then(|| align_weekly_rule_to_anchor(rrule, start));

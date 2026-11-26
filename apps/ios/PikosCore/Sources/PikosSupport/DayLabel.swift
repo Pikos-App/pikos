@@ -2,42 +2,29 @@ import Foundation
 
 /// What a `YYYY-MM-DD` day is called in a list, and how to produce one.
 ///
-/// The shared Rust deliberately stops at the date. Building "Today" /
-/// "Tomorrow" / "Thu, 27 Aug" there would mean a second locale implementation,
-/// and a phone that says "Thu, Aug 27" to a reader whose every other app says
-/// "Thu 27 Aug" reads as a port rather than as an app. So the date crosses the
-/// boundary and the naming happens here, against the reader's own locale.
+/// The shared Rust stops at the date, so the naming happens here against the
+/// reader's own locale instead of a second locale implementation there.
 ///
-/// A `YYYY-MM-DD` in this app is always a **proleptic Gregorian** date, because
+/// A `YYYY-MM-DD` in this app is always a proleptic Gregorian date, because
 /// that is what SQLite holds and what the Rust compares. The reader's calendar
-/// decides how a date is *shown*, never how one is parsed or written — a device
-/// set to the Buddhist calendar numbers 2026 as 2569, and a key built from its
-/// components matches no row in the database and empties the view with nothing
-/// logged. Hence [`gregorian(like:)`]: every arithmetic path below borrows only
-/// the time zone from the caller's calendar.
-///
-/// In `PikosSupport` rather than in a view so it can be tested on the host: the
-/// interesting cases are the two relative words, the boundary between them and
-/// the calendar trap, and none of that needs a simulator.
+/// decides how a date is shown, never how one is parsed or written: a device
+/// on the Buddhist calendar numbers 2026 as 2569, and a key built from that
+/// matches no row and empties the view with nothing logged. Hence
+/// [`gregorian(like:)`], which borrows only the time zone from the caller's calendar.
 public enum DayLabel {
     /// "Today", "Tomorrow", or a short date in the reader's locale.
     ///
-    /// `today` is passed in rather than read from the clock because it is a
-    /// boundary — a list rendered at 23:59:59 and asked again a second later
-    /// must not disagree with itself about which day is "Today", and a test has
-    /// to be able to stand on both sides of midnight.
+    /// `today` is passed in, not read from the clock, so a list can't disagree
+    /// with itself across midnight and a test can stand on both sides of it.
     ///
-    /// Falls back to the raw date for anything it cannot read, which is the
-    /// same choice the rest of the app makes: a stamp shown as itself is a
-    /// visible fault, and a plausible wrong date is not.
+    /// Falls back to the raw date for anything it cannot read: a stamp shown as
+    /// itself is a visible fault, and a plausible wrong date is not.
     public static func relative(
         _ date: String, today: String, calendar: Calendar = .current
     ) -> String {
         if date == today { return "Today" }
         guard let day = self.date(from: date, in: calendar) else { return date }
 
-        // Compared as dates rather than as strings, so the day after the 31st
-        // and the day after a leap February both land where they should.
         let arithmetic = gregorian(like: calendar)
         if let todayDate = self.date(from: today, in: calendar),
             let tomorrow = arithmetic.date(byAdding: .day, value: 1, to: todayDate),
@@ -46,21 +33,14 @@ public enum DayLabel {
             return "Tomorrow"
         }
 
-        // Formatted through the reader's own locale, which is the one thing
-        // here that *should* follow a non-Gregorian device setting.
+        // The one place that should follow a non-Gregorian device setting.
         return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
-    /// A bare day, for listing several at once — "Tue 5 May" where the reader
-    /// writes it that way, "Tue, May 5" where they do not.
+    /// A bare day for listing several at once, in the reader's locale order.
     ///
-    /// Never relative. [`relative`] is for a heading over one section, where
-    /// "Today" is the most useful thing a reader can be told; in a list of
-    /// missed days that reads as a mistake, because none of them is today.
-    ///
-    /// Falls back to the raw date for anything it cannot read, like the rest of
-    /// this file: a stamp shown as itself is a visible fault, and a plausible
-    /// wrong date is not.
+    /// Never relative: in a list of missed days "Today" would read as a mistake.
+    /// Falls back to the raw date, like [`relative`].
     public static func short(_ date: String, calendar: Calendar = .current) -> String {
         guard let day = self.date(from: date, in: calendar) else { return date }
         return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
@@ -68,10 +48,8 @@ public enum DayLabel {
 
     /// Today, as the `YYYY-MM-DD` key the shared Rust compares against.
     ///
-    /// Built by hand from Gregorian components rather than through a
-    /// `DateFormatter`: this is a storage key, not something a reader sees, and
-    /// a formatter carrying the device's calendar would write a Buddhist or
-    /// Japanese year that matches nothing.
+    /// Built by hand, not through a `DateFormatter`, which would write the
+    /// device calendar's Buddhist or Japanese year into a storage key.
     public static func today(_ calendar: Calendar = .current, now: Date = Date()) -> String {
         let parts = gregorian(like: calendar).dateComponents([.year, .month, .day], from: now)
         guard let year = parts.year, let month = parts.month, let day = parts.day else { return "" }
@@ -80,11 +58,8 @@ public enum DayLabel {
 
     /// A `YYYY-MM-DD` string as noon on that day, in the caller's time zone.
     ///
-    /// Noon rather than midnight on purpose. These are wall-clock days with no
-    /// zone, and midnight is the one instant a DST transition can delete — in a
-    /// zone that springs forward at 00:00, midnight on that date does not
-    /// exist, and asking for it yields either nil or the previous day. Noon is
-    /// never in a gap, and nothing here reads the time.
+    /// Noon, not midnight: a zone that springs forward at 00:00 has no midnight
+    /// on that date, and asking for it yields nil or the previous day.
     public static func date(from day: String, in calendar: Calendar = .current) -> Date? {
         let parts = day.split(separator: "-")
         guard parts.count == 3,
@@ -100,13 +75,11 @@ public enum DayLabel {
 
     /// A Gregorian calendar in the same time zone as `calendar`.
     ///
-    /// Internal rather than private: `StorageTimestamp.wallClock` needs the same
-    /// guarantee for the same reason, and two copies of "force Gregorian, keep
-    /// the zone" is one place for them to disagree.
+    /// Internal, not private, so `StorageTimestamp.wallClock` shares the one
+    /// "force Gregorian, keep the zone" rather than keeping a copy.
     ///
-    /// The time zone is the caller's business — which instant "2026-09-13 noon"
-    /// is depends on where they are. Which *numbering system* names that day is
-    /// not: the database has exactly one answer.
+    /// The time zone is the caller's; the numbering system is not, since the
+    /// database has one answer.
     static func gregorian(like calendar: Calendar) -> Calendar {
         if calendar.identifier == .gregorian { return calendar }
         var copy = Calendar(identifier: .gregorian)

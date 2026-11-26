@@ -30,7 +30,6 @@ pub struct GoogleCredentials {
 }
 
 impl GoogleCredentials {
-    /// Serialize for the keychain. The blob is opaque to the store.
     pub fn to_blob(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }

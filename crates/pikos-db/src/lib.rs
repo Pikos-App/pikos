@@ -1,9 +1,6 @@
-//! pikos-db — the Pikos local SQLite data layer.
-//!
-//! Schema/migrations, the pool opener (WAL + pragmas), and the writer functions
-//! (`*_impl`) plus their IO types. Tauri-free: the desktop app wraps these in
-//! `#[tauri::command]` shims, and the CLI calls them directly — one writer, one
-//! source of truth.
+//! The local SQLite data layer: migrations, the pool opener, and the writer
+//! functions with their IO types. Tauri-free, so the desktop app and the CLI
+//! call the same writers.
 
 // The sqlx QueryBuilder pattern uses drop(fields) to release the Separated
 // borrow before pushing additional clauses — clippy flags this but it's required.
@@ -42,15 +39,13 @@ pub mod views;
 
 /// The Tiptap document schema this build writes and can safely read.
 ///
-/// Single source of truth for the `pages.content_schema_version` column added
-/// in migration 023. Bump it in the same commit that changes the editor's
-/// document schema — a new node type, a renamed attribute, anything that makes
-/// an older build's round-trip lossy — and ship a content migration alongside.
+/// Stamped into `pages.content_schema_version`. Bump it in the same commit that
+/// changes the editor's document schema (a new node type, a renamed attribute,
+/// anything that makes an older build's round-trip lossy) and ship a content
+/// migration alongside.
 ///
-/// The number is not a version of *this crate* or of the app. It versions the
-/// shape of `pages.content` alone, which is why it lives beside the data layer
-/// rather than in the editor package: the database is what outlives any one
-/// client, and with iOS in the picture there is more than one client.
+/// It versions the shape of `pages.content` alone, not this crate or the app,
+/// so it lives beside the database that outlives any one client.
 pub const CONTENT_SCHEMA_VERSION: i64 = 2;
 
 pub use backups::{
@@ -86,17 +81,10 @@ pub use tags::*;
 
 #[cfg(test)]
 mod content_schema_version_tests {
-    //! Guards the one constant that exists on both sides of the language
-    //! boundary. `CONTENT_SCHEMA_VERSION` is mirrored in
-    //! `packages/core/src/types.ts` so TypeScript callers can stamp mock pages
-    //! and reason about document compatibility. Two copies of a number that
-    //! must agree is exactly the kind of thing that silently drifts, and the
-    //! failure mode when it does — a client believing it can safely write a
-    //! document shape it cannot represent — is data loss rather than a crash.
-    //!
-    //! Reading the TypeScript source from a Rust test is unusual, but it is the
-    //! only place the check can live and still fail at the moment somebody
-    //! bumps one side.
+    //! `CONTENT_SCHEMA_VERSION` is mirrored in `packages/core/src/types.ts`. If the
+    //! copies drift, a client can write a document shape it cannot represent,
+    //! which loses data instead of crashing, so this test fails when one side is
+    //! bumped alone.
 
     use std::path::PathBuf;
 

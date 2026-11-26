@@ -1,15 +1,10 @@
-// Ground truth for the Rust date-expression engine.
+// Ground truth for the Rust date-expression engine. The parser reads four things back from
+// chrono: the matched span, per-field certainty, the resolved start and a range end. That is all
+// chrono does for Pikos, so a replacement must reproduce it (crates/pikos-core/src/nlp/mod.rs).
 //
-// The parser hands chrono a string and reads four things back: the matched
-// span, per-field certainty, the resolved start, and a range end. Those four
-// are the whole of what chrono-node does for Pikos, so they are what a
-// replacement has to reproduce (see the crate docs in
-// crates/pikos-core/src/nlp/mod.rs).
-//
-// This records all four for every distinct expression the corpus exercises, at
-// every pinned reference time, by calling chrono directly. Development-grade
-// detail: the acceptance bar remains the full parser corpus, which exercises
-// these through the parser rather than around it.
+// This records all four for every distinct corpus expression at every pinned reference time,
+// calling chrono directly. The acceptance bar remains the full parser corpus, which exercises
+// them through the parser.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,7 +16,7 @@ const chrono = createRequire(import.meta.url)("chrono-node") as typeof ChronoNod
 
 const GRANULARITIES = ["hour", "minute", "second", "day", "month", "year", "weekday"] as const;
 
-/** Matches the reference times in the parser corpus. */
+/** The parser corpus's reference times. */
 const REFERENCES: { id: string; iso: string }[] = [
   { id: "sun_noon", iso: "2026-03-15T12:00:00" },
   { id: "wed_noon", iso: "2026-03-18T12:00:00" },
@@ -49,7 +44,6 @@ function packageRoot(): string {
   }
 }
 
-/** Local wall-clock ISO, matching how Pikos stores dates. */
 function localIso(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
@@ -61,7 +55,7 @@ function localIso(date: Date): string {
 interface Case {
   expression: string;
   ref: string;
-  /** Null when chrono found no date in the expression. */
+  /** Null when chrono found no date. */
   result: {
     index: number;
     text: string;

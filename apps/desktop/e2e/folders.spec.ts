@@ -2,8 +2,6 @@ import { expect } from "@playwright/test";
 
 import { test as appTest, createFolder, quickAdd } from "./fixtures";
 
-// ─── Create and navigate folders ───────────────────────────────────────────
-
 appTest("create and navigate folders @smoke", async ({ app }) => {
   const sidebar = app.getByRole("group", { name: "Views and folders" });
   const folderBtn = sidebar.getByRole("button", { exact: true, name: "Projects" });
@@ -13,7 +11,6 @@ appTest("create and navigate folders @smoke", async ({ app }) => {
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
   await expect(app.getByText("No pages")).toBeVisible();
 
-  // Create a page — it lands in the current folder
   await quickAdd(app, "folder page");
   await expect(app.locator("[data-page-list-item]").getByText("folder page")).toBeVisible();
 
@@ -22,7 +19,6 @@ appTest("create and navigate folders @smoke", async ({ app }) => {
     app.locator("[data-page-list-item]").filter({ hasText: "folder page" })
   ).not.toBeVisible();
 
-  // Delete the folder — right-click → Delete — no confirmation dialog, just undo toast
   await folderBtn.click({ button: "right" });
   await app.getByRole("menuitem", { name: "Delete" }).click();
 
@@ -42,18 +38,8 @@ appTest("create and navigate folders @smoke", async ({ app }) => {
   await expect(app.locator("[data-page-list-item]").getByText("folder page")).toBeVisible();
 });
 
-// ─── Drag a folder to reorder ───────────────────────────────────────────────
-//
-// useThreePanelDnD's `at === "folder" && ot === "folder"` branch handles
-// folder→folder reordering via arrayMove. Manual sort (the default) shows
-// folders in the workspace's intrinsic order, so a drag should swap the
-// rendered position. A regression that ignored the drop event would
-// silently leave the order untouched.
-
 appTest("drag a folder to reorder its position in the sidebar", async ({ app }) => {
-  // Seed three folders. New folders are inserted at the top of the list, so
-  // creating in order Alpha → Beta → Gamma yields [Gamma, Beta, Alpha] in
-  // the sidebar. Read the actual order before asserting reorder semantics.
+  // New folders insert at the top; read the actual order rather than assume it.
   await createFolder(app, "Alpha");
   await createFolder(app, "Beta");
   await createFolder(app, "Gamma");
@@ -64,8 +50,6 @@ appTest("drag a folder to reorder its position in the sidebar", async ({ app }) 
   );
   await expect(folderItems).toHaveCount(3);
 
-  // Capture initial top→bottom names so we can assert the order changed,
-  // not assume a specific insert direction.
   async function readOrder(): Promise<string[]> {
     const names: string[] = [];
     const count = await folderItems.count();
@@ -77,8 +61,7 @@ appTest("drag a folder to reorder its position in the sidebar", async ({ app }) 
   const initial = await readOrder();
   expect(initial).toHaveLength(3);
 
-  // Drag the LAST folder to the FIRST folder's position. dnd-kit activation
-  // is 8 px — nudge before moving onto the target.
+  // dnd-kit activates after 8 px: nudge before moving onto the target.
   const lastFolder = sidebar.getByRole("button", { exact: true, name: initial[2]! });
   const firstFolder = sidebar.getByRole("button", { exact: true, name: initial[0]! });
   const lastBox = await lastFolder.boundingBox();
@@ -87,7 +70,6 @@ appTest("drag a folder to reorder its position in the sidebar", async ({ app }) 
 
   await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2);
   await app.mouse.down();
-  // Move up to cross the activation threshold, then onto the first folder.
   await app.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height / 2 - 16, {
     steps: 4,
   });
@@ -96,23 +78,16 @@ appTest("drag a folder to reorder its position in the sidebar", async ({ app }) 
   });
   await app.mouse.up();
 
-  // The reorder is an optimistic update after dragEnd — DOM updates a tick
-  // later. Wait for the leading folder to flip; otherwise readOrder() may
-  // race the post-drop render.
+  // The reorder is optimistic, so the DOM updates a tick after dragEnd; wait for the leading folder to flip.
   await expect
     .poll(async () => (await folderItems.first().getAttribute("aria-label")) ?? "")
     .not.toBe(initial[0]);
 
   const reordered = await readOrder();
   expect(reordered).toHaveLength(3);
-  // Same three folders, different order. Compare on copies because
-  // Array.prototype.sort mutates in place. Specifics of arrayMove aren't
-  // pinned — we lock down the contract that drag actually re-arranged the list.
   expect([...reordered].sort()).toEqual([...initial].sort());
   expect(reordered).not.toEqual(initial);
 });
-
-// ─── Badges ────────────────────────────────────────────────────────────────
 
 appTest(
   "the sidebar badges follow a page as it's created, moved, completed and deleted",

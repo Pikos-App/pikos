@@ -16,17 +16,15 @@ import { chipFolderStyle } from "../utils/calendarColors";
 import { CALENDAR_GUTTER_WIDTH } from "../utils/gutterWidth";
 import { AllDayBar } from "./AllDayBar";
 
-/** Rows drawn past each edge of the strip's scrolled view, so a scroll shows bars already drawn. A
- *  busy week holds hundreds of bars in a strip a few rows tall, and drawing them all was most of
- *  the cost of showing the week. */
+/** Rows drawn past each edge of the strip's scrolled view. A busy week holds hundreds of bars in
+ *  a strip a few rows tall, and drawing them all was most of the cost of showing the week. */
 const OVERSCAN_ROWS = 4;
 
 interface AllDaySectionProps {
   allDayDragHoverIndex: number | null;
   autoOpenPageId: string | null;
-  /** When set, render a ghost overlay spanning [startDayIndex..endDayIndex] at
-   * the first-free row of the spanned columns during a drag-to-create gesture.
-   * Absolute-positioned — doesn't participate in bar layout. */
+  /** Ghost overlay spanning [startDayIndex..endDayIndex] at the first-free row during drag-to-create;
+   *  absolute, so it stays outside bar layout. */
   createPreview: { startDayIndex: number; endDayIndex: number } | null;
   days: Date[];
   draggingPageId: string | null;
@@ -37,7 +35,6 @@ interface AllDaySectionProps {
     pageId: string;
     originalDate?: string;
   }) => void;
-  /** Press on empty all-day cells — WeekGrid decides click-vs-drag at release. */
   onCreateDragStart: (info: { clientX: number; clientY: number; dayIndex: number }) => void;
   onEdgeResizeStart: (info: {
     clientX: number;
@@ -53,10 +50,9 @@ interface AllDaySectionProps {
 }
 
 /**
- * All-day event strip between the day-name row and the time grid. Each event
- * renders as a single absolutely-positioned bar spanning its columns; the day
- * columns are thin background elements handling weekend striping, dividers,
- * drag-target highlight, and click-to-create.
+ * All-day event strip between the day-name row and the time grid. Each event is one
+ * absolutely-positioned bar spanning its columns; the day columns are thin backgrounds that
+ * handle striping, dividers, drag-target highlight and click-to-create.
  */
 export function AllDaySection({
   allDayDragHoverIndex,
@@ -83,15 +79,12 @@ export function AllDaySection({
   const bars = buildAllDayBars(slotsByDay);
   const rowCount = slotsByDay[0]?.length ?? 0;
   const columnCount = days.length;
-  // Reserve enough height for every row plus symmetric top/bottom padding.
-  // min-h-full on the scroll container ensures backgrounds still reach the
-  // bottom edge when the bar count is short.
+  // Every row plus symmetric padding; min-h-full keeps backgrounds reaching the bottom when bars are few.
   const contentMinHeight = metrics.allDayTopPadding * 2 + rowCount * metrics.allDayRowHeight;
 
-  // Auto-open fires on at most one bar. `!continuesLeft` rules out week-crossed
-  // continuation bars (autoOpen targets a newly-created page, which always
-  // starts inside the current view), and if multiple bars still match (shared-
-  // id recurring), the first one wins deterministically.
+  // Auto-open fires on at most one bar. `!continuesLeft` rules out week-crossed continuations
+  // (autoOpen targets a newly created page, which starts inside the view); if several bars still
+  // match (shared-id recurring), the first wins.
   const autoOpenBarKey = autoOpenPageId
     ? (bars.find((b) => b.page.id === autoOpenPageId && !b.continuesLeft)?.key ?? null)
     : null;
@@ -107,15 +100,13 @@ export function AllDaySection({
       bar.page.id === draggingPageId
   );
 
-  // Normalise create-preview bounds (the drag could go in either direction).
   const previewBounds = createPreview
     ? {
         hi: Math.max(createPreview.startDayIndex, createPreview.endDayIndex),
         lo: Math.min(createPreview.startDayIndex, createPreview.endDayIndex),
       }
     : null;
-  // Ghost row matches where assignAllDayRows will actually place the new bar
-  // on commit, so there's no visual jump when the ghost becomes a real bar.
+  // Matches where assignAllDayRows places the new bar on commit, so the ghost doesn't jump.
   const previewTopPx = previewBounds
     ? metrics.allDayTopPadding +
       firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * metrics.allDayRowHeight
@@ -123,18 +114,13 @@ export function AllDaySection({
 
   function handleColumnPointerDown(e: React.PointerEvent, dayIndex: number) {
     if (!e.isPrimary || e.button !== 0) return;
-    // Prevent the native press from starting a text selection — dragging the
-    // pointer across nearby bar labels would otherwise highlight them.
     e.preventDefault();
     onCreateDragStart({ clientX: e.clientX, clientY: e.clientY, dayIndex });
   }
 
   return (
     <div className="relative shrink-0 border-b border-border/50" style={{ height }}>
-      {/* Vertical scroll container — when bar count exceeds the user-set
-          section height, scroll instead of clipping. `min-h-full` keeps the
-          columns tall when bars are short so weekend bg + dividers reach the
-          bottom edge. */}
+      {/* Scrolls rather than clips past the user-set height; `min-h-full` keeps weekend bg and dividers to the bottom edge. */}
       <div
         aria-label="All-day events"
         className="h-full overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden"
@@ -153,13 +139,9 @@ export function AllDaySection({
                 <div
                   aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
                   className={cn(
-                    // The same divider the time grid draws, rather than a look-alike:
-                    // a pseudo-element at a different opacity antialiased differently
-                    // on a fractional column edge, which read as the all-day lines
-                    // sitting a pixel off the ones below. Unlike the grid, the first
-                    // column keeps its border — the gutter beside it is empty here,
-                    // so the line closes the row, where in the grid it would fence
-                    // off the hour labels.
+                    // The same divider the time grid draws, not a look-alike: a pseudo-element at another opacity
+                    // antialiased differently on a fractional column edge and sat a pixel off. Unlike the grid, the
+                    // first column keeps its border: the gutter beside it is empty here, so the line closes the row.
                     "relative min-w-0 flex-1 cursor-cell border-l border-border/50",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
@@ -173,10 +155,8 @@ export function AllDaySection({
               );
             })}
 
-            {/* Bars overlay — wrapper is pointer-events-none so empty space
-                routes clicks through to the background columns beneath. Each
-                bar re-enables pointer-events-auto on itself. No aria-hidden:
-                that would take every bar out of the accessibility tree. */}
+            {/* pointer-events-none routes clicks on empty space to the columns beneath; each bar re-enables
+                it. No aria-hidden: that would take every bar out of the accessibility tree. */}
             <div className="pointer-events-none absolute inset-0">
               {drawnBars.map((bar) => {
                 const folderColor = bar.page.folderId
@@ -219,11 +199,9 @@ export function AllDaySection({
         </div>
       </div>
 
-      {/* Drag handle — bottom edge. Always-visible 3px bar so it stays
-          grippable when the all-day section scrolls. `z-20` keeps it above
-          the bars overlay so chips covering the bottom don't steal the
-          press. `touch-none` because the bar's only gesture is the resize —
-          without it the browser claims a touch drag here for a scroll. */}
+      {/* Always-visible 3px bar so it stays grippable when the section scrolls. `z-20` keeps it above
+          the bars overlay; `touch-none` because its only gesture is the resize, and otherwise the
+          browser claims a touch drag here for a scroll. */}
       <div
         aria-label="Resize all-day section"
         className="absolute inset-x-0 bottom-0 z-20 h-[3px] cursor-row-resize touch-none bg-border/25 transition-colors duration-[var(--transition-fast)] hover:bg-border/60 active:bg-border/80"

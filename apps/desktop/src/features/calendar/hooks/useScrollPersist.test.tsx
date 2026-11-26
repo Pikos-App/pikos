@@ -1,10 +1,5 @@
-// useScrollPersist — covers initial restore (saved value → corresponding
-// scrollTop), smart-start fallback when no usable saved value, debounced
-// persistence on scroll, and one-shot restore (no re-pin on geometry change).
-//
-// The hook reads container height via ResizeObserver; jsdom doesn't ship one,
-// so we install a manual mock per test. A small Harness component attaches
-// the hook's scrollRef to a real div whose clientHeight we control.
+// jsdom has no ResizeObserver, so each test installs a mock; a Harness attaches the hook's
+// scrollRef to a div whose clientHeight we control.
 
 import type { CollapseGeometry } from "@pikos/core";
 import { buildCollapseGeometry } from "@pikos/core";
@@ -16,8 +11,6 @@ import { useScrollPersist } from "./useScrollPersist";
 
 const STORAGE_KEY = "pikos:test:scrollHour";
 
-// Geometry with both bands expanded so mapHourToY(h, geometry) === h * hourHeight.
-// 9am → 9 × 64 = 576 px, easy to read in assertions.
 function makeGeometry(): CollapseGeometry {
   return buildCollapseGeometry(
     { bottomCollapsed: false, bottomHour: 22, topCollapsed: false, topHour: 6 },
@@ -57,7 +50,6 @@ function Harness({
   return <div data-testid="scroll" ref={scrollRef} style={{ height: "100%" }} />;
 }
 
-/** Create a probe + a setter the harness uses to push live values out. */
 function makeProbe() {
   const probe: ProbeRef = { containerHeight: 0, scrollEl: null };
   function update(next: ProbeRef) {
@@ -67,8 +59,7 @@ function makeProbe() {
   return { probe, update };
 }
 
-/** Install a mock ResizeObserver + clientHeight stub. The clientHeight stub is
- * scoped to elements rendered AFTER `install` and reverts on `restore`. */
+/** The clientHeight stub covers elements rendered after `install` and reverts on `restore`. */
 function installResizeObserver(initialHeight: number) {
   const observers: Array<{
     target: Element;
@@ -100,7 +91,6 @@ function installResizeObserver(initialHeight: number) {
   });
 
   return {
-    /** Push a resize entry to all live observers. */
     pushResize(height: number) {
       const entry = {
         contentRect: { height },
@@ -146,7 +136,6 @@ describe("useScrollPersist — initial restore", () => {
     vi.setSystemTime(new Date(2026, 0, 1, 10, 0, 0));
     const { probe, update } = makeProbe();
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
-    // 10am → currentHour−1 = 9 > 7 → expect 9.
     expect(probe.scrollEl?.scrollTop).toBe(9 * 64);
     ro.restore();
   });
@@ -157,7 +146,6 @@ describe("useScrollPersist — initial restore", () => {
     vi.setSystemTime(new Date(2026, 0, 1, 8, 0, 0));
     const { probe, update } = makeProbe();
     render(<Harness geometry={makeGeometry()} onProbe={update} />);
-    // 8am → currentHour−1 = 7, floor 7 → expect 7.
     expect(probe.scrollEl?.scrollTop).toBe(7 * 64);
     ro.restore();
   });
@@ -181,7 +169,6 @@ describe("useScrollPersist — re-render semantics", () => {
     const { rerender } = render(<Harness geometry={initialGeom} onProbe={update} />);
     expect(probe.scrollEl?.scrollTop).toBe(576);
 
-    // User scrolls; then geometry recomputes (density flip, band toggle…).
     if (probe.scrollEl) probe.scrollEl.scrollTop = 1200;
     rerender(<Harness geometry={makeGeometry()} onProbe={update} />);
     // Restore must NOT re-fire — the in-session scroll position is preserved.

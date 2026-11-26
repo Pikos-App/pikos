@@ -3,8 +3,7 @@
 export type RescheduleVirtualInput = {
   ruleId: string;
   /**
-   * The rule-generated date being detached (YYYY-MM-DD) — merged into the
-   * rule's exdates so the virtual occurrence stops rendering.
+   * The rule-generated date being detached (YYYY-MM-DD), merged into the rule's exdates.
    */
   originalDate: string;
   scheduledStart: string;

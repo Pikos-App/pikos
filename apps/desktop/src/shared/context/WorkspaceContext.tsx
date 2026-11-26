@@ -1,8 +1,6 @@
-// WorkspaceContext — workspace lifecycle. Owns adapter, workspace identity,
-// init/seed/reset orchestration, and the event bus. Data state (pages,
-// folders, schedules, recurrence) lives in PagesContext; import flow lives
-// in ImportContext. Both nest inside this provider and dispatch their own
-// data load via a registered loader callback.
+// Workspace lifecycle: owns the adapter, workspace identity, init/seed/reset orchestration and
+// the event bus. Data state lives in PagesContext and ImportContext, which nest inside this
+// provider and load through a registered loader callback.
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
 import { watchWrites } from "@pikos/core";
@@ -37,47 +35,34 @@ type DataLoader = () => Promise<void>;
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
   isLoading: boolean;
-  /** Set when the auto-init or selectWorkspace path fails, or when any command
-   *  later finds the workspace file damaged. UI surfaces this so the user sees
-   *  the actual error + a guidance message instead of an indefinite blank
-   *  screen. No in-app retry — connect_db failure is almost always a
-   *  path/permission issue that needs a relaunch. */
+  /** Set when auto-init or selectWorkspace fails, or a command finds the workspace file damaged. No
+   *  in-app retry: connect_db failure is almost always a path or permission issue needing a relaunch. */
   loadError: unknown;
-  /** Reload pages + folders from the DB (e.g. after an external seed). */
   reload: () => Promise<void>;
-  /** First-launch: create default workspace + connect. Subsequent: already handled on mount. */
   selectWorkspace: () => Promise<void>;
-  /** Consume one-shot navigation target set by tutorial seed. Returns null if none pending. */
   consumePendingNavigation: () => { pageId: string; folderId: string } | null;
-  /** Dev tool: wipe all data and re-seed with a scenario. */
   resetAndSeed: (scenario: SeedScenario) => Promise<void>;
   on: <E extends WorkspaceEvent>(
     event: E,
     handler: (payload: WorkspaceEventPayloadMap[E]) => void
   ) => () => void;
-  /** Direct access to the storage adapter — used by features that need raw CRUD (e.g. reminders). */
   storage: StorageAdapter | null;
 }
 
 interface WorkspaceInternalValue extends WorkspaceContextValue {
   /** Always-defined adapter (use storage publicly to gate on workspace readiness). */
   adapter: StorageAdapter;
-  /** Lists loaded a window at a time; null while the full in-memory list is the only path. */
   viewCache: ViewCacheController;
-  /** The calendar's recurring occurrences, held while it is unmounted. */
   calendarExpansion: ExpansionHold;
   eventBus: WorkspaceEventBus;
-  /** Register a data loader called during init/reload/resetAndSeed. Pass null to unregister. */
   registerDataLoader: (loader: DataLoader | null) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceInternalValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  // The in-memory adapter comes out of its own chunk — see
-  // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
-  // time this runs, and what it throws if it isn't. The bridge lane uses the
-  // real adapter with its transport already repointed in main.tsx.
+  // The in-memory adapter comes out of its own chunk (see shared/adapters/mockStorageChunk.ts). The
+  // bridge lane uses the real adapter with its transport already repointed in main.tsx.
   const [{ adapter, calendarExpansion, viewCache }] = useState(() => {
     const raw: StorageAdapter =
       STORAGE_BACKEND === "mock" ? requireMockStorage() : new TauriSQLiteAdapter();
@@ -100,7 +85,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
 
-  // One-shot navigation target from tutorial seed — consumed once by AppShell.
   const pendingNavigationRef = useRef<{ pageId: string; folderId: string } | null>(null);
 
   function consumePendingNavigation(): { pageId: string; folderId: string } | null {
@@ -116,17 +100,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const eventBusRef = useRef(createWorkspaceEventBus());
   const eventBus = eventBusRef.current;
 
-  // PagesProvider registers its loader here on mount. Lifecycle calls it
-  // during init / selectWorkspace / resetAndSeed / reload so a single
-  // sequence (seed → set workspace → load data → emit) stays atomic.
+  // PagesProvider registers its loader here so the lifecycle's seed, set workspace, load data, emit
+  // sequence stays atomic.
   const dataLoaderRef = useRef<DataLoader>(async () => {});
   function registerDataLoader(loader: DataLoader | null) {
     dataLoaderRef.current = loader ?? (async () => {});
   }
-
-  // ─── Auto-init on mount ────────────────────────────────────────────────────
-  // Attempts to reopen the most recently used workspace from the store.
-  // On first launch (empty store) → auto-creates workspace + seeds tutorial.
 
   // Init runs at most once per provider instance: concurrent callers (StrictMode
   // double-mount, HMR, anything that re-fires the effect) await the same
@@ -149,9 +128,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     async function runInit(): Promise<void> {
       if (STORAGE_BACKEND === "mock") {
-        // The workspace identity below keys off the backend, not off whether a
-        // seed actually ran — an unrecognised VITE_SEED still names a seed
-        // workspace, as it always has.
+        // The workspace identity below keys off the backend, not off whether a seed ran: an
+        // unrecognised VITE_SEED still names a seed workspace.
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
         await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
         await dataLoaderRef.current();
@@ -225,19 +203,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [adapter]);
 
-  // ─── selectWorkspace ───────────────────────────────────────────────────────
-  // Creates the default workspace on first launch. Called by initWorkspace when no workspaces exist.
   // Safe to call concurrently — re-entrant callers share the in-flight promise.
 
   /**
-   * Open the real writer from a browser, for the e2e bridge lane.
-   *
-   * None of the path resolution in `selectWorkspaceImpl` can be reused here:
-   * `appDataDir()` and the workspaces store are Tauri APIs, and the bridge lane
-   * has no Tauri. What it does share is the half worth testing, which is
-   * `connect_db` against a real file with real migrations behind it, so the
-   * per-spec token stands in for the resolved path and the rest of the sequence
-   * runs unchanged.
+   * Open the real writer from a browser, for the e2e bridge lane. `appDataDir()` and the
+   * workspaces store are Tauri APIs the lane lacks, so the per-spec token stands in for the
+   * resolved path and the rest of the sequence, `connect_db` against a real file with real
+   * migrations, runs unchanged.
    */
   // Stryker disable all: the e2e lane's own start-up, which no other build runs
   async function initBridgeWorkspace(): Promise<void> {
@@ -259,7 +231,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   // Stryker restore all
 
-  /** Open the scratch workspace the bench build was launched with, never the user's. */
   // Stryker disable all: the in-app benchmark's own start-up, which no other build runs
   async function initBenchWorkspace(): Promise<void> {
     const bench = await import("@/bench/session");
@@ -392,7 +363,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
-/** For data (pages, folders, scheduling, recurrence) use `usePages()` from PagesContext. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
@@ -400,23 +370,17 @@ export function useWorkspace(): WorkspaceContextValue {
   return ctx;
 }
 
-/** The view cache; null outside a workspace, as in a component test rendered on its own. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useViewCacheController(): ViewCacheController | null {
   return useContext(WorkspaceContext)?.viewCache ?? null;
 }
 
-/** The calendar's held occurrences; null outside a workspace. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCalendarExpansionHold(): ExpansionHold | null {
   return useContext(WorkspaceContext)?.calendarExpansion ?? null;
 }
 
-/**
- * Internal hook for nested providers (PagesProvider, ImportProvider). Returns
- * the adapter + event bus + data-loader registration. Don't use from feature
- * code — call useWorkspace() or usePages() instead.
- */
+/** Internal hook for nested providers; feature code uses useWorkspace() or usePages(). */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspaceInternal(): WorkspaceInternalValue {
   const ctx = useContext(WorkspaceContext);

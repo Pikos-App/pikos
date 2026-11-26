@@ -116,7 +116,7 @@ describe("storageErrorUserMessage", () => {
     ] as StorageErrorKind[]) {
       seen.add(storageErrorUserMessage(err(kind), "doing X"));
     }
-    // Internal and Unknown deliberately share the generic fallback (7 unique copies).
+    // Internal and Unknown deliberately share the generic fallback.
     expect(seen.size).toBeGreaterThanOrEqual(7);
   });
 

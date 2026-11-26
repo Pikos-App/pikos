@@ -4,14 +4,8 @@ import SwiftUI
 
 /// Recently deleted pages, and the way back.
 ///
-/// Exists because swipe-to-delete did not have one. A phone is the device most
-/// likely to produce an accidental swipe and was the only one with no way to
-/// undo it — the page was gone as far as the user could tell, even though the
-/// delete had been soft all along.
-///
-/// Read-only apart from restore. Emptying the trash by hand is deliberately not
-/// offered: the retention window already clears it, and a permanent delete on a
-/// small screen next to a restore button is the same mis-tap this screen exists
+/// Read-only apart from restore. Emptying the trash by hand is not offered: the retention window
+/// clears it, and a permanent delete next to a restore button is the mis-tap this screen exists
 /// to recover from.
 struct TrashSheet: View {
     @Environment(WorkspaceStore.self) private var store
@@ -64,10 +58,8 @@ struct TrashSheet: View {
                 Text(page.title.isEmpty ? "Untitled" : page.title)
                     .lineLimit(2)
                 HStack(spacing: 6) {
-                    // Marked visibly, not only to VoiceOver: the retention
-                    // sentence in the footer is not true of these rows, and a
-                    // reader who cannot tell which ones they are has been told
-                    // something false about the page in front of them.
+                    // Marked visibly, not only to VoiceOver: the retention sentence in the footer isn't true of
+                    // these rows.
                     if page.isSynced {
                         Image(systemName: "calendar")
                             .accessibilityHidden(true)
@@ -92,9 +84,8 @@ struct TrashSheet: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibleLabel(page))
-        // The same gesture that put it here brings it back: a leading swipe
-        // on the list is "complete", and on the trash the analogous verb is
-        // restore. The button stays for anyone who does not swipe.
+        // The leading swipe restores, as it completes on the list. The button stays for anyone who
+        // does not swipe.
         .swipeActions(edge: .leading) {
             Button {
                 Task {
@@ -116,15 +107,11 @@ struct TrashSheet: View {
         return parts.joined(separator: ", ")
     }
 
-    /// What actually happens to these rows, which is not one rule.
-    ///
-    /// A page mirroring a calendar event is never purged: `purge_trashed_pages`
-    /// routes every eligible row through the app's one delete, and that path
-    /// keeps a mirror soft-deleted so its tombstone survives to suppress the
-    /// upstream event. Destroying it would let the next sync pass re-create the
-    /// page the user deleted. So the retention sentence only holds for native
-    /// pages, and the second sentence appears only when a row it describes is
-    /// actually on screen.
+    /// A page mirroring a calendar event is never purged: `purge_trashed_pages` routes every
+    /// eligible row through the app's one delete, which keeps a mirror soft-deleted so its tombstone
+    /// suppresses the upstream event, and destroying it would let the next sync re-create the page.
+    /// So the retention sentence holds only for native pages, and the second appears only when a
+    /// mirror row is on screen.
     private var retentionFooter: String {
         let base = String(localized: "Pages are removed permanently after \(store.trashRetentionDays) days.")
         guard pages.contains(where: \.isSynced) else { return base }
@@ -137,17 +124,10 @@ struct TrashSheet: View {
         isLoading = false
     }
 
-    /// "Deleted 3 days ago", from the UTC stamp the data layer writes.
-    ///
-    /// Parsed rather than shown raw because the stamp is storage format, and
-    /// what the reader needs is how long they have left to change their mind.
-    /// Falls back to the raw value rather than inventing a date: a malformed
-    /// stamp is worth seeing, not hiding behind "just now".
-    ///
-    /// The parse itself lives in `PikosSupport` — `deleted_at` is a UTC instant
-    /// and not the zoneless wall clock the scheduling fields use, and that
-    /// distinction is worth stating once where it can be tested on the host
-    /// rather than restating it in every view that shows a date.
+    /// "Deleted 3 days ago", from the UTC stamp the data layer writes. Falls back to the raw value
+    /// rather than inventing a date: a malformed stamp is worth seeing. `deleted_at` is a UTC
+    /// instant, not the zoneless wall clock the scheduling fields use, and `PikosSupport` is where
+    /// that parse is tested.
     private static func deletedLabel(_ stamp: String) -> String {
         guard let deleted = StorageTimestamp.utc(stamp) else { return stamp }
         return String(localized: "Deleted \(deleted.formatted(.relative(presentation: .named)))")

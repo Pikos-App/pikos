@@ -7,9 +7,8 @@ export type SyncAccount = {
   authKind: string;
   createdAt: string;
   /**
-   * Set when a poll hits a rejected credential, and the scheduler then skips the
-   * account entirely — so the panel must surface it, or a background rejection is
-   * invisible until someone resyncs by hand.
+   * Set when a poll hits a rejected credential, after which the scheduler skips the
+   * account, so the panel must surface it.
    */
   reconnectNeeded: boolean;
 };

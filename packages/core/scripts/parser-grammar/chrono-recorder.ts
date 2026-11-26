@@ -1,14 +1,9 @@
-// A recording stand-in for chrono-node.
+// A recording stand-in for chrono-node, aliased over the real module when bundling `measure.ts`,
+// so the parser is measured as it runs, with no instrumentation in parser.ts.
 //
-// Aliased over the real module when bundling `measure.ts`, so the parser is
-// measured exactly as it runs — no instrumentation in parser.ts, and no
-// second copy of its pre-processing to drift from the first.
-//
-// The real module is loaded through `createRequire` rather than imported.
-// A static import would be caught by the very alias that installs this
-// recorder and redirect straight back into itself; a runtime require is
-// resolved by Node, after bundling, so it reaches the genuine package — and
-// without hard-coding a version-pinned path into the repo.
+// The real module loads through `createRequire` because a static import would be caught by the
+// alias that installs this recorder and redirect into itself. A runtime require resolves after
+// bundling and reaches the genuine package, without a version-pinned path in the repo.
 
 import { createRequire } from "node:module";
 
@@ -16,11 +11,10 @@ import type * as ChronoNode from "chrono-node";
 
 const real = createRequire(import.meta.url)("chrono-node") as typeof ChronoNode;
 
-/** Everything the parser reads back off a chrono result. */
+/** What the parser reads back off a chrono result. */
 export interface RecordedResult {
   index: number;
   text: string;
-  /** Local wall-clock ISO, matching how Pikos stores dates. */
   start: string;
   startCertain: string[];
   end: string | null;
@@ -29,16 +23,14 @@ export interface RecordedResult {
 
 export interface RecordedCall {
   fn: "parse" | "parseDate";
-  /** Text as it reached chrono — after the parser's own rewriting. */
+  /** After the parser's rewriting. */
   text: string;
-  /** The substring chrono claimed, or null when it found no date. */
+  /** The substring chrono claimed; null when it found no date. */
   matched: string | null;
   index: number | null;
-  /** Field granularities chrono was certain about. Drives the parser's branching. */
+  /** Field granularities chrono was certain about; drives the parser's branching. */
   certain: string[];
-  /** Whether chrono parsed a range. */
   hasEnd: boolean;
-  /** The first result in full, or null when chrono found no date. */
   result: RecordedResult | null;
 }
 

@@ -8,10 +8,8 @@ interface PanelResizeOptions {
   defaultWidth: number;
   min: number;
   max: number;
-  /** The widest this panel may draw on screen, once the calendar and the other
-   *  panel have taken theirs. A panel yields to its own `min` before it yields
-   *  to this: a ceiling narrower than the text needs crushes the panel, and the
-   *  breakpoints already hide one a window genuinely cannot hold. */
+  /** The widest this panel may draw on screen once the calendar and the other panel have taken theirs.
+   *  A panel yields to its own `min` first: a ceiling narrower than the text crushes the panel. */
   ceiling: number;
 }
 
@@ -21,12 +19,10 @@ interface PanelResize {
 }
 
 /**
- * A panel's width in px, scaled so the panel holds the same amount of text at
- * any interface text size.
+ * A panel's width in px, scaled so it holds the same amount of text at any interface text size.
  *
- * The stored number is the width at 100%, never the width on screen, and `min`
- * and `max` bound that same base. Storing what is on screen instead makes the
- * setting irreversible: a divider dragged at 200% persists a 200%-sized number,
+ * The stored number is the width at 100%, and `min` and `max` bound that base. Storing the on-screen
+ * width would make the setting irreversible: a divider dragged at 200% persists a 200%-sized number,
  * and going back to 100% leaves the panel stuck wide.
  */
 export function usePanelResize({
@@ -56,7 +52,6 @@ export function usePanelResize({
     handle.dataset["dragging"] = "true";
 
     const onMove = (ev: MouseEvent) => {
-      // The cursor moves in screen px; the store holds base px.
       const base = (startWidth + ev.clientX - startX) / textScale;
       setStoredBaseWidth(Math.round(Math.max(min, Math.min(maxBase, base))));
     };

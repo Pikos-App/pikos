@@ -6,7 +6,6 @@
 
 use serde::Deserialize;
 
-/// `events.list` / `events.get` response.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct EventsResponse {
@@ -89,7 +88,6 @@ impl ApiErrorResponse {
     }
 }
 
-/// `calendarList.list` response.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CalendarListResponse {

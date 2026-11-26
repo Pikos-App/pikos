@@ -14,10 +14,9 @@ function held(controller: ViewCacheController, _version: number): PageSummary[] 
 }
 
 /**
- * The pages the view cache holds, unsaved edits included, re-rendering with every change to them;
- * null outside a workspace. Only a reader that needs them live subscribes, so a change to the
- * store doesn't re-render every reader of `usePages()`. `enabled` false skips the subscription, for
- * a reader that needs them only while open.
+ * The pages the view cache holds, unsaved edits included, re-rendering with every change; null
+ * outside a workspace. Only a reader that needs them live subscribes, so a store change doesn't
+ * re-render every reader of `usePages()`. `enabled` false skips the subscription.
  */
 export function useHeldPages(enabled = true): PageSummary[] | null {
   const controller = useViewCacheController();
@@ -29,7 +28,6 @@ export function useHeldPages(enabled = true): PageSummary[] | null {
   return live ? held(live, version) : null;
 }
 
-/** Finds one held page when an action needs it, without subscribing. */
 export function usePageLookup(): (id: string) => PageSummary | undefined {
   const controller = useViewCacheController();
   return (id) => controller?.store.get(id);
@@ -38,7 +36,7 @@ export function usePageLookup(): (id: string) => PageSummary | undefined {
 const NO_HEADS = () => null;
 
 /** Every recurring series' head, re-rendering only when one changes; null outside a workspace or
- *  when `enabled` is false. Today needs the heads to place its occurrences, not every held page. */
+ *  when `enabled` is false. */
 export function useSeriesHeads(enabled = true): PageSummary[] | null {
   const controller = useViewCacheController();
   const live = controller && enabled ? controller : null;

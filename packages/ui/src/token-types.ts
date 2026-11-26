@@ -1,14 +1,8 @@
-// The vocabulary the design tokens are written in.
+// Token values are data, never CSS strings, so a non-CSS renderer can consume `tokens.ts`
+// without parsing CSS.
 //
-// Values are modelled as *data*, never as CSS strings: a hex is a hex, a
-// color-mix is a mix node, a shadow is a list of layers. That is what lets a
-// second renderer (a native mobile app, a docs site, a Figma export) consume
-// `tokens.ts` without parsing CSS — the CSS spelling lives in `css.ts`, which is
-// one consumer among several rather than the source of truth.
-//
-// Relative imports inside this package carry the `.ts` extension on purpose:
-// scripts/gen-ui-tokens.mjs loads these modules straight from Node (type
-// stripping), and Node's ESM resolver requires the real filename.
+// Relative imports in this package keep the `.ts` extension: scripts/gen-ui-tokens.mjs
+// loads these modules straight from Node, whose ESM resolver needs the real filename.
 
 /** The two schemes the app renders in. `light` is also the base for anything unthemed. */
 export type ColorScheme = "dark" | "light";
@@ -117,13 +111,11 @@ export interface TokenDefinition {
 
 export interface TokenGroup {
   /**
-   * Banner lines for this group. `null` means the group continues the previous
-   * one with no banner and no separating blank line — how the shadcn aliases,
-   * chart and sidebar runs read as a single block in the light scheme while the
-   * dark scheme labels the subsets it actually overrides.
+   * Banner lines for this group. `null` continues the previous group with no banner and no
+   * blank line, so several groups read as one block in the light scheme while the dark scheme
+   * labels the subsets it overrides.
    */
   readonly comment: readonly string[] | null;
-  /** Banner in the dark block; defaults to `comment`. */
   readonly darkComment?: readonly string[] | null;
   readonly tokens: readonly TokenDefinition[];
 }
@@ -140,8 +132,6 @@ export interface TailwindAliasGroup {
   readonly comment: readonly string[];
   readonly aliases: readonly TailwindAlias[];
 }
-
-// ── Constructors ─────────────────────────────────────────────────────────────
 
 export const hex = (value: string): HexColor => ({ hex: value, kind: "hex" });
 
@@ -199,7 +189,6 @@ export const transition = (durationMs: number, easing: string): TransitionValue 
   kind: "transition",
 });
 
-/** True for the value kinds that describe a color rather than a metric. */
 export function isColorValue(value: TokenValue): value is ColorValue {
   return (
     value.kind === "hex" ||

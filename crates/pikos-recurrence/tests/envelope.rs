@@ -1,8 +1,7 @@
 //! Envelope boundary: the engine REJECTS (never silently mis-enumerates) parts
 //! it does not implement, and ENUMERATES everything with defined rrule.js
-//! semantics. With rrule.js gone there is no fallback engine — a rejected rule
-//! renders nowhere — so rejection is reserved for parts whose semantics the
-//! enumerator genuinely lacks. See `ParsedRule::parse`.
+//! semantics. There is no fallback engine, so rejection is reserved for parts
+//! the enumerator genuinely lacks. See `ParsedRule::parse`.
 
 use pikos_recurrence::{expand_range, list_occurrences, RecurrenceError};
 
@@ -56,11 +55,8 @@ fn accepts_in_envelope() {
     assert_ok("FREQ=YEARLY");
 }
 
-// ─── Arms the envelope widening added — enumeration pinned, not just accepted ──
-
 #[test]
 fn yearly_bymonth_byday_ordinal_enumerates() {
-    // The VTIMEZONE / US-holiday shape the old envelope rejected.
     let thanksgiving =
         list_occurrences("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH", "2026-01-01T09:00:00", 3);
     assert_eq!(
@@ -75,7 +71,7 @@ fn yearly_bymonth_byday_ordinal_enumerates() {
 
 #[test]
 fn yearly_bymonth_bymonthday_enumerates() {
-    // "15 March, annually" — the common provider rule C37 named.
+    // "15 March, annually": a common provider rule.
     let dates = list_occurrences(
         "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15",
         "2026-01-01T09:00:00",
@@ -100,7 +96,7 @@ fn daily_byday_filters() {
 
 #[test]
 fn weekly_bymonth_filters() {
-    // June/July Mondays only — the head-drag degrade scenario's rule (C43).
+    // June/July Mondays only.
     let dates = list_occurrences("FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7", "2026-05-01T09:00:00", 3);
     assert_eq!(
         dates,
@@ -134,8 +130,7 @@ fn weekly_byday_ordinal_reads_as_bare_weekday() {
 
 #[test]
 fn count_and_until_run_to_the_tighter_bound() {
-    // RFC forbids the pair but rrule.js honors both; with no fallback engine,
-    // enumerate rather than reject. COUNT tighter:
+    // RFC forbids the pair but rrule.js honors both; enumerate rather than reject. COUNT tighter:
     let by_count = list_occurrences(
         "FREQ=DAILY;COUNT=3;UNTIL=20260401T000000Z",
         "2026-03-02T09:00:00",

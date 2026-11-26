@@ -150,8 +150,6 @@ async fn count(pool: &SqlitePool, sql: &str) -> i64 {
     sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
 }
 
-// ─── Pages ───────────────────────────────────────────────────────────────────
-
 // qa: CLOUD-03
 #[tokio::test]
 async fn one_body_edited_on_both_devices_keeps_the_later_save_whole() {
@@ -328,8 +326,6 @@ async fn a_reordered_list_is_in_the_same_order_on_the_other_device() {
     assert_converged(&mac, &phone).await;
 }
 
-// ─── Schedule ────────────────────────────────────────────────────────────────
-
 // qa: CLOUD-13, CLOUD-14, CLOUD-17
 #[tokio::test]
 async fn a_new_date_and_time_reach_the_other_device() {
@@ -490,8 +486,6 @@ async fn a_floating_time_reads_the_same_on_the_other_device() {
     );
 }
 
-// ─── All-day pages ───────────────────────────────────────────────────────────
-
 // qa: CLOUD-25, CLOUD-27, CLOUD-31, CLOUD-32
 #[tokio::test]
 async fn an_all_day_span_arrives_on_the_same_days_with_its_inclusive_end() {
@@ -632,8 +626,6 @@ async fn an_all_day_series_arrives_all_day() {
         Some("2030-01-07")
     );
 }
-
-// ─── Repeating pages ─────────────────────────────────────────────────────────
 
 // qa: CLOUD-37, CLOUD-51
 #[tokio::test]
@@ -855,8 +847,6 @@ async fn the_last_occurrence_of_a_series_completed_on_one_device_ends_it_on_both
     );
 }
 
-// ─── Occurrences ─────────────────────────────────────────────────────────────
-
 // qa: CLOUD-52, CLOUD-53, CLOUD-55
 #[tokio::test]
 async fn skipped_occurrences_are_skipped_on_the_other_device() {
@@ -942,8 +932,6 @@ async fn a_done_copy_moved_and_deleted_follows_on_the_other_device() {
     assert_converged(&mac, &phone).await;
 }
 
-// ─── Folders ─────────────────────────────────────────────────────────────────
-
 async fn folder_name_and_color(pool: &SqlitePool, id: &str) -> (Option<String>, Option<String>) {
     sqlx::query_as("SELECT name, color FROM folders WHERE id = ?")
         .bind(id)
@@ -1008,8 +996,6 @@ async fn a_deleted_folder_and_its_pages_are_in_the_other_devices_trash() {
     assert!(trashed(&phone, &inside).await);
     assert_converged(&mac, &phone).await;
 }
-
-// ─── Everywhere else ─────────────────────────────────────────────────────────
 
 // qa: CLOUD-74
 #[tokio::test]
@@ -1279,8 +1265,6 @@ async fn a_finished_focus_session_reaches_the_other_device() {
     assert_eq!(sessions, 1);
 }
 
-// ─── Calendar accounts and their events ──────────────────────────────────────
-
 // qa: CLOUD-95, CLOUD-96, CLOUD-100, CLOUD-101
 #[tokio::test]
 async fn a_calendars_edits_to_a_live_mirror_are_never_sent() {
@@ -1370,8 +1354,6 @@ async fn a_calendar_account_and_its_folders_stay_on_their_device() {
     );
 }
 
-// ─── Settings ────────────────────────────────────────────────────────────────
-
 // qa: CLOUD-121
 #[tokio::test]
 async fn changes_made_while_sync_was_off_reach_the_other_device_once_it_is_back_on() {
@@ -1394,8 +1376,6 @@ async fn changes_made_while_sync_was_off_reach_the_other_device_once_it_is_back_
 
     assert_eq!(page(&phone, &id).await.title, "Packing list, Lisbon");
 }
-
-// ─── Long absences ───────────────────────────────────────────────────────────
 
 // qa: CLOUD-125
 #[tokio::test]

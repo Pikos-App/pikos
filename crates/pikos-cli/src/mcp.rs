@@ -1,11 +1,10 @@
 //! `pikos mcp` — a Model Context Protocol server on stdio, so an agent can drive
 //! a real workspace through the same code the subcommands use.
 //!
-//! The protocol is hand-rolled rather than taken from a crate. What MCP asks of a
-//! stdio server is four methods of newline-delimited JSON-RPC 2.0 — `initialize`,
-//! `notifications/initialized`, `tools/list`, `tools/call` — which is less code
-//! than the shim around an SDK would be, and it keeps the CLI's dependency set to
-//! what it already had. Every tool is a thin arm over [`crate::ops`]; nothing here
+//! The protocol is hand-rolled rather than taken from a crate: a stdio server needs
+//! four methods of newline-delimited JSON-RPC 2.0 (`initialize`,
+//! `notifications/initialized`, `tools/list`, `tools/call`), which is less code
+//! than an SDK shim. Every tool is a thin arm over [`crate::ops`]; nothing here
 //! reaches pikos-db directly, so the tool and the subcommand cannot drift.
 //!
 //! Two invariants the transport imposes:
@@ -71,7 +70,6 @@ pub async fn serve(db_override: Option<String>, migrate: bool) -> Result<(), Cli
     Ok(())
 }
 
-/// One line in, at most one line out. `None` means the message was a notification.
 async fn handle_line(
     line: &str,
     pool: &mut Option<SqlitePool>,
@@ -92,8 +90,6 @@ async fn handle_line(
     let id = message.get("id").cloned();
     let params = message.get("params").cloned().unwrap_or(Value::Null);
 
-    // A response carries the request's id; a notification has none and is answered
-    // with silence, which is what `notifications/initialized` expects.
     let id = id?;
 
     match method {
@@ -148,14 +144,10 @@ fn error_frame(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
-/// A tool result: the payload as pretty JSON in one text block, which every client
-/// renders and every model can parse.
 fn tool_content(payload: &Value, is_error: bool) -> Value {
     let text = serde_json::to_string_pretty(payload).unwrap_or_else(|_| payload.to_string());
     json!({ "content": [{ "type": "text", "text": text }], "isError": is_error })
 }
-
-// ─── Tool definitions ────────────────────────────────────────────────────────
 
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({
@@ -385,9 +377,6 @@ fn tool_definitions() -> Vec<Value> {
     ]
 }
 
-// ─── Dispatch ────────────────────────────────────────────────────────────────
-
-/// Open the workspace on demand, reusing the pool once it exists.
 async fn workspace<'a>(
     cache: &'a mut Option<SqlitePool>,
     db_override: &Option<String>,
@@ -404,7 +393,6 @@ async fn call_tool(
     cache: &mut Option<SqlitePool>,
     db_override: &Option<String>,
 ) -> Result<Value, CliError> {
-    // The one tool that touches no workspace: parsing is the bridge's job alone.
     if name == "create_page" && flag(args, "dryRun") {
         return parse_only(&require_str(args, "text")?);
     }

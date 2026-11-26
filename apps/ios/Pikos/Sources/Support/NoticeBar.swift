@@ -1,18 +1,11 @@
 import SwiftUI
 
-/// The bar that says what just happened, and offers the way back.
+/// The bar that says what just happened, and offers the way back, drawn from
+/// `WorkspaceStore.notice` over the bottom of whichever screen is up.
 ///
-/// Drawn over the bottom of whichever screen is up, from `WorkspaceStore.notice`.
-/// It is one view because it is one behaviour: a sentence, an optional action,
-/// and a countdown. Two screens each drawing their own copy is how the undo
-/// window comes to differ between them, and a reader who has learned one is
-/// wrong-footed by the other. The window is the desktop's eight seconds, for
-/// the same reason across the two apps.
-///
-/// It clears itself rather than waiting to be dismissed. A bar sitting over the
-/// bottom of a list until somebody notices it is worse than a missed undo —
-/// every action it describes is reversible from elsewhere in the app, and the
-/// bar is a convenience, not the only way back.
+/// One view so the undo window can't differ between screens; it is the desktop's eight seconds.
+/// It clears itself: every action it describes is reversible from elsewhere in the app, so a bar
+/// waiting to be dismissed is worse than a missed undo.
 struct NoticeBar: View {
     let notice: WorkspaceStore.Notice
     let onDismiss: () -> Void
@@ -38,9 +31,6 @@ struct NoticeBar: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
-        // Glass on iOS 26, a material elsewhere: the bar floats in the
-        // navigation layer over content, which is the one place the new
-        // design language puts glass.
         .floatingSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .transition(.opacity)
         .accessibilityElement(children: .contain)
@@ -56,11 +46,7 @@ struct NoticeBar: View {
 
 extension View {
     /// Show the store's current notice over this view.
-    ///
-    /// Applied to each tab's root screen rather than to the `TabView`: an
-    /// overlay on the tab view would sit over the tab bar, and one on the
-    /// screen sits just above it, which is where a bar the user might tap
-    /// belongs.
+    /// Show the store's current notice over this view.
     func noticeOverlay() -> some View {
         bottomChrome { EmptyView() }
     }
@@ -82,10 +68,8 @@ private struct BottomChrome<Floating: View>: ViewModifier {
             VStack(spacing: 10) {
                 if let notice = store.notice {
                     NoticeBar(notice: notice) {
-                        // Only clear the notice this bar was drawn for. By the
-                        // time the countdown ends a newer one may have
-                        // replaced it, and clearing that would cut its window
-                        // short.
+                        // Only clear the notice this bar was drawn for: a newer one may have replaced it by the
+                        // time the countdown ends.
                         if store.notice == notice {
                             withAnimation(reduceMotion ? nil : .pkQuick) { store.notice = nil }
                         }
@@ -97,10 +81,8 @@ private struct BottomChrome<Floating: View>: ViewModifier {
             .padding(.bottom, 4)
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .pkQuick, value: store.notice)
-        // Said aloud as well as shown. A bar that appears for six seconds at
-        // the bottom of the screen is one VoiceOver would only find by
-        // sweeping down to it, and "Deleted — Undo" is exactly the sentence
-        // that has to reach the person before it goes.
+        // Said aloud as well as shown: VoiceOver would only find the bar by sweeping down to it,
+        // and "Deleted, Undo" has to reach the person before it goes.
         .onChange(of: store.notice) { _, notice in
             guard let notice else { return }
             var spoken = notice.message

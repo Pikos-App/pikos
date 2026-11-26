@@ -7,12 +7,6 @@ import { onFlushPending } from "@/shared/pendingWrites";
 
 import { useAutoUpdater } from "./useAutoUpdater";
 
-// ─── Mocks ────────────────────────────────────────────────────────────────
-//
-// useAutoUpdater dynamically imports @tauri-apps/plugin-updater inside doCheck
-// and doInstall. We mock both the dynamic import target and import.meta.env
-// flags so the hook actually exercises its check/install branches under test.
-
 const check = vi.fn<() => Promise<unknown>>();
 const downloadAndInstall = vi.fn<() => Promise<void>>();
 
@@ -29,15 +23,11 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
-  // The hook short-circuits in DEV and TEST_MODE — disable both so the real
-  // check/install branches run.
   vi.stubEnv("VITE_TEST_MODE", "false");
   vi.stubEnv("DEV", false);
   vi.stubGlobal("__PIKOS_BENCH__", false);
   vi.stubGlobal("__PIKOS_STAGING__", false);
   localStorage.clear();
-  // Disable auto-check-on-mount so each test controls which mocked check()
-  // call its explicit checkForUpdates() consumes.
   localStorage.setItem("pikos:autoUpdateEnabled", "false");
   check.mockReset();
   downloadAndInstall.mockReset();
@@ -87,8 +77,6 @@ describe("staging build", () => {
 
 describe("doCheck error path", () => {
   it("tags errors with scope='check' and shows generic copy", async () => {
-    // Plugin throws an error whose .message includes a Releases URL — this is
-    // exactly what the audit fixed: such messages can echo response bodies.
     check.mockRejectedValueOnce(
       new Error("error fetching https://releases.pikos.app/latest.json — ECONNREFUSED")
     );
@@ -97,7 +85,6 @@ describe("doCheck error path", () => {
 
     await act(async () => {
       result.current.checkForUpdates();
-      // flush the awaited dynamic import + check()
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -113,8 +100,6 @@ describe("doCheck error path", () => {
 
 describe("doInstall error path", () => {
   it("tags errors with scope='install' so the modal can surface them", async () => {
-    // First check() resolves with an available update so the hook reaches
-    // the "available" state. The second check() inside doInstall throws.
     check
       .mockResolvedValueOnce({
         body: "notes",
@@ -145,16 +130,14 @@ describe("doInstall error path", () => {
     expect(result.current.status.state).toBe("error");
     if (result.current.status.state !== "error") return;
     expect(result.current.status.scope).toBe("install");
-    // Raw URL from the rejected error must not leak into the user-facing copy.
     expect(result.current.status.message).not.toContain("releases.pikos.app");
     expect(result.current.status.message).not.toContain(".dmg");
     expect(result.current.status.message.toLowerCase()).toContain("install");
   });
 });
 
-// Relaunch restarts the process without closing the window, so nothing the write
-// queue listens for fires. Before this, clicking "Update now" with an editor open
-// dropped whatever was still sitting on the debounce.
+// Relaunch restarts the process without closing the window, so the write queue's close-time flush
+// never runs: "Update now" with an editor open would drop what sits on the debounce.
 describe("doInstall flushes pending writes first", () => {
   it("drains unwritten edits before the installer runs", async () => {
     const order: string[] = [];

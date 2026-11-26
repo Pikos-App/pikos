@@ -2,21 +2,13 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// Search over titles, page bodies, and the things a page *is*, shaped like the
-/// desktop's palette.
+/// Search over titles, page bodies and the things a page is, shaped like the desktop's palette.
 ///
-/// Two kinds of query, and the workspace decides which this is. Plain words go
-/// to SQLite's FTS5, maintained by the same data layer the desktop app uses,
-/// including for pages typed on this phone. A query carrying an operator
-/// (`tag:`, `folder:`, `is:`, `priority:`, `due:`) becomes a structured query
-/// instead, with any remaining words still going to the index. Nothing here
-/// parses any of that: the grammar is one function in Rust, shared with the
-/// desktop, so that "is:open" cannot come to mean two things.
-///
-/// On a phone the operators are chips rather than syntax. Tapping a folder, a tag
-/// or "Due this week" puts a token in the field that stands for the operator, and
-/// the query sent is the tokens' operators followed by the typed words. Someone who
-/// types `tag:home` still gets it read; nobody has to learn that they can.
+/// Plain words go to SQLite's FTS5; a query carrying an operator (`tag:`, `folder:`, `is:`,
+/// `priority:`, `due:`) becomes a structured query. Nothing here parses the grammar: it is one
+/// function in Rust shared with the desktop, so "is:open" cannot mean two things. On a phone the
+/// operators are chips: tapping one puts a token in the field, and the query sent is the tokens'
+/// operators followed by the typed words.
 struct SearchScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -37,7 +29,7 @@ struct SearchScreen: View {
             .joined(separator: " ")
     }
 
-    /// No `NavigationStack` of its own — see the note on `PageListScreen`.
+    /// No `NavigationStack` of its own: it is pushed onto the one on `Route.path`.
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -231,12 +223,8 @@ struct SearchScreen: View {
     // MARK: - Completions
 
     /// Tokens for the word being typed, from the reader's own folders and tags and the fixed states.
-    ///
-    /// A word that starts an operator's name ("fol") or its value ("hom") offers the matching
-    /// tokens, so somebody who never learns the syntax still narrows by typing a name.
-    ///
-    /// Drawn as the same pills as "Narrow to" above the results, not through `searchSuggestions`:
-    /// the system's suggestion list covers the results on a black ground the theme cannot reach.
+    /// Drawn as the same pills as "Narrow to", not through `searchSuggestions`: the system's list
+    /// covers the results on a black ground the theme cannot reach.
     @ViewBuilder
     private var suggestions: some View {
         let words = query.split(separator: " ").map(String.init)

@@ -2,7 +2,6 @@ import XCTest
 
 @testable import PikosSupport
 
-/// The four orders, on the cases that look right while being wrong.
 final class PageSortTests: XCTestCase {
     private let now = "2026-09-14T15:00:00"
 
@@ -21,8 +20,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .manual), ["a", "b", "c"])
     }
 
-    /// Unscheduled pages sink; a timed page and an all-day one on the same
-    /// day order by the clock, with the all-day page at midnight.
     func testDatePutsTheUnscheduledLastAndAllDayAtMidnight() {
         let keys = [
             page("nothing"),
@@ -33,8 +30,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .date), ["sooner", "that day", "lunch", "nothing"])
     }
 
-    /// An all-day page dated today sits at *now*: after this morning's
-    /// meeting, before this evening's.
     func testAnAllDayPageTodaySitsAtNow() {
         let keys = [
             page("evening", at: "2026-09-14T19:00:00"),
@@ -46,7 +41,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(PageSort.instant(of: "2026-09-15", now: now), "2026-09-15T00:00:00")
     }
 
-    /// Urgent first, none last, and the date breaks ties within a tier.
     func testPriorityRunsUrgentToLowWithNoneLast() {
         let keys = [
             page("none", priority: 0, at: "2026-09-15"),
@@ -66,8 +60,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .title), ["Apple", "banana", "cherry"])
     }
 
-    /// Equal keys keep their incoming order, so a re-sort never shuffles
-    /// rows that tie.
     func testTheSortIsStable() {
         let keys = [page("first", order: 1), page("second", order: 1), page("third", order: 1)]
         XCTAssertEqual(titles(keys, by: .manual), ["first", "second", "third"])

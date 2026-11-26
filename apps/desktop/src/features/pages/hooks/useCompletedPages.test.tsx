@@ -9,8 +9,6 @@ import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useCompletedPages } from "./useCompletedPages";
 
-/** Render the combined workspace + completed-pages hook and initialise the
- * workspace. `viewId` can be changed mid-test via `hook.rerender({ viewId })`. */
 async function setup(initialViewId = "inbox") {
   const hook = renderHookWithProviders(
     ({ viewId }: { viewId: string }) => ({
@@ -26,7 +24,6 @@ async function setup(initialViewId = "inbox") {
   return hook;
 }
 
-/** Minimal PageSummary used for mergePages fixtures. */
 function fixtureDonePage(overrides: {
   id: string;
   folderId?: string | null;
@@ -59,13 +56,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ─── Calendar isolation ─────────────────────────────────────────────────────
-
 describe("useCompletedPages — calendar isolation", () => {
   it("a page merged with an old completedAt stays hidden from the derived list", async () => {
-    // Simulates CalendarView's range fetch: a completed page from months ago
-    // gets placed into the workspace `pages` array via mergePages. The hook
-    // must NOT surface it in the Inbox Completed section.
     const hook = await setup("inbox");
 
     await act(async () => {
@@ -82,8 +74,6 @@ describe("useCompletedPages — calendar isolation", () => {
     expect(hook.result.current.completed.completedPages).toHaveLength(0);
   });
 });
-
-// ─── Session gate ───────────────────────────────────────────────────────────
 
 describe("useCompletedPages — session gate", () => {
   it("an optimistic status toggle surfaces the page without calling onExpand", async () => {
@@ -107,13 +97,8 @@ describe("useCompletedPages — session gate", () => {
   });
 });
 
-// ─── Pagination ─────────────────────────────────────────────────────────────
-
 describe("useCompletedPages — pagination", () => {
   it("onExpand surfaces historical completions that the session gate would exclude", async () => {
-    // Two pages marked done long before the session started — neither should
-    // be visible initially. After onExpand pulls them via listCompletedPages,
-    // both land in loadedIds and become visible.
     const hook = await setup("inbox");
     const storage = hook.result.current.workspace.storage;
     if (!storage) throw new Error("storage should be available after selectWorkspace");
@@ -142,7 +127,6 @@ describe("useCompletedPages — pagination", () => {
       await storage.updatePage(b.id, { completedAt: "2025-02-01T00:00:00" });
     });
 
-    // Neither is in the workspace `pages` array yet, so nothing visible.
     expect(hook.result.current.completed.completedPages).toHaveLength(0);
 
     await act(async () => {
@@ -153,8 +137,6 @@ describe("useCompletedPages — pagination", () => {
     expect(new Set(ids)).toEqual(new Set([a.id, b.id]));
   });
 });
-
-// ─── Per-view isolation ─────────────────────────────────────────────────────
 
 describe("useCompletedPages — per-view isolation", () => {
   it("a page completed in folder A does not appear in folder B's Completed list", async () => {
@@ -176,10 +158,8 @@ describe("useCompletedPages — per-view isolation", () => {
       await Promise.resolve();
     });
 
-    // Folder A sees it via the session gate.
     expect(hook.result.current.completed.completedPages.map((p) => p.id)).toEqual([pageInA.id]);
 
-    // Switch to folder B — the same hook instance now filters by B.
     hook.rerender({ viewId: "folder-b" });
 
     expect(hook.result.current.completed.completedPages).toHaveLength(0);

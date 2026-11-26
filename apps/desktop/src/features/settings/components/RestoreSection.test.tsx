@@ -1,7 +1,3 @@
-// Restoring is the one destructive action in the app that is *meant* to replace
-// everything, so what matters is that it cannot happen by accident and that a
-// refusal leaves a working app behind.
-
 import { StorageError } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -40,7 +36,6 @@ describe("RestoreSection", () => {
       expect(screen.getByText("Before an update changed the workspace")).toBeInTheDocument()
     );
     expect(screen.getByText("Before an import")).toBeInTheDocument();
-    // The filename is an implementation detail of where it landed on disk.
     expect(screen.queryByText(/pre-migration-/)).not.toBeInTheDocument();
   });
 
@@ -98,13 +93,10 @@ describe("RestoreSection", () => {
     });
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/workspace file is damaged/i);
-    // And the raw sqlx-shaped detail never reaches the screen.
     expect(screen.queryByText(/page 3 is malformed/)).not.toBeInTheDocument();
   });
 
-  // The heading goes with the contents. An empty state here could not tell you how to
-  // fill it — you do not take a backup, Pikos does — so it was a section explaining
-  // something you cannot act on, in the panel people open when they are already worried.
+  // The heading goes with the contents: see RestoreSection.
   // qa: EXP-09:3
   it("shows nothing at all when no snapshot has been needed yet", async () => {
     vi.spyOn(MockStorageAdapter.prototype, "listBackups").mockResolvedValue([]);

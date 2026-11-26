@@ -85,8 +85,6 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     // and the hour to scroll are read the same way or the jump misses the block.
     const start = viewerStart(page)!;
     setReferenceDate(parseLocalISO(start));
-    // Date-only (all-day) strings have no time component — the chip sits in the
-    // always-visible all-day strip, so no timed-grid scroll needed.
     if (isTimedIso(start)) {
       const startDate = parseLocalISO(start);
       const pageHour = startDate.getHours() + startDate.getMinutes() / 60;
@@ -120,12 +118,9 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
       }
       return;
     }
-    // No existing rule. If the page has no date yet, anchor to today so the
-    // first occurrence is concrete. Snap the anchor onto the first date the
-    // rule permits (e.g. a Sunday date under an M/W/F rule moves to Monday).
-    // Await scheduleOnce so the rule's anchor and the head's scheduledStart
-    // commit together — otherwise a failed scheduleOnce leaves a rule
-    // referencing a date the head doesn't carry.
+    // No existing rule. With no date yet, anchor to today, snapped onto the first date the rule permits
+    // (a Sunday under M/W/F moves to Monday). scheduleOnce is awaited so the rule's anchor and the head's
+    // scheduledStart commit together; a failure would leave a rule referencing a date the head lacks.
     const anchorStart = snapAnchorToRule(rrule, page.scheduledStart ?? localToday());
     if (anchorStart !== page.scheduledStart) {
       await scheduleOnce(page.id, anchorStart, page.scheduledEnd ?? undefined);
@@ -153,7 +148,6 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
   }
 
   function handleTitleFocus() {
-    // Measure div height before swapping so textarea starts at exactly the same size.
     if (titleDivRef.current) {
       titleHeightRef.current = titleDivRef.current.offsetHeight;
     }
@@ -163,9 +157,8 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    // Shrink to 0 to measure true scrollHeight (avoids stale height inflating it).
-    // On first mount after focus, start from the div's measured height so the
-    // initial frame has no shift — scrollHeight will only grow from there.
+    // Shrink to 0 to measure the true scrollHeight; on first mount start from the div's measured height
+    // so the initial frame doesn't shift.
     el.style.height = titleHeightRef.current !== undefined ? `${titleHeightRef.current}px` : "0";
     titleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
@@ -215,11 +208,9 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     updatePage(page.id, { subtitle: next });
   }
 
-  /** Leaving a metadata field writes it out now rather than on the debounce.
-   *  The window listener below is a different event: it fires when the whole app
-   *  loses focus, never when focus moves between elements inside it. Without
-   *  this, clicking from the title into the body left the edit unwritten for
-   *  800ms, and a quit inside that window dropped it. */
+  /** Leaving a metadata field writes it now, not on the debounce. The window listener below fires when
+   *  the whole app loses focus, never between elements inside it, so clicking from title to body left
+   *  the edit unwritten for 800ms and a quit inside it dropped it. */
   function commitField() {
     void flushPage(page.id);
   }
@@ -381,11 +372,8 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
           </div>
         )}
 
-        {/* The timer repeats the byline's own `pt-2 pb-4` so both boxes have the
-            same vertical padding: `items-center` aligns boxes, not text, and the
-            byline's asymmetric padding would otherwise push the timer below the
-            copy it sits beside. `min-w-0` lets the byline keep truncating its
-            chips instead of pushing the timer off. */}
+        {/* Repeats the byline's `pt-2 pb-4` so both boxes share vertical padding: `items-center` aligns boxes,
+            not text. `min-w-0` lets the byline keep truncating its chips instead of pushing the timer off. */}
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <Byline

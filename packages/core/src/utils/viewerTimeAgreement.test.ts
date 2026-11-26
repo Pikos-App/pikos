@@ -1,12 +1,6 @@
-// Every surface that shows a time asks one of three functions whether that time is
-// absolute. They are separate implementations — the grid needs a `Date` for pixel
-// maths, the label needs a formatted string, the lists need an ISO — so nothing but
-// this file stops them drifting apart. They did drift: `viewerStart` read a
-// populated `timezone` as "synced", which authoring puts on every native page, so a
-// list showed a page at one time and the grid showed it at another.
-//
-// A native page carrying a source zone is the fixture that tells them apart, and it
-// is the ordinary case rather than a contrived one.
+// The grid, the label and the lists each decide separately whether a time is absolute, and
+// nothing else stops them drifting apart. A native page carrying a source zone, which is the
+// ordinary case, tells them apart.
 
 import { describe, expect, it } from "vitest";
 
@@ -17,7 +11,6 @@ import { viewerStart } from "./syncedTime";
 
 const DAY = new Date("2026-03-15T00:00:00Z");
 
-/** 15:00 Los_Angeles is 22:00 UTC in March, and the test runner is UTC. */
 const SOURCE_WALL_CLOCK = "2026-03-15T15:00:00";
 const CONVERTED_HOUR = 22;
 

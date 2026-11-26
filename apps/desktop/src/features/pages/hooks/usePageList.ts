@@ -79,13 +79,11 @@ export function usePageList() {
     requestDeletePage(page);
   }
 
-  /** Delete from a gesture acting on `actsOn` pages; a lone series asks which dates first. */
   function requestDelete(page: PageSummary, actsOn = 1) {
     if (deleteAsksWhichDates(page, actsOn)) setDeletingSeries(page);
     else requestDeletePage(page);
   }
 
-  /** Delete what a gesture acts on: a lone page as requestDelete, several under one undo. */
   function requestDeleteMany(pages: PageSummary[], actsOn: number) {
     const [only] = pages;
     if (only && pages.length === 1) requestDelete(only, actsOn);
@@ -127,11 +125,9 @@ export function usePageList() {
 
   return {
     activePage,
-    /** The view's lists loaded a window at a time, when the view cache serves it. */
     cached,
     completedHasMore: completed.hasMore,
     completedPages,
-    /** The series whose Delete is waiting on "this date or all of them". */
     deletingSeries,
     dismissSeriesDelete: () => setDeletingSeries(null),
     folders,

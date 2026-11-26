@@ -1,12 +1,7 @@
-//! Core-lifecycle conformance — the third shared table, over the page/folder/
-//! reminder surface and, mostly, over search.
-//!
-//! Search is the reason this table exists. The writer matches through FTS5 —
-//! tokens split on non-alphanumeric, implicit AND between them, a prefix `*` on the
-//! last — while a mock has nothing to run a full-text index with. Whatever it does
-//! instead is a guess, and every search assertion in the Playwright suite rests on
-//! that guess being close enough. The rows below are the cases where a plausible
-//! guess and the index disagree.
+//! Core-lifecycle conformance for the page, folder and reminder surface and, mostly, search. The
+//! writer matches through FTS5 (tokens split on non-alphanumeric, implicit AND, a prefix `*` on the
+//! last) while the mock has no full-text index, so every search assertion in the Playwright suite
+//! rests on its guess being close. The rows are cases where a plausible guess and the index differ.
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -84,9 +79,8 @@ struct Expect {
     reminder_count: Option<ReminderExpect>,
 }
 
-/// `PageFilter.query` — a plain LIKE over title and extracted text, and a separate
-/// surface from `search_pages`. No production caller passes it today, which is
-/// exactly why it drifts unnoticed.
+/// `PageFilter.query`, a plain LIKE over title and extracted text, separate from `search_pages`.
+/// No production caller passes it, which is why it drifts unnoticed.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ListQueryExpect {
@@ -94,9 +88,8 @@ struct ListQueryExpect {
     matches: Vec<String>,
 }
 
-/// `match_source` and `excerpt` are checked against every matched row: the label
-/// picks which arm of the palette renders the row, so the pair is what makes a hit's
-/// rendering testable rather than only its presence in the list.
+/// `match_source` and `excerpt` are checked on every matched row: the label picks which palette
+/// arm renders it, so the pair makes a hit's rendering testable, not just its presence.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchExpect {
@@ -133,9 +126,8 @@ async fn run(scenario: &Scenario) {
     check(&pool, &ids, scenario).await;
 }
 
-/// The fixture names pages and folders; the writers mint the ids. Rewriting a row's
-/// id after the fact trips the foreign keys the schema relies on, so the mapping is
-/// kept here instead.
+/// The fixture names pages and folders; the writers mint the ids. Rewriting an id later trips
+/// the foreign keys, so the mapping is kept here.
 async fn apply(pool: &sqlx::SqlitePool, ids: &mut HashMap<String, String>, step: &Step) {
     match step {
         Step::Page {

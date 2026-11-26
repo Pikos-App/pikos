@@ -38,9 +38,8 @@ interface PageListItemProps {
   onClearDate?: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
-  /** How many pages this row's context menu will act on — the selection it belongs
-   *  to, or 1. A menu that reads the same on one page and on five cannot say what a
-   *  click is about to do, and Delete is in it. */
+  /** How many pages this row's context menu acts on: the selection it belongs to, or 1. A menu that
+   *  reads the same on one page and on five can't say what Delete is about to do. */
   menuActsOn?: number;
   onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
@@ -123,7 +122,6 @@ export function PageListItem({
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
             e.stopPropagation();
-            // Synced mirror: title is calendar-owned; the backend rejects the write.
             if (page.scheduleLocked) return;
             onRenameStart();
           }}
@@ -131,26 +129,20 @@ export function PageListItem({
             if (e.key === "Enter" && !isRenaming) {
               e.preventDefault();
               openPage(page.id);
-              // Defer focus to let the editor mount/update
               requestAnimationFrame(() => {
                 const editor = document.querySelector<HTMLElement>(".editor-content");
                 editor?.focus();
               });
             }
           }}
-          // Strip dnd-kit's injected role="button". The row contains nested
-          // interactive children (checkbox, date-toggle, context menu); leaving
-          // role="button" trips axe's nested-interactive at runtime. The row
-          // is still keyboard-reachable via tabIndex (also from {...attributes})
-          // and labeled via aria-label; the parent's onKeyDown handles
-          // Enter/Space. Proper listbox/option modeling lands with the post-launch a11y refactor.
+          // Strip dnd-kit's injected role="button": the row contains nested interactive children, which trips
+          // axe's nested-interactive. It stays keyboard-reachable via tabIndex, labeled via aria-label, and the
+          // parent's onKeyDown handles Enter/Space.
           role={undefined}
           tabIndex={isActive ? 0 : -1}
         >
-          {/* Checkbox — border color encodes priority when not done.
-              Centred on the title's line rather than the row's top edge: the row is
-              `items-start` so a two-line row keeps the box beside the title instead of
-              floating to the middle, and on a one-line row that left it sitting high. */}
+          {/* Border colour encodes priority when not done. Centred on the title's line, not the row's top edge:
+              the row is `items-start`, so a two-line row keeps the box beside the title. */}
           <span className="type-body flex h-[1em] shrink-0 items-center leading-none">
             <TaskCheckbox
               borderColor={isOpen(page) ? PRIORITY_CHECKBOX_COLORS[page.priority] : undefined}
@@ -159,7 +151,6 @@ export function PageListItem({
             />
           </span>
 
-          {/* Content */}
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -217,14 +208,9 @@ export function PageListItem({
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = isDone(page);
-                    // A synced event's stored time is its source calendar's, so the
-                    // row reads the viewer's — otherwise a London 5pm meeting reads
-                    // as still to come at 5pm long after it happened at 9am here.
+                    // A synced event's stored time is its source calendar's; the row reads the viewer's.
                     const start = viewerStart(page)!;
                     const end = viewerEnd(page);
-                    // Multi-day all-day span: show the explicit range ("May 2 – 10").
-                    // Falls back to single-date formatting for timed events or
-                    // when end is missing/equal to start.
                     const isAllDaySpan =
                       isAllDayIso(start) &&
                       typeof end === "string" &&

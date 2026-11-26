@@ -45,8 +45,6 @@ fi
 
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
 
-# No CI gate exists for this branch, so the sign-off is the gate. `pnpm
-# preflight` runs the same sweep ci.yml would.
 cat <<BRIEF
 
   Branch:   $BRANCH

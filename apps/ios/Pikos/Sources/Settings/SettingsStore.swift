@@ -2,18 +2,11 @@ import Observation
 import PikosSupport
 import SwiftUI
 
-/// The user's preferences, as something SwiftUI can watch.
+/// The user's preferences, observable by SwiftUI.
 ///
-/// `Preferences` is a value over `UserDefaults` — right for the widget, which
-/// reads once and renders, and wrong for the app, where changing the theme has
-/// to redraw everything currently on screen. This is the thin observable layer
-/// over it: the storage stays in `PikosSupport` where the widget can reach it,
-/// and the observation stays here where only the app needs it.
-///
-/// Every property writes through immediately rather than on a "Done" button.
-/// A settings screen that can be dismissed without saving is a screen that can
-/// lose a choice, and on a phone it is dismissed by swiping — which nobody
-/// reads as discarding anything.
+/// `Preferences` is a value over `UserDefaults`, right for the widget and not for the app,
+/// where a theme change must redraw. Every property writes through immediately: a settings
+/// screen is dismissed by swiping, which nobody reads as discarding a choice.
 @MainActor
 @Observable
 public final class SettingsStore {
@@ -58,11 +51,8 @@ public final class SettingsStore {
         set { preferences.defaultReminderMinutes = newValue }
     }
 
-    /// How a view's list is ordered.
-    ///
-    /// `Preferences` is a plain value, so a read through it is not observed;
-    /// the version below is what a list watches, bumped on every write so the
-    /// rows re-sort the moment the menu is used.
+    /// A read through the plain-value `Preferences` isn't observed, so lists watch `sortVersion`,
+    /// bumped on every write, to re-sort at once.
     public func listSort(for viewId: String, fallback: PageSort.Mode = .manual) -> PageSort.Mode {
         _ = sortVersion
         return preferences.listSort(for: viewId, fallback: fallback)
@@ -75,7 +65,6 @@ public final class SettingsStore {
 
     private var sortVersion = 0
 
-    /// A lead in words, for the picker and its row.
     public static func leadLabel(_ minutes: Int64) -> String {
         switch minutes {
         case ..<0: return String(localized: "None")
@@ -88,8 +77,7 @@ public final class SettingsStore {
         }
     }
 
-    /// What `theme` means to SwiftUI. `nil` is "follow the system", which is
-    /// the absence of an override rather than a third scheme.
+    /// `nil` follows the system: the absence of an override, not a third scheme.
     public var colorScheme: ColorScheme? {
         switch theme {
         case .system: return nil
@@ -98,12 +86,8 @@ public final class SettingsStore {
         }
     }
 
-    /// The reader's calendar with their week start applied.
-    ///
-    /// Put into the environment at the root so every `DatePicker` and date view
-    /// below picks it up, rather than each one remembering to ask. Built from
-    /// `Calendar.current` so the identifier, locale and time zone stay the
-    /// device's — only the first weekday is ours to change.
+    /// The reader's calendar with their week start applied, put in the environment at the root.
+    /// Built from `Calendar.current` so only the first weekday changes.
     public var calendar: Calendar {
         var calendar = Calendar.current
         calendar.firstWeekday = weekStart.rawValue

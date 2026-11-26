@@ -1,6 +1,5 @@
-// ConfirmDialog — thin wrapper over AlertDialog with destructive styling and a
-// `busy` state that keeps the dialog open while async work runs. Cancel button
-// receives initial focus, so Enter/Esc on open both cancel.
+// Thin wrapper over AlertDialog with destructive styling and a `busy` state that keeps the dialog
+// open while async work runs. Cancel receives initial focus, so Enter and Esc on open both cancel.
 
 import type { ReactNode } from "react";
 

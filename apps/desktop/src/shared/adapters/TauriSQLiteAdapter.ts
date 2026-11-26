@@ -63,12 +63,10 @@ import { createLogger } from "@/shared/logger";
 
 const log = createLogger("IPC-watchdog");
 
-// ─── Dev-mode IPC watchdog ────────────────────────────────────────────────────
-// Catches render-loop bugs that flood the Tauri IPC channel before they crash
-// the webview. If any command fires more than WATCHDOG_THRESHOLD times within
-// WATCHDOG_WINDOW_MS, we log an error + stack trace pointing at the caller —
-// and throttle subsequent warnings for the same command so the console stays
-// readable. DEV-only; `invoke` passes straight through in production.
+// Dev-only IPC watchdog: a command fired more than WATCHDOG_THRESHOLD times within
+// WATCHDOG_WINDOW_MS logs an error and a stack trace at the caller, then throttles further
+// warnings for it. Catches render loops that flood the IPC channel before they crash the webview.
+// `invoke` passes straight through in production.
 
 const WATCHDOG_WINDOW_MS = 100;
 const WATCHDOG_THRESHOLD = 20;
@@ -93,8 +91,6 @@ function watchdog(command: string): void {
   if (now < cooldown) return;
   cooldownUntil.set(command, now + WATCHDOG_COOLDOWN_MS);
 
-  // Pass an Error so DevTools renders a clickable stack trace pointing at
-  // the effect/component responsible for the runaway calls.
   log.error(
     `"${command}" fired ${recent.length}× in ${WATCHDOG_WINDOW_MS}ms — likely render-loop bug. ` +
       `Further warnings for this command suppressed for ${WATCHDOG_COOLDOWN_MS}ms.`,
@@ -102,21 +98,17 @@ function watchdog(command: string): void {
   );
 }
 
-// Commands that mutate the workspace DB. Issuing one opens a suppression
-// window so the DB watcher's change event for our own write doesn't trigger a
-// redundant reload (see shared/lib/externalChange.ts). Leaving a mutating
-// command out is not inert: the watcher reads its own echo as somebody else's
-// write and refetches the workspace on top of the user's action.
+// Commands that mutate the workspace DB. Issuing one opens a suppression window so the DB
+// watcher's change event for our own write doesn't trigger a redundant reload (see
+// shared/lib/externalChange.ts). Leaving one out is not inert: the watcher reads its own echo as
+// somebody else's write and refetches the workspace on top of the user's action.
 //
-// Only commands issued through this module's `invoke` are covered. The wipe/reset
-// and seeding commands go straight to `@tauri-apps/api/core` and are not listed —
-// a reload after wiping the workspace is the right outcome anyway.
+// Only commands issued through this module's `invoke` are covered. The wipe/reset and seeding
+// commands go straight to `@tauri-apps/api/core`, and a reload after wiping is the right outcome.
 export const WRITE_COMMANDS = new Set([
-  // Replaces the workspace file outright, then restarts the app. The watcher
-  // never sees the echo because the process is gone, but it belongs here rather
-  // than among the reads: nothing in this app rewrites more.
+  // Replaces the workspace file outright, then restarts the app, so the watcher never sees the echo;
+  // it belongs here rather than among the reads because nothing else rewrites more.
   "restore_backup",
-  // Closing the pool folds the write-ahead log back into the file.
   "close_damaged_workspace",
   "move_pages",
   "create_page",
@@ -160,17 +152,17 @@ export const WRITE_COMMANDS = new Set([
   "set_sync_calendar_color",
   "resync_sync_account",
   "refresh_sync_account",
-  // Workspace lifecycle. All three mutate what the watcher watches — a truncate,
-  // an uninstall, and a credential purge — so the app's own echo must be ignored.
+  // Workspace lifecycle: a truncate, an uninstall and a credential purge all mutate what the
+  // watcher watches, so the app's own echo must be ignored.
   "reset_db",
   "wipe_app_data",
   "release_sync_credentials",
   "record_first_run_seed",
 ]);
 
-/** Commands that only read. Listed rather than inferred so a new command has to be
- *  classified deliberately — the test below rejects any invoke in neither set.
- *  `connect_db` belongs here: it opens the pool and writes no workspace data. */
+/** Commands that only read. Listed rather than inferred so a new command must be classified: the
+ *  test below rejects any invoke in neither set. `connect_db` belongs here: it opens the pool and
+ *  writes no workspace data. */
 export const READ_COMMANDS = new Set([
   "change_state",
   "count_views",
@@ -205,8 +197,7 @@ export const READ_COMMANDS = new Set([
   "get_sync_status",
   "list_sync_calendars",
   "google_sync_available",
-  // Backups and exports read the workspace and write somewhere else entirely,
-  // so they leave nothing for the watcher to react to.
+  // Backups and exports write somewhere else entirely, so the watcher has nothing to react to.
   "backup_db",
   "backup_db_before_import",
   "export_csv",
@@ -221,9 +212,8 @@ export type CommandTransport = <T>(command: string, args?: Record<string, unknow
 
 let transport: CommandTransport = rawInvoke;
 
-/** Point the commands somewhere other than Tauri IPC. The e2e bridge lane uses
- *  this to reach the real Rust writer from a browser, which has no IPC. A lane
- *  that swaps the channel cannot see a defect in the channel itself. */
+/** Point the commands somewhere other than Tauri IPC, so the e2e bridge lane can reach the real
+ *  Rust writer from a browser. A lane that swaps the channel cannot see a defect in the channel. */
 export function setCommandTransport(next: CommandTransport): void {
   transport = next;
 }
@@ -234,7 +224,6 @@ export function setCommandTransport(next: CommandTransport): void {
 let damage: StorageError | null = null;
 const damageListeners = new Set<(error: StorageError) => void>();
 
-/** Called once, with the first damaged-file error any command returns. */
 export function onWorkspaceDamaged(listener: (error: StorageError) => void): () => void {
   damageListeners.add(listener);
   return () => damageListeners.delete(listener);
@@ -254,10 +243,9 @@ function reportDamage(error: StorageError): void {
   damageListeners.forEach((listener) => listener(error));
 }
 
-// Rust commands serialize errors as { kind, message } (see
-// apps/desktop/src-tauri/src/error.rs::AppError). Convert at the boundary
-// into a typed StorageError so UI code can branch on `kind` and never
-// stringifies a raw IPC payload (which would render "[object Object]").
+// Rust commands serialize errors as { kind, message } (see src-tauri/src/error.rs::AppError).
+// Convert at the boundary into a typed StorageError so UI code branches on `kind` and never
+// stringifies a raw IPC payload ("[object Object]").
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const isBlockedOnceDamaged =
     WRITE_COMMANDS.has(command) && !WRITES_ALLOWED_AFTER_DAMAGE.has(command);
@@ -273,17 +261,12 @@ function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> 
   });
 }
 
-/**
- * Open (or create) the SQLite workspace at `path` and run migrations.
- * Must be called by WorkspaceContext before any storage operations.
- */
+/** Open (or create) the SQLite workspace at `path` and run migrations. Call before any storage operation. */
 export function connectDb(path: string): Promise<void> {
   return invoke<void>("connect_db", { path });
 }
 
 export class TauriSQLiteAdapter implements StorageAdapter {
-  // ─── Pages ──────────────────────────────────────────────────────────────────
-
   getPage(id: string): Promise<Page | null> {
     return invoke<Page | null>("get_page", { id });
   }
@@ -422,8 +405,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<string[]>("search_tags", { query });
   }
 
-  // ─── Folders ────────────────────────────────────────────────────────────────
-
   getFolder(id: string): Promise<Folder | null> {
     return invoke<Folder | null>("get_folder", { id });
   }
@@ -456,8 +437,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("reorder_folders", { orderedIds });
   }
 
-  // ─── Schedules ──────────────────────────────────────────────────────────────
-
   createPageSchedule(data: NewPageSchedule): Promise<PageSchedule> {
     return invoke<PageSchedule>("create_page_schedule", { data });
   }
@@ -477,8 +456,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]> {
     return invoke<PageSchedule[]>("list_page_schedules_for_rules", { ruleIds });
   }
-
-  // ─── Recurrence rules ────────────────────────────────────────────────────────
 
   createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
     return invoke<PageRecurrenceRule>("create_recurrence_rule", { data });
@@ -550,8 +527,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<RescheduleVirtualResult>("reschedule_virtual_occurrence", { data });
   }
 
-  // ─── Focus sessions ─────────────────────────────────────────────────────────
-
   /** Flattened, not wrapped in `{ data }`: the command takes four scalars, which
    *  is why `ipc_tests` carries a wire case for it — every one of them is
    *  multi-word, so a camelCase⇄snake_case slip would be silent. */
@@ -563,8 +538,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
       startedAt: data.startedAt,
     });
   }
-
-  // ─── Reminders ──────────────────────────────────────────────────────────────
 
   createPageReminder(data: NewPageReminder): Promise<PageReminder> {
     return invoke<PageReminder>("create_page_reminder", { data });
@@ -585,8 +558,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]> {
     return invoke<NotificationHistoryEntry[]>("list_notification_history", { limit });
   }
-
-  // ─── Calendar sync ────────────────────────────────────────────────────────────
 
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
     return invoke<AccountWithCalendars>("connect_caldav_account", { ...data });
@@ -635,8 +606,6 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   getSyncStatus(): Promise<AccountWithCalendars[]> {
     return invoke<AccountWithCalendars[]>("get_sync_status");
   }
-
-  // ─── Workspace data lifecycle ──────────────────────────────────────────────
 
   backupDatabase(): Promise<string> {
     return invoke<string>("backup_db");

@@ -1,30 +1,23 @@
-// Differential fuzzing: does the Rust parser agree with this one on inputs
-// nobody thought to write down?
+// Differential fuzzing: does the Rust parser agree with this one on inputs nobody wrote down? The
+// corpus is what the author thought to test, a lower bound on what people type. The Rust parser's
+// pipeline order is load-bearing (cadence before date, intervals before day words, "biweekly"
+// before "weekly"), and order bugs appear only when a line carries several features in an order
+// nobody tried.
 //
-// `parser.json` is 317 inputs scraped from the test suite. That is what the
-// author thought to test, which is a lower bound on what people type — and the
-// port passing all of it says nothing about the space around it. The Rust
-// parser is a pipeline whose *order* is load-bearing (cadence before date,
-// intervals before day words, "biweekly" before "weekly"), and order bugs do
-// not show up in inputs written one feature at a time. They show up when a
-// line carries four features in an order nobody tried.
-//
-// So this composes lines out of fragments in random order, runs them through
-// the reference, and writes what it got. `crates/pikos-core/tests/
-// quick_add_fuzz.rs` grades the Rust parser against it.
+// This composes lines from fragments in random order, runs them through the reference and writes
+// the result; `crates/pikos-core/tests/quick_add_fuzz.rs` grades the Rust parser against it.
 //
 //   pnpm --filter @pikos/core gen:fuzz                 # the committed corpus
 //   FUZZ_CASES=20000 FUZZ_SEED=7 pnpm --filter @pikos/core gen:fuzz
 //
-// Deterministic: the same seed and count give byte-identical output, so a
-// regeneration that changes the file means behaviour changed.
+// The same seed and count give byte-identical output, so a changed file means behaviour changed.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../../src/nlp/parser";
 
-/** Matches the reference times in the parser corpus. */
+/** The parser corpus's reference times. */
 const REFERENCES: { id: string; iso: string }[] = [
   { id: "sun_noon", iso: "2026-03-15T12:00:00" },
   { id: "wed_noon", iso: "2026-03-18T12:00:00" },
@@ -35,7 +28,7 @@ const REFERENCES: { id: string; iso: string }[] = [
   { id: "year_end", iso: "2026-12-31T23:00:00" },
 ];
 
-/** mulberry32 — small, fast, and reproducible across Node versions. */
+/** mulberry32: small, fast, and reproducible across Node versions. */
 function makeRandom(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -47,11 +40,9 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-// ─── Fragments ───────────────────────────────────────────────────────────────
-// Every group is something the parser handles separately, so mixing them is
-// what exercises the interactions. The awkward members are deliberate: "may"
-// as a bare month, "second" as both an ordinal and a time unit, day-of-month
-// forms the date engine cannot read on its own.
+// Each group is handled separately by the parser, so mixing them exercises the interactions. The
+// awkward members are deliberate: "may" as a bare month, "second" as an ordinal and a time unit,
+// and day-of-month forms the date engine can't read alone.
 
 const TITLES = [
   "call bob",
@@ -175,7 +166,7 @@ const MARKERS = [
   "@tomorrow",
 ];
 
-/** Junk that has no business parsing, to catch over-matching. */
+/** Junk that must not parse, to catch over-matching. */
 const NOISE = [
   "section 24",
   "12345",
@@ -201,7 +192,6 @@ function pick<T>(random: Random, items: readonly T[]): T {
   return items[Math.floor(random() * items.length)]!;
 }
 
-/** Spacing and casing the way people actually type. */
 function roughen(random: Random, text: string): string {
   let out = text;
   const roll = random();
@@ -214,10 +204,9 @@ function roughen(random: Random, text: string): string {
   return out;
 }
 
-/** One line: a handful of fragments from different groups, shuffled. */
+/** A handful of fragments from different groups, shuffled. */
 function makeInput(random: Random): string {
-  // Occasionally emit something with no structure at all — a parser that only
-  // ever sees well-formed lines is not being tested.
+  // Sometimes no structure at all: a parser seeing only well-formed lines isn't being tested.
   if (random() < 0.04) {
     const length = 1 + Math.floor(random() * 20);
     const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789 #~!@/:-.,";
@@ -231,14 +220,12 @@ function makeInput(random: Random): string {
   const used = new Set<number>();
   for (let i = 0; i < count; i++) {
     let group = Math.floor(random() * GROUPS.length);
-    // Two fragments from the same group is a realistic mistake ("tomorrow
-    // next friday"), just not the common case.
+    // Two fragments from one group is a realistic mistake ("tomorrow next friday"), if uncommon.
     if (used.has(group) && random() < 0.7) group = (group + 1) % GROUPS.length;
     used.add(group);
     chosen.push(pick(random, GROUPS[group]!));
   }
-  // Shuffle: the order features appear in is exactly what the pipeline's
-  // ordering rules are sensitive to.
+  // Order is what the pipeline's ordering rules are sensitive to.
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j]!, chosen[i]!];
@@ -275,30 +262,27 @@ function main(): void {
     root,
     process.env["FUZZ_OUT"] ?? "../../crates/pikos-core/tests/corpus/parser-fuzz.json"
   );
-  // Inputs that once diverged between the two implementations. Always included,
-  // whatever the seed — a regression case is worth more than a random one.
+  // Inputs that diverged between the implementations, always included: a regression case beats a
+  // random one.
   const regressionsPath = resolve(root, "scripts/parser-grammar/fuzz-regressions.json");
   let regressions: string[] = [];
   try {
     regressions = JSON.parse(readFileSync(regressionsPath, "utf8")) as string[];
   } catch {
-    // None recorded yet.
+    // keep walking
   }
 
   const random = makeRandom(seed);
   const inputs = new Set<string>(regressions);
-  // Bounded: the fragment space is finite, so asking for more unique lines than
-  // exist would spin forever.
+  // Bounded: the fragment space is finite, so asking for more unique lines than exist would spin.
   for (let attempts = 0; inputs.size < wanted && attempts < wanted * 50; attempts++) {
     inputs.add(makeInput(random));
   }
 
-  // A line like "mon/wed/fri 10 times" expands to a two-thousand-page series
-  // — "fri 10" resolves to a date, leaving "2026  times" to be read as a
-  // count. Recording those in full is 12MB of JSON and a minute of comparison
-  // for one behaviour, which a unit test pins far more cheaply. They are
-  // skipped rather than dropped: the count and the inputs are written out, so
-  // the omission is visible rather than a silent hole in the corpus.
+  // "mon/wed/fri 10 times" expands to a two-thousand-page series ("fri 10" resolves to a date,
+  // leaving "2026  times" as a count): 12MB of JSON and a minute of comparison for a behaviour a
+  // unit test pins cheaply. They are skipped, with the count and inputs written out so the
+  // omission is visible.
   const MAX_SERIES = 30;
 
   const cases: { input: string; ref: string; result: unknown }[] = [];

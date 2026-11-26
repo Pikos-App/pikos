@@ -33,11 +33,9 @@ const MID_PANEL = { defaultWidth: 280, max: 480, min: 240 };
 /**
  * What the calendar keeps whatever the two panels do, in screen px.
  *
- * Unscaled, unlike the panels: an hour column stays readable narrow, where a
- * panel's text does not. Scaling this too would leave nothing to drag into at
- * the largest text size, which is what capping each panel at a share of the
- * window used to do — at 200% the two panels' minimums are wider than the half
- * window that rule allowed them, so both dividers were inert.
+ * Unscaled, unlike the panels: an hour column stays readable narrow, where a panel's text does
+ * not. Scaling it too would leave nothing to drag into at the largest text size, where the two
+ * panels' minimums are wider than half the window and both dividers would be inert.
  */
 const CALENDAR_MIN_WIDTH = 320;
 
@@ -57,10 +55,9 @@ export function ThreePanelLayout() {
   // avoid resetting the underlying state when the viewport grows.
   const drawerVisible = pageListOverlay && pageListDrawerOpen;
 
-  // Custom collision: first check what's under the pointer, then pick the
-  // closest center among those candidates. Prevents folder droppables from
-  // activating when the cursor is still in the page list panel.
-  // Over the calendar, suppress all collisions so page items don't shift.
+  // Custom collision: check what's under the pointer, then pick the closest center among those, so
+  // folder droppables don't activate while the cursor is in the page list panel. Over the calendar,
+  // suppress all collisions so page items don't shift.
   const collisionDetection: CollisionDetection = isDraggingOverCalendar
     ? () => []
     : (args) => {
@@ -125,7 +122,6 @@ export function ThreePanelLayout() {
       >
         {!isFullscreen && <TitleBar />}
         <div className="relative flex min-h-0 flex-1">
-          {/* Left folder sidebar — hidden at md/sm or when manually collapsed. */}
           <motion.div
             animate={{
               opacity: leftHidden || hideSidebar ? 0 : 1,
@@ -135,17 +131,14 @@ export function ThreePanelLayout() {
               "h-full shrink-0 overflow-hidden",
               leftHidden || hideSidebar ? "pointer-events-none" : "pointer-events-auto"
             )}
-            // A collapsed panel is zero-width, not unmounted, and its contents
-            // overflow rather than clip away — so without this the sidebar keeps
-            // taking Tab focus and stays in the accessibility tree while nothing
-            // is on screen. `pointer-events-none` only stops the mouse.
+            // A collapsed panel is zero-width, not unmounted, and its contents overflow rather than clip, so
+            // without this the sidebar keeps Tab focus and stays in the accessibility tree.
             inert={leftHidden || hideSidebar}
             transition={PANEL_SPRING}
           >
             <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
           </motion.div>
 
-          {/* Middle page list — inline at xl/lg/md, hidden at sm (rendered as overlay below). */}
           {!pageListOverlay && (
             <motion.div
               animate={{
@@ -165,7 +158,6 @@ export function ThreePanelLayout() {
 
           <EditorPanel />
 
-          {/* sm overlay drawer — absolute, slides in from the left with a backdrop. */}
           <AnimatePresence>
             {drawerVisible && (
               <>

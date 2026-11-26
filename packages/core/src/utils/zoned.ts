@@ -1,43 +1,28 @@
-// ─── Timezone-aware boundary layer ──────────────────────────────────────────
+// Pikos-native pages are timezone-naive, but synced events are zone-aware: "every Wednesday 9am
+// in America/New_York" keeps its 9am New York wall clock across DST, so its absolute time varies
+// by occurrence.
 //
-// Pikos-native pages are timezone-naive (local wall-clock strings), but
-// externally synced calendar events are zone-aware: "every Wednesday 9am in
-// America/New_York" keeps its 9am *New York* wall clock across DST, so its
-// absolute time — and therefore the viewer-local time — varies by occurrence.
-//
-// RFC 5545 defines recurrence in the event's own local time, which is exactly
-// the naive wall-clock space the wasm engine works in. So the engine stays
-// timezone-free, and this module supplies the two conversions needed at its
-// boundary:
-//
-//   viewer wall-clock ⇄ UTC instant ⇄ event wall-clock
-//
-// using the platform's own timezone database via Intl (zero bundle bytes —
-// deliberately NOT embedded in the wasm; see crates/pikos-recurrence's
-// feature-gated `zoned` module for the native mirror of this file).
-//
-// DST edge policy (identical in the Rust mirror — keep them in sync):
-// - Nonexistent wall times (spring-forward gap, e.g. 02:30 on a US
-//   spring-forward day) resolve with the pre-transition offset, which shifts
-//   the wall clock forward by the gap (02:30 EST-that-never-was → 03:30 EDT).
-//   This matches Google Calendar's behavior.
-// - Ambiguous wall times (fall-back repeat) resolve to the EARLIEST instant
-//   (the first time the clock shows that wall time).
+// RFC 5545 defines recurrence in the event's own local time, the naive wall-clock space the wasm
+// engine works in. The engine stays timezone-free, and this module converts at its boundary:
+// viewer wall clock, UTC instant, event wall clock. It uses the platform's timezone database via
+// Intl, so the wasm carries none. The native mirror is the `zoned` module in
+// crates/pikos-recurrence; keep the DST policy identical in both:
+// - A nonexistent wall time (spring-forward gap) resolves with the pre-transition offset, which
+//   shifts the wall clock forward by the gap (02:30 becomes 03:30). This matches Google Calendar.
+// - An ambiguous wall time (fall-back repeat) resolves to the earliest instant.
 
 import * as engine from "@pikos/recurrence-wasm";
 
 import { isAllDayIso } from "./dates";
 
-/** Engine wire shape for one expanded occurrence (same as recurrence.ts). */
 interface EngineOccurrence {
   originalDate: string;
   scheduledStart: string;
   scheduledEnd: string | null;
 }
 
-// ─── Wall-clock string ⇄ fake-UTC millis ────────────────────────────────────
-// A wall-clock time has no zone, so it is carried as the epoch millis of the
-// UTC datetime with the same fields ("fake UTC") — never as a local Date.
+// A wall-clock time has no zone, so it is carried as the epoch millis of the UTC datetime with
+// the same fields ("fake UTC"), never as a local Date.
 
 function wallIsoToMs(iso: string): number {
   const [date, time] = iso.split("T");
@@ -55,14 +40,12 @@ function msToWallIso(ms: number): string {
   );
 }
 
-// ─── Zone offset lookup via Intl ────────────────────────────────────────────
-
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function zoneFormatter(zone: string): Intl.DateTimeFormat {
   let dtf = formatterCache.get(zone);
   if (!dtf) {
-    // en-CA date parts are unambiguous; hourCycle h23 avoids the "24:00" quirk.
+    // hourCycle h23 avoids the "24:00" quirk.
     dtf = new Intl.DateTimeFormat("en-CA", {
       day: "2-digit",
       hour: "2-digit",
@@ -97,23 +80,18 @@ function offsetAt(zone: string, utcMs: number): number {
   return wallMsAt(zone, utcMs) - utcMs;
 }
 
-// ─── Public conversions ─────────────────────────────────────────────────────
-
-/**
- * Converts a wall-clock ISO string in `zone` to its UTC instant, applying the
- * DST edge policy documented above. Date-only input is treated as midnight.
- */
 /** An instant as the database stores one: UTC to the second, `YYYY-MM-DDTHH:MM:SSZ`. */
 export function utcInstant(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+/** A wall-clock ISO string in `zone` as its UTC instant, by the DST policy above. Date-only input
+ * is midnight. */
 export function wallClockToUtc(zone: string, wallClockIso: string): Date {
   const wall = wallIsoToMs(wallClockIso);
 
-  // Two candidate offsets: the one in effect if the wall value were UTC, and
-  // the one in effect at the instant that first guess produces. Around a
-  // transition these differ and bracket the answer.
+  // Two candidate offsets: the one in effect if the wall value were UTC, and the one at the
+  // instant that first guess produces. Around a transition they differ and bracket the answer.
   const off1 = offsetAt(zone, wall);
   const cand1 = wall - off1;
   const off2 = offsetAt(zone, cand1);
@@ -123,42 +101,32 @@ export function wallClockToUtc(zone: string, wallClockIso: string): Date {
   const valid = candidates.filter((utc) => wallMsAt(zone, utc) === wall);
 
   if (valid.length > 0) {
-    // Unique or ambiguous (fall-back): earliest instant wins.
     return new Date(valid[0]!);
   }
-  // Nonexistent (spring-forward gap): interpret with the pre-transition
-  // offset — the offset in effect at the earlier candidate — which shifts
-  // the wall clock forward by the gap.
+  // Spring-forward gap: the offset in effect at the earlier candidate.
   return new Date(wall - offsetAt(zone, candidates[0]!));
 }
 
-/** Wall-clock ISO string ('YYYY-MM-DDTHH:MM:SS') shown in `zone` at `instant`. */
+/** The wall clock ('YYYY-MM-DDTHH:MM:SS') shown in `zone` at `instant`. */
 export function utcToWallClock(zone: string, instant: Date): string {
   return msToWallIso(wallMsAt(zone, instant.getTime()));
 }
 
-// ─── Zoned recurrence expansion ─────────────────────────────────────────────
-
 export interface ZonedOccurrence {
-  /**
-   * The occurrence date (YYYY-MM-DD) in the EVENT's zone — the stable
-   * identity used for exdates/overrides, matching what the source calendar
-   * would report.
-   */
+  /** The date (YYYY-MM-DD) in the event's zone: the identity for exdates and overrides, matching
+   *  what the source calendar reports. */
   originalDate: string;
-  /** Occurrence start as viewer-zone wall-clock ISO. */
+  /** Viewer-zone wall-clock ISO. */
   scheduledStart: string;
-  /** Occurrence end as viewer-zone wall-clock ISO (null when the rule has none). */
+  /** Viewer-zone wall-clock ISO; null when the rule has none. */
   scheduledEnd: string | null;
-  /** The exact UTC instant of the start, for callers that need to re-anchor. */
+  /** For callers that need to re-anchor. */
   utcStart: string;
 }
 
-/**
- * RFC 5545 expresses a timed UNTIL in UTC when DTSTART carries a TZID.
- * The engine compares occurrences in event-zone wall-clock, so rewrite the
- * UNTIL bound into that frame before expansion. Date-only UNTILs pass through.
- */
+/** RFC 5545 gives a timed UNTIL in UTC when DTSTART carries a TZID, but the engine compares in
+ * event-zone wall clock, so this rewrites the bound into that frame. Date-only UNTILs pass
+ * through. */
 export function normalizeUntilToZone(rrule: string, eventZone: string): string {
   return rrule.replace(/UNTIL=(\d{8})T(\d{6})Z?/i, (_, date: string, time: string) => {
     const iso =
@@ -170,24 +138,10 @@ export function normalizeUntilToZone(rrule: string, eventZone: string): string {
 }
 
 /**
- * Expands a zone-aware recurrence (an externally synced event) into
- * occurrences expressed in the viewer's zone.
- *
- * The pipeline: normalize UNTIL (UTC → event wall-clock) → convert the
- * viewer-zone range bounds into event wall-clock → expand naively in the
- * event's zone via the wasm engine (RFC 5545 semantics: the wall clock is
- * what recurs) → convert each occurrence event → UTC → viewer wall-clock.
- *
- * All-day rules are zone-less by definition and pass through unconverted.
- *
- * @param rrule - RRULE string without "RRULE:" prefix
- * @param scheduledStart - base occurrence start, wall-clock in eventZone
- * @param scheduledEnd - base occurrence end, wall-clock in eventZone
- * @param eventZone - IANA zone the event recurs in (e.g. "America/New_York")
- * @param viewerZone - IANA zone to express results in (e.g. getLocalTimezone())
- * @param rangeStartIso / rangeEndIso - visible range as viewer-zone wall-clock
- *   ISO strings, [start, end) — end exclusive
- * @param exdates - YYYY-MM-DD dates (event zone) excluded from the series
+ * Expands a synced zone-aware recurrence into occurrences in the viewer's zone. The range
+ * bounds are viewer-zone wall-clock ISO, end exclusive; `rrule` has no "RRULE:" prefix;
+ * `scheduledStart`/`scheduledEnd` and `exdates` (YYYY-MM-DD) are in `eventZone`. All-day rules are
+ * zone-less and pass through unconverted.
  */
 export function expandRecurrenceInZone(opts: {
   rrule: string;

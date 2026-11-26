@@ -119,10 +119,8 @@ export function EditorPanel() {
     when: calendarShown,
   });
 
-  // min-w-0: a flex item defaults to min-width:auto and so refuses to shrink
-  // below its content. The month grid is as wide as its widest row wants to be,
-  // so without this the panel grows past the window and drags the whole
-  // three-panel shell with it — the sidebar and page list scroll off screen.
+  // min-w-0: a flex item's min-width:auto refuses to shrink below its content, so the month grid
+  // would grow the panel past the window and push the sidebar and page list off screen.
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-background">
       <RightPanelHeader>
@@ -140,14 +138,9 @@ export function EditorPanel() {
       </RightPanelHeader>
       <CalendarNotSyncingBanner />
 
-      {/* Both mounted and toggled via `hidden` to eliminate the unmount/remount
-          flash when switching panels. The first mount pays the cost for both
-          subtrees; subsequent toggles are instant and preserve scroll/focus.
-
-          Each pane gets its own ErrorBoundary so a Tiptap/WeekGrid render
-          error stays contained — the other pane (and the rest of the shell)
-          stays usable. The editor boundary is keyed on activePageId so
-          navigating to a different page also clears any prior crash. */}
+      {/* Both mounted and toggled via `hidden` to avoid the unmount/remount flash; the first mount pays
+          for both. Each pane has its own ErrorBoundary so a render error stays contained; the editor's is
+          keyed on activePageId so navigating to another page clears a prior crash. */}
       <div
         className="flex min-h-0 flex-1 flex-col"
         hidden={ui.rightPanel !== "editor"}

@@ -6,34 +6,24 @@ import UIKit
 
 /// The app's single connection to the workspace, and the state the UI observes.
 ///
-/// One store, one `Workspace`, one writer — the rule the data layer is built
-/// around. Views read `pages` and call the methods here rather than holding a
-/// `Workspace` of their own, so there is one place where a write happens and
-/// one place where the list is refreshed after it.
-///
-/// `@MainActor` because everything it publishes drives SwiftUI. The FFI calls
-/// are `async` and do their work off the main thread; only the results land
-/// here.
+/// One store, one `Workspace`, one writer: views read `pages` and call the methods here rather
+/// than holding a `Workspace` of their own, so a write and the refresh after it happen in one
+/// place. `@MainActor` because everything it publishes drives SwiftUI.
 @MainActor
 @Observable
 public final class WorkspaceStore {
-    /// What the app is currently showing.
-    /// Hashable, not merely Equatable: SwiftUI's `tag(_:)` requires it, and the
-    /// view switcher is a Picker over these.
+    /// What the app is currently showing. Hashable because SwiftUI's `tag(_:)` requires it.
     public enum Scope: Hashable {
         case today
         case upcoming
         case inbox
         case folder(id: String, name: String)
 
-        /// Every view lists open work only. What is finished appears below it
-        /// in its own section, ordered by when it was completed rather than by
-        /// where it was filed — see `completedScope`.
+        /// Every view lists open work only; finished work is its own section, see `completedScope`.
         var query: PageQuery {
             switch self {
             case .today, .upcoming:
-                // The date views have their own listings, which arrive already
-                // sectioned; this query is unused for them.
+                // Unused for the date views, which have their own listings.
                 return PageQuery()
             case .inbox:
                 return PageQuery(folder: .inbox, openOnly: true)
@@ -42,12 +32,9 @@ public final class WorkspaceStore {
             }
         }
 
-        /// What this view's Completed section means, which is not the same
-        /// question in each. Today and Upcoming ask "what did I finish today",
-        /// across every folder — they have no folder of their own, and what
-        /// left their sections since this morning is the only finished work
-        /// they can sensibly claim. A folder asks "what have I ever finished in
-        /// here".
+        /// What this view's Completed section means. Today and Upcoming ask "what did I finish today"
+        /// across every folder, the only finished work they can claim; a folder asks "what have I ever
+        /// finished in here".
         var completedScope: CompletedScope {
             switch self {
             case .today, .upcoming: return .today
@@ -56,10 +43,8 @@ public final class WorkspaceStore {
             }
         }
 
-        /// Whether this view's order comes from the schedule rather than from
-        /// how the user arranged it. A sort control has nothing to act on in
-        /// one of these, which is also why they are the two that arrive in
-        /// sections.
+        /// Whether this view's order comes from the schedule rather than the user's arrangement, so a
+        /// sort control has nothing to act on.
         var isDateGrouped: Bool {
             switch self {
             case .today, .upcoming: return true
@@ -86,16 +71,10 @@ public final class WorkspaceStore {
         }
     }
 
-    /// One run of rows under one heading.
-    ///
-    /// Every view produces these, including the ones with no headings at all —
-    /// a folder is a single untitled section. Uniform on purpose: the
-    /// alternative is a screen that branches on the view to decide whether it
-    /// is drawing a list or a set of lists, and the two date views would be the
-    /// only ones exercising the second branch.
+    /// One run of rows under one heading. Every view produces these, a folder being one untitled
+    /// section, so the screen doesn't branch on the view to decide between a list and a set of lists.
     public struct Section: Identifiable, Hashable {
-        /// Stable across refreshes, so SwiftUI keeps scroll position and row
-        /// identity when the contents change under it.
+        /// Stable across refreshes, so SwiftUI keeps scroll position and row identity.
         public let id: String
         /// `nil` for a view that is one undifferentiated list.
         public let title: String?
@@ -151,31 +130,17 @@ public final class WorkspaceStore {
     /// How many rows the list has loaded, so a refresh after a write re-reads those and no more.
     private var loadedRows = 0
 
-    /// Every listed page, regardless of which section it is in.
-    ///
-    /// Derived rather than stored so it cannot fall out of step with
-    /// `sections`. The filter field and the empty-state check both want the
-    /// whole set and neither cares how it is grouped.
+    /// Every listed page regardless of section, derived so it can't fall out of step with `sections`.
     public var pages: [PageSummary] { sections.flatMap(\.pages) }
     public private(set) var folders: [Folder] = []
 
-    /// Set when something failed in a way the user should see. Cleared when
-    /// they dismiss it.
-    ///
-    /// Shown by the shell rather than by any one screen, so a write that fails
-    /// while the calendar is up says so on the calendar instead of waiting for
-    /// the user to come back to the page list.
+    /// Set when something failed in a way the user should see, until dismissed. Shown by the shell,
+    /// so a failed write on the calendar says so there.
     public var errorMessage: String?
 
-    /// Something that just happened and the way back from it, for a few
-    /// seconds.
-    ///
-    /// One mechanism for every "done — undo?" moment in the app: a backlog
-    /// moved to today, an occurrence skipped, a page added somewhere the user
-    /// is not looking. Each used to draw its own bar, and two copies of a
-    /// countdown is two places for the timing to drift. The shell
-    /// draws whatever is here and clears it; the store only says what
-    /// happened.
+    /// Something that just happened and the way back from it, for a few seconds. One mechanism for
+    /// every "done, undo?" moment, since two copies of a countdown drift. The shell draws and clears
+    /// it; the store only says what happened.
     public struct Notice: Identifiable, Equatable {
         public let id = UUID()
         public let message: String
@@ -207,19 +172,12 @@ public final class WorkspaceStore {
     /// whose every action would do nothing.
     public private(set) var openFailure: String?
 
-    /// True until the first load completes, so the list can distinguish "still
-    /// loading" from "genuinely empty" — an empty list shown during startup
-    /// reads as data loss.
+    /// True until the first load completes, so an empty list during startup doesn't read as data loss.
     public private(set) var isLoading = true
 
-    /// Bumped whenever the workspace has been written to and re-read.
-    ///
-    /// `pages` is enough for the list, which observes it directly. The calendar
-    /// asks a different question — occurrences projected onto the days on
-    /// screen — and its answer is not in `pages`, so without something to
-    /// observe it would keep showing what it fetched when the range last
-    /// changed. Completing a task from the editor and coming back to a calendar
-    /// still showing it undone is the symptom.
+    /// Bumped whenever the workspace has been written to and re-read. The calendar's data isn't in
+    /// `pages`, so without this to observe it would keep showing what it fetched when its range last
+    /// changed, such as a task completed in the editor still undone.
     public private(set) var dataVersion = 0
 
     #if DEBUG
@@ -230,11 +188,8 @@ public final class WorkspaceStore {
     public var scope: Scope = .today {
         didSet {
             guard scope != oldValue else { return }
-            // The finished pages belong to the view that was showing, and the
-            // new one's are a different set entirely — Today's are today's
-            // across every folder. Dropped rather than re-fetched, so the
-            // section starts collapsed in the new view and costs nothing until
-            // somebody asks for it.
+            // The finished pages belong to the view that was showing. Dropped rather than re-fetched, so
+            // the section starts collapsed and costs nothing until asked for.
             isCompletedExpanded = false
             completedPages = []
             completedTotal = 0
@@ -245,24 +200,17 @@ public final class WorkspaceStore {
         }
     }
 
-    /// What this view has loaded of its finished pages, newest first.
-    ///
-    /// Empty until the section is opened. A folder accumulates completed pages
-    /// without limit, so this is the one list in the app that is paginated —
-    /// loading all of them would make the screen slower every week for rows
-    /// nobody is looking at.
+    /// What this view has loaded of its finished pages, newest first, empty until the section is
+    /// opened. A folder's completed pages grow without limit, so this is the one paginated list.
     public private(set) var completedPages: [PageSummary] = []
 
     /// How many finished pages this view has in total, which is usually more
     /// than `completedPages.count`. The difference is what "Show more" is for.
     public private(set) var completedTotal: UInt32 = 0
 
-    /// Whether the Completed section is open.
-    ///
-    /// Held here rather than by the list screen because it changes together with
-    /// what the section has loaded. The screen is one view across every scope;
-    /// while it owned this flag, a switch dropped the rows and kept the section
-    /// open, and nothing loaded the new scope's, so it read "Loading…" for good.
+    /// Whether the Completed section is open. Held here, not by the list screen, because it changes
+    /// with what the section has loaded: a scope switch dropped the rows and kept the section open,
+    /// so it read "Loading…" for good.
     public private(set) var isCompletedExpanded = false
 
     /// Whether this scope's first page of finished work has arrived. Distinct
@@ -272,32 +220,22 @@ public final class WorkspaceStore {
 
     private var workspace: Workspace?
 
-    /// The open workspace, for the one caller that needs the handle rather than
-    /// this store's methods.
-    ///
-    /// `CalendarSyncStore` talks to the same file but keeps its own state,
-    /// because its failures are a different kind — a server that is down, a
-    /// password that was rotated — and folding them into this store's single
-    /// `errorMessage` would show "could not read or write" over all of them.
-    /// Read-only: the one-writer rule still means every *write* goes through a
-    /// method here or on that store, never through a handle passed around.
+    /// The open workspace, for the one caller that needs the handle. `CalendarSyncStore` keeps its
+    /// own state because its failures differ in kind, and folding them into `errorMessage` would show
+    /// "could not read or write" over all of them. Read-only: every write still goes through a method
+    /// here or on that store.
     public var handle: Workspace? { workspace }
 
     public init() {}
 
-    /// Open the workspace and load the first screen's worth of data.
-    ///
-    /// Separate from `init` because it can fail and because it is async; a
-    /// failing initialiser would leave the app with no store to show the error
+    /// Open the workspace and load the first screen's worth of data. Separate from `init` because it
+    /// can fail and is async, and a failing initialiser would leave no store to show the error with.
     /// with.
     public func start() async {
         do {
             let url = try WorkspaceLocation.databaseURL()
-            // Decided before the open, which creates the file. Whether this
-            // is a first launch is a property of the disk, not of a
-            // preference: a preference would survive "Delete all data" and a
-            // reinstall would forget it, and both are exactly the moments a
-            // fresh workspace should be recognised as one.
+            // Decided before the open, which creates the file. First launch is a property of the disk: a
+            // preference would survive "Delete all data" and be forgotten by a reinstall.
             var isNewWorkspace = !FileManager.default.fileExists(atPath: url.path)
             do {
                 workspace = try await Workspace.open(path: url.path)
@@ -308,9 +246,8 @@ public final class WorkspaceStore {
                 startupNote = String(
                     localized: "This phone's workspace was made by a test build of Pikos that this one can't read, so Pikos started a new one. The old one is in Files, under Pikos › Set aside.")
             }
-            // After the open, so the sidecar files SQLite creates get the class
-            // too. The app is the only writer, so this is the one place it can
-            // be applied without racing anyone.
+            // After the open, so SQLite's sidecar files get the class too. The app is the only writer, so
+            // there is no race.
             try? WorkspaceLocation.applyProtectionClass()
             if isNewWorkspace {
                 #if DEBUG
@@ -346,21 +283,11 @@ public final class WorkspaceStore {
     /// What a brand-new workspace starts with: the desktop's "Start here" folder and its three
     /// pages, in the phone's own words.
     ///
-    /// There is no onboarding. Nothing to sign up for means nothing to ask,
-    /// and a carousel of screens between a person and their first note is a
-    /// cost the app's whole pitch is about not having. What a first launch
-    /// does get is a folder of ordinary pages, written in the product's own
-    /// voice: where the data lives, how capture works, and what to swipe. A
-    /// folder rather than one page in the Inbox, as the desktop has it, so the
-    /// whole lesson goes in one delete.
-    ///
-    /// Undated, unlike the desktop's welcome page, which sits on today's
-    /// calendar. On a phone Today's empty state is where capture is taught, and
-    /// it stays empty so its "Try …" example still lands.
-    ///
-    /// Seeded only when the database did not exist before this open, so a
-    /// workspace that arrives by restore or sync is never given pages its
-    /// owner did not write.
+    /// There is no onboarding; a folder of ordinary pages teaches the product, and as a folder the
+    /// whole lesson goes in one delete. Undated, unlike the desktop's welcome page, so Today's empty
+    /// state, where capture is taught, stays empty for its "Try …" example. Seeded only when the
+    /// database did not exist before this open, so a workspace arriving by restore or sync is never
+    /// given pages its owner did not write.
     private func seedStartHere() async {
         guard let workspace,
             let folder = try? await workspace.createFolder(
@@ -378,8 +305,7 @@ public final class WorkspaceStore {
     /// The desktop tutorial's folder colour, so the folder looks the same on both.
     private static let startHereColor = "#6366f1"
 
-    /// Plain paragraphs, turned into documents by the shared Rust so the
-    /// pages are written in the same schema as everything else.
+    /// Plain paragraphs, turned into documents by the shared Rust so the pages share its schema.
     private static var startHerePages: [(title: String, subtitle: String, text: String)] {
         [
             (
@@ -445,12 +371,9 @@ public final class WorkspaceStore {
         ]
     }
 
-    /// Open the workspace if nothing has yet.
-    ///
-    /// For the entry points that can run before the first screen's `.task`
-    /// — a background refresh, a notification action on an app launched in
-    /// the background for it. A second call while the first is still opening
-    /// waits for it rather than opening twice.
+    /// Open the workspace if nothing has yet, for entry points that can run before the first
+    /// screen's `.task`, such as a background refresh. A second call while the first is opening waits
+    /// for it rather than opening twice.
     public func ensureStarted() async {
         if workspace != nil { return }
         if let opening {
@@ -472,9 +395,8 @@ public final class WorkspaceStore {
             defer { lastRefresh = started.duration(to: .now) }
         #endif
         do {
-            // Sequential rather than concurrent. These are two local SQLite
-            // queries measured in single-digit milliseconds; overlapping them
-            // would buy nothing and put two readers on the pool for no reason.
+            // Sequential: two local SQLite queries in single-digit milliseconds, so overlapping them would
+            // only put two readers on the pool.
             sections = try await load(scope)
             try await refreshAroundTheList(workspace)
         } catch {
@@ -490,10 +412,8 @@ public final class WorkspaceStore {
             folder.color = CurrentPaletteColor.of(folder.color)
             return folder
         }
-        // An opened section re-reads its rows; a closed one re-reads only
-        // its count. The count is not decoration: the screen decides
-        // whether to show "nothing here yet" from it, and a view whose
-        // pages are all finished is not empty — it just has nothing open.
+        // An opened section re-reads its rows; a closed one only its count, which the screen needs to
+        // tell "nothing here yet" from a view whose pages are all finished.
         if hasLoadedCompleted {
             await reloadCompleted()
         } else {
@@ -540,15 +460,10 @@ public final class WorkspaceStore {
         }
     }
 
-    /// The rows for one view, already grouped the way it is drawn.
-    ///
-    /// The two date views come back sectioned from the workspace rather than
-    /// being sectioned here. Both rules behind the grouping are subtle enough
-    /// to be worth having in one place: an all-day item stays "today" until
-    /// midnight while a timed one slips the moment it passes, and an all-day
-    /// item dated today sorts at *now* so it lands between what has gone and
-    /// what has not. A Swift copy of either would be a second definition that
-    /// drifts from the one the desktop is graded against.
+    /// The rows for one view, already grouped the way it is drawn. The date views are sectioned by
+    /// the workspace, not here: an all-day item stays "today" until midnight while a timed one slips
+    /// when it passes, and an all-day item dated today sorts at now. A Swift copy would drift from
+    /// the one the desktop is graded against.
     private func load(_ scope: Scope) async throws -> [Section] {
         guard let workspace else { return [] }
         switch scope {
@@ -671,10 +586,8 @@ public final class WorkspaceStore {
     /// How many finished pages one fetch brings back.
     private static let completedPageSize: UInt32 = 20
 
-    /// Open or close the section, loading the first page the first time it opens.
-    ///
-    /// Reopening a section that is already loaded shows what is there rather
-    /// than re-querying, which is what makes expanding and collapsing free.
+    /// Open or close the section, loading the first page the first time it opens. Reopening shows
+    /// what is loaded rather than re-querying.
     public func toggleCompleted() {
         isCompletedExpanded.toggle()
         guard isCompletedExpanded, !hasLoadedCompleted else { return }
@@ -695,23 +608,17 @@ public final class WorkspaceStore {
         completedPages.count < Int(completedTotal)
     }
 
-    /// Re-read everything already on screen, in one query rather than page by
-    /// page.
-    ///
-    /// A write can add a row to the top of this list (a page just ticked) or
-    /// take one out of it (unticked, deleted), and both shift every row after
-    /// it. Re-fetching from offset 0 with the count already shown is the only
-    /// way to stay consistent — paging further after an insert with per-page
-    /// offsets would show one row twice and skip another.
+    /// Re-read everything already on screen in one query. A write can add a row to the top (a page
+    /// just ticked) or take one out, shifting every row after it, so re-fetching from offset 0 with
+    /// the count shown is the only consistent way: paging on with per-page offsets would show one
+    /// row twice and skip another.
     private func reloadCompleted() async {
         let shown = max(UInt32(completedPages.count), Self.completedPageSize)
         await fetchCompleted(offset: 0, replacing: true, limit: shown)
     }
 
-    /// How many finished pages this view has, without reading any of them.
-    ///
-    /// A limit of zero is the point: the query still runs its `COUNT(*)`, which
-    /// is what the caller wants, and returns no rows to build summaries from.
+    /// How many finished pages this view has, without reading any: a limit of zero still runs the
+    /// `COUNT(*)` and returns no rows.
     private func countCompleted() async {
         await fetchCompleted(offset: 0, replacing: false, limit: 0)
     }
@@ -746,11 +653,9 @@ public final class WorkspaceStore {
         do {
             return try await workspace.getPage(id: id)
         } catch let error as WorkspaceError {
-            // A page that has been deleted is routine — a stale deep link, a
-            // widget tap, a restored navigation stack. Not worth an alert.
-            // `NotFound`, capitalised: UniFFI spells an error case exactly as
-            // the Rust variant is spelled, not in Swift's lowerCamelCase. The
-            // lowercase form compiles nowhere and is easy to write from habit.
+            // A deleted page is routine (a stale deep link, a widget tap, a restored navigation stack),
+            // not worth an alert. `NotFound` is capitalised because UniFFI spells a case as the Rust
+            // variant is spelled; the lowercase form compiles nowhere.
             if case .NotFound = error { return nil }
             errorMessage = error.localizedDescription
             return nil
@@ -760,14 +665,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Everything the calendar draws for a visible range, inclusive of both
-    /// ends and in `YYYY-MM-DD`.
-    ///
-    /// Not cached and not folded into `pages`. The calendar's question is a
-    /// different one — it needs recurring occurrences projected onto the days
-    /// on screen, which no page list contains — and the range changes as the
-    /// user swipes, so a cache keyed on nothing in particular would be a
-    /// staleness bug waiting to happen.
+    /// Everything the calendar draws for a visible range, inclusive of both ends, in `YYYY-MM-DD`.
+    /// Not cached or folded into `pages`: it needs recurring occurrences projected onto the days on
+    /// screen, and the range changes as the user swipes, so a cache would be a staleness bug.
     public func calendarRange(from start: String, to end: String) async -> [CalendarEntry] {
         guard let workspace else { return [] }
         do {
@@ -778,13 +678,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Every tag on an open page, most used first.
-    ///
-    /// For the search screen's suggestions, which complete `tag:` from what
-    /// exists rather than from what the reader can remember. One query over
-    /// the open pages; the finished ones would add tags nobody is filtering
-    /// by any more. Errors are swallowed: a suggestion list that is empty is
-    /// a search screen exactly as it was, not a fault worth an alert.
+    /// Every tag on an open page, most used first, for the search screen's suggestions. Open pages
+    /// only, since finished ones add tags nobody filters by. Errors are swallowed: an empty
+    /// suggestion list is not worth an alert.
     public func allTags() async -> [String] {
         guard let workspace else { return [] }
         guard let pages = try? await workspace.listPages(query: PageQuery(openOnly: true)) else {
@@ -827,12 +723,9 @@ public final class WorkspaceStore {
 
     // MARK: - Writes
 
-    /// Save an edited document.
-    ///
-    /// Deliberately does not refresh the list: this is called on every debounced
-    /// keystroke while the editor is open, and reloading the page list under the
-    /// user on each one would be both wasteful and visibly janky. The list
-    /// refreshes when the editor closes.
+    /// Save an edited document. Does not refresh the list: it runs on every debounced keystroke, and
+    /// reloading the list under the user each time would be janky. The list refreshes when the editor
+    /// closes.
     public func saveDocument(pageId: String, json: String) async {
         guard let workspace else { return }
         await untilWritten {
@@ -867,12 +760,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Add a reminder to a page, as minutes before its start.
-    ///
-    /// No refresh: a reminder changes nothing a list shows. Used by the one
-    /// path that builds a page by hand from a parsed line, so a lead typed on
-    /// it is written rather than dropped; the quick-add path proper writes its
-    /// reminders in the workspace.
+    /// Add a reminder to a page, as minutes before its start. No refresh: a reminder changes nothing
+    /// a list shows. For the path that builds a page by hand from a parsed line; the quick-add path
+    /// writes its reminders in the workspace.
     public func addReminder(pageId: String, minutesBefore: Int64) async {
         guard let workspace else { return }
         do {
@@ -947,11 +837,8 @@ public final class WorkspaceStore {
         return await reminders(pageId: pageId)
     }
 
-    /// Folders the user can file into.
-    ///
-    /// Excludes any a calendar owns: the workspace refuses a page filed into
-    /// one, so offering it in a picker is offering a choice that cannot be
-    /// taken. Better to leave it out than to explain the refusal afterwards.
+    /// Folders the user can file into. Excludes a calendar's: the workspace refuses a page filed into
+    /// one, so offering it would be a choice that can't be taken.
     public var fileableFolders: [Folder] {
         folders.filter { !$0.isExternalCalendar }
     }
@@ -983,18 +870,14 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Delete everything on this device.
-    ///
-    /// No trash, no undo, and nothing here asks — the screen offering this has
-    /// asked twice by the time it is called. The workspace stays open and
-    /// usable afterwards rather than needing a restart, which is why this
-    /// refreshes instead of tearing anything down.
+    /// Delete everything on this device. No trash, no undo, and nothing here asks: the screen
+    /// offering it asks twice. The workspace stays open afterwards, so this refreshes rather than
+    /// tearing anything down.
     public func deleteAllData() async {
         guard let workspace else { return }
         do {
             try await workspace.deleteAllData()
-            // Back to the view that always has something to show, since the one
-            // that was open may have been a folder that no longer exists.
+            // Back to Today, since the open view may have been a folder that no longer exists.
             scope = .today
             await refresh()
         } catch {
@@ -1004,13 +887,9 @@ public final class WorkspaceStore {
 
     // MARK: - Focus timer
 
-    /// Record a finished focus session, and return the sentence to show.
-    ///
-    /// `nil` when there is nothing to say, which is only the case where the
-    /// write failed — a lost session is a missing row on a screen nobody is
-    /// looking at, not something worth interrupting somebody mid-page for. Both
-    /// real outcomes carry their own wording from the workspace, so the phone
-    /// and the desktop say the same thing.
+    /// Record a finished focus session, and return the sentence to show: nil only when the write
+    /// failed, which isn't worth interrupting for. Both real outcomes carry the workspace's wording,
+    /// so the phone and the desktop say the same thing.
     @discardableResult
     public func recordFocusSession(pageId: String, from began: Date, to ended: Date) async
         -> String?
@@ -1026,9 +905,8 @@ public final class WorkspaceStore {
             case .tooShort(let label): return label
             }
         } catch {
-            // Deliberately not `errorMessage`: that surfaces as an alert over
-            // the page list, and a focus session that did not save is not worth
-            // one.
+            // Not `errorMessage`: that is an alert over the page list, and an unsaved focus session isn't
+            // worth one.
             return nil
         }
     }
@@ -1039,11 +917,8 @@ public final class WorkspaceStore {
         workspace?.focusElapsedLabel(seconds: Int64(seconds)) ?? ""
     }
 
-    /// The colours a folder can be, served by the workspace.
-    ///
-    /// Read once and held: it is a constant, and the only reason it crosses the
-    /// boundary at all is so that this app is not a fourth place the palette is
-    /// written down.
+    /// The colours a folder can be, served by the workspace so this app isn't a fourth place the
+    /// palette is written down.
     public var paletteColors: [PaletteColor] {
         (workspace?.paletteColors() ?? []).map { color in
             var color = color
@@ -1052,12 +927,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Set a folder's colour, or clear it with `nil`.
-    ///
-    /// Offered on a calendar's folder too. Its name and its placement belong to
-    /// the calendar; what colour it is here does not — and the write latches
-    /// that choice, so the next sync stops pulling the provider's colour back
-    /// over it.
+    /// Set a folder's colour, or clear it with `nil`. Offered on a calendar's folder too: its name and
+    /// placement belong to the calendar but its colour here does not, and the write latches that
+    /// choice so the next sync stops pulling the provider's colour back over it.
     public func setFolderColor(id: String, to color: String?) async {
         guard let workspace else { return }
         do {
@@ -1068,11 +940,8 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Move a folder to the trash, taking its pages with it.
-    ///
-    /// If the deleted folder was the one being shown, the scope falls back to
-    /// Today — leaving it selected would show an empty list under the name of
-    /// something that no longer exists.
+    /// Move a folder to the trash, taking its pages with it. If it was the folder being shown, the
+    /// scope falls back to Today rather than an empty list under a deleted name.
     public func trashFolder(id: String) async {
         guard let workspace else { return }
         do {
@@ -1086,13 +955,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Rename a page without opening it.
-    ///
-    /// The title is the first line of the document on desktop, but renaming
-    /// from a list must not load and re-save the body — that would restamp
-    /// `content_schema_version` for a change that touched no content, and on a
-    /// page written by a newer build it would be the exact overwrite the
-    /// version stamp exists to prevent.
+    /// Rename a page without opening it: loading and re-saving the body would restamp
+    /// `content_schema_version` for a change that touched no content, and on a page written by a newer
+    /// build be the overwrite the stamp exists to prevent.
     public func renamePage(id: String, to title: String) async {
         guard let workspace else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1107,12 +972,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// File a page into a folder, or `nil` for the Inbox.
-    ///
-    /// The two are one call rather than a move and an unfile, because `nil`
-    /// here means the Inbox rather than "leave it alone" — `PageEdit.folder`
-    /// draws that distinction with an enum precisely so a caller cannot lose it
-    /// to an optional.
+    /// File a page into a folder, or `nil` for the Inbox: one call, since `nil` here means the Inbox
+    /// rather than "leave it alone". `PageEdit.folder` is an enum so a caller can't lose that to an
+    /// optional.
     @discardableResult
     public func movePage(id: String, toFolder folderId: String?) async -> Bool {
         guard let workspace else { return false }
@@ -1143,15 +1005,10 @@ public final class WorkspaceStore {
             })
     }
 
-    /// Move a page to a date, or give one to a page that had none.
-    ///
-    /// Replaces whatever one-off date the page carried rather than adding a
-    /// second — a page can hold several, and the earliest still ahead is the
-    /// one it shows, so adding when the user meant moving leaves the old date
-    /// to resurface days later.
-    ///
-    /// Both strings are local wall clocks: `yyyy-MM-dd` for an all-day page,
-    /// `yyyy-MM-ddTHH:mm:ss` for a timed one, and the workspace refuses a
+    /// Move a page to a date, or give one to a page that had none. Replaces the page's one-off date
+    /// rather than adding a second: a page can hold several and shows the earliest ahead, so adding
+    /// when the user meant moving lets the old date resurface. Both strings are local wall clocks,
+    /// `yyyy-MM-dd` for all-day and `yyyy-MM-ddTHH:mm:ss` for timed, and the workspace refuses a
     /// mismatched pair.
     public func setSchedule(pageId: String, start: String, end: String?) async {
         guard let workspace else { return }
@@ -1241,16 +1098,10 @@ public final class WorkspaceStore {
         return counts
     }
 
-    /// Replace a page's tags.
-    ///
-    /// Whole-list rather than add/remove: tags are stored as one JSON column
-    /// plus a join table the writer keeps in step, so every write is a
-    /// replacement underneath. Offering "remove one" on top of that would be a
-    /// read-modify-write in the UI that two edits in quick succession could
-    /// interleave and lose.
-    ///
-    /// Blank entries are dropped and the leading `#` is optional, because the
-    /// same person types `#work` in quick add an hour earlier.
+    /// Replace a page's tags. Whole-list because tags are one JSON column plus a join table, so every
+    /// write is a replacement underneath, and an add/remove here would be a read-modify-write two
+    /// quick edits could interleave and lose. Blank entries are dropped and the leading `#` is
+    /// optional.
     public func setTags(pageId: String, to tags: [String]) async {
         guard let workspace else { return }
         let cleaned =
@@ -1266,11 +1117,8 @@ public final class WorkspaceStore {
         }
     }
 
-    /// What a page repeats as, and whether this app may change it.
-    ///
-    /// Fetched on demand rather than carried on every summary: a repeat is read
-    /// when somebody opens the picker, and a rule row per listed page would be
-    /// a join on every refresh for a field almost no row uses.
+    /// What a page repeats as, and whether this app may change it. Fetched on demand: a rule row per
+    /// listed page would be a join on every refresh for a field almost no row uses.
     public func pageRepeat(for pageId: String) async -> PageRepeat? {
         guard let workspace else { return nil }
         do {
@@ -1281,11 +1129,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Make a page repeat, or change how it already does.
-    ///
-    /// Returns whether it took, so a sheet knows whether to close. The workspace
-    /// refuses a page with no date, a rule it cannot represent, and one a
-    /// calendar owns — and each refusal carries a sentence worth showing.
+    /// Make a page repeat, or change how it does. Returns whether it took, so a sheet knows whether
+    /// to close; each refusal (no date, a rule it can't represent, a calendar's page) carries a
+    /// sentence worth showing.
     @discardableResult
     public func setRepeat(pageId: String, to value: Repeat) async -> Bool {
         guard let workspace else { return false }
@@ -1324,13 +1170,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Set a page's priority, or take it away with `nil`.
-    ///
-    /// Stored as a number, low value first: 1 urgent through 4 low, with 0
-    /// meaning none. The naming runs the opposite way to the number, which is
-    /// exactly why this mapping lives in one place — and why "none" is a real
-    /// value here rather than the absence of one. `PageEdit.priority` uses nil
-    /// for "leave it alone", so clearing has to say 0 out loud.
+    /// Set a page's priority, or take it away with `nil`. Stored low value first, 1 urgent through 4
+    /// low, with 0 meaning none: the opposite of the naming, so the mapping lives in one place.
+    /// `PageEdit.priority` uses nil for "leave it alone", so clearing says 0 out loud.
     public func setPriority(pageId: String, priority: Priority?) async {
         guard let workspace else { return }
         let stored: Int64
@@ -1349,14 +1191,10 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Create whatever a quick-add line asks for — one page, several, or a
-    /// recurring one — and return them.
-    ///
-    /// The line is parsed in Rust, by the same code the desktop's parser is
-    /// graded against, so "standup every weekday at 9am #work" means the same
-    /// thing on both. `reference` is passed explicitly rather than read from
-    /// the clock inside, so a line typed at 23:59 cannot resolve against a
-    /// different day than the one the user is looking at.
+    /// Create whatever a quick-add line asks for (one page, several, or a recurring one) and return
+    /// them. The line is parsed in Rust by the code the desktop's parser is graded against.
+    /// `reference` is passed explicitly so a line typed at 23:59 can't resolve against a different
+    /// day than the one the user sees.
     public func createFromQuickAdd(
         _ line: String,
         reference: Date = Date(),
@@ -1379,12 +1217,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Say where a new page went when it did not land in front of the user.
-    ///
-    /// Adding "buy milk" while looking at Today files it in the Inbox and
-    /// nothing on screen changes, which reads as the add having failed. The
-    /// notice names where it went and offers to go there. Silent when the page
-    /// did land in the current view — the row appearing is the confirmation.
+    /// Say where a new page went when it did not land in front of the user: adding "buy milk" while
+    /// looking at Today files it in the Inbox with nothing changing on screen, which reads as a
+    /// failed add. Silent when the page landed in the current view.
     private func noticeIfOutOfView(_ created: [Page]) {
         guard let first = created.first, !pages.contains(where: { $0.id == first.id }) else {
             return
@@ -1395,8 +1230,7 @@ public final class WorkspaceStore {
         } else if first.scheduledStart == nil {
             destination = .inbox
         } else {
-            // Dated but not in view: it is somewhere on the calendar. Upcoming
-            // is the nearest view that lists by date.
+            // Dated but not in view: Upcoming is the nearest view that lists by date.
             destination = .upcoming
         }
         let count = created.count
@@ -1409,14 +1243,9 @@ public final class WorkspaceStore {
             })
     }
 
-    /// A `Date` as the wall-clock string the workspace speaks.
-    ///
-    /// Fixed format and fixed locale, with no timezone conversion: the stored
-    /// value is a wall clock and `Date` is an instant, so converting is the
-    /// mistake the string-typed boundary exists to prevent.
-    ///
-    /// `nonisolated` because it reads nothing from the store — the class is
-    /// main-actor bound and callers of this are not.
+    /// A `Date` as the wall-clock string the workspace speaks: fixed format and locale, no timezone
+    /// conversion, since the stored value is a wall clock and converting is the mistake the
+    /// string-typed boundary prevents. `nonisolated` because it reads nothing from the store.
     nonisolated static func wallClock(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1424,32 +1253,18 @@ public final class WorkspaceStore {
         return formatter.string(from: date)
     }
 
-    /// Tick or untick a page.
-    ///
-    /// One call, whatever kind of page it is. The routing lives in Rust because
-    /// the two operations behind this checkbox are indistinguishable at the
-    /// call site and one of them is destructive: setting `status` on a
-    /// recurring head ends the series, while completing an occurrence of it
-    /// clones the head and advances it.
-    ///
-    /// An earlier version decided here, reading `is_recurring` from `pages` and
-    /// defaulting to false when the page was not in the list. That is correct
-    /// for this screen and a trap for every other caller — a widget action or an
-    /// App Intent completing a page it never listed would silently take the
-    /// corrupting path. Moving the decision removed the trap instead of
-    /// documenting it.
+    /// Tick or untick a page, whatever kind. The routing lives in Rust because the two operations
+    /// behind this checkbox look alike at the call site and one is destructive: setting `status` on
+    /// a recurring head ends the series, while completing an occurrence clones the head and advances
+    /// it. Deciding here from `pages` would be a trap for a widget action or intent completing a page
+    /// it never listed.
     public func setStatus(pageId: String, done: Bool) async {
         guard let workspace else { return }
         let isRecurring = pages.first { $0.id == pageId }?.isRecurring ?? false
 
-        // Optimistic, but only for a plain page. A recurring one does not simply
-        // become done — the head advances and a completed clone appears beside
-        // it — so there is nothing honest to show before the write lands.
-        //
-        // Written into `sections`, which is the stored state; `pages` is a
-        // projection of it and cannot be assigned to. The row stays where it
-        // is, ticked, until the refresh moves it to Completed — that beat is
-        // what lets the tick be seen before the row leaves.
+        // Optimistic only for a plain page: a recurring one advances its head and adds a completed
+        // clone, so there is nothing honest to show before the write lands. Written into `sections`,
+        // the stored state; the row stays, ticked, until the refresh moves it, so the tick can be seen.
         if !isRecurring {
             sections = sections.map { section in
                 guard section.pages.contains(where: { $0.id == pageId }) else { return section }
@@ -1476,19 +1291,10 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Let a ticked row be seen before it goes.
-    ///
-    /// The write has landed; what waits is the re-read that moves the row to
-    /// Completed. A row that vanishes the instant it is tapped gives the eye
-    /// nothing to confirm and the thumb no chance to take a mis-tap back —
-    /// Things holds a checked row for about a second for exactly this, and
-    /// Reminders keeps it until the list is left. A beat under a second is
-    /// long enough to read and short enough that the list never feels stuck.
-    ///
-    /// One hold for a run of ticks: clearing five rows in a row moves all
-    /// five together after the last, rather than reshuffling the list under
-    /// the finger four times. Any other write refreshes at once and cancels
-    /// the hold, so nothing is ever *later* than it would have been.
+    /// Let a ticked row be seen before it goes. The write has landed; what waits is the re-read that
+    /// moves the row to Completed. A row vanishing the instant it is tapped gives the eye nothing to
+    /// confirm and no chance to take a mis-tap back. One hold covers a run of ticks, moving five rows
+    /// together after the last; any other write refreshes at once and cancels the hold.
     private func holdThenRefresh() {
         pendingHold?.cancel()
         pendingHold = Task { [weak self] in
@@ -1502,12 +1308,8 @@ public final class WorkspaceStore {
 
     // MARK: - Several pages at once
 
-    /// Finish every selected page.
-    ///
-    /// The batch verbs exist for select mode, where one gesture names many
-    /// rows. Each goes through the same workspace call the single verb uses
-    /// — a repeating page still advances rather than ending — and the list
-    /// re-reads once at the end rather than once per page.
+    /// Finish every selected page. Each goes through the single verb's workspace call, so a repeating
+    /// page still advances, and the list re-reads once at the end.
     public func completePages(ids: [String]) async {
         guard let workspace, !ids.isEmpty else { return }
         var finished = 0
@@ -1527,11 +1329,9 @@ public final class WorkspaceStore {
                 : String(localized: "Completed \(finished) pages"))
     }
 
-    /// Put every selected page on a day, or take its date away.
-    ///
-    /// Pages a calendar owns or that repeat are left alone and counted: the
-    /// workspace would refuse both, and a sentence that says "3 moved, 1
-    /// left" is worth more than an error about the one.
+    /// Put every selected page on a day, or take its date away. Pages a calendar owns or that repeat
+    /// are left alone and counted: the workspace would refuse both, and "3 moved, 1 left" is worth
+    /// more than an error about the one.
     public func schedulePages(_ pages: [PageSummary], to day: String?) async {
         guard let workspace, !pages.isEmpty else { return }
         var moved = 0
@@ -1623,17 +1423,11 @@ public final class WorkspaceStore {
             })
     }
 
-    /// Move everything overdue onto today.
-    ///
-    /// Says what it did through `notice`, with the way back attached. The
-    /// sentence comes from the workspace and names what stayed behind as well
-    /// as what moved — a recurring series and a page a calendar owns are both
-    /// left alone, and a reader who is not told will believe the section was
-    /// cleared and stop looking at it.
-    ///
-    /// Which pages are overdue is decided by the workspace, not by the list on
-    /// screen: that list is as old as the last refresh, and a bulk write keyed
-    /// on a stale one moves pages the reader can no longer see.
+    /// Move everything overdue onto today, saying so through `notice` with the way back attached.
+    /// The sentence comes from the workspace and names what stayed behind (a recurring series, a
+    /// calendar's page), or a reader would believe the section was cleared. Overdue is decided by
+    /// the workspace, not the list on screen: that list is as old as the last refresh, and a bulk
+    /// write keyed on it moves pages the reader can no longer see.
     public func moveOverdueToToday() async {
         guard let workspace else { return }
         do {
@@ -1665,33 +1459,24 @@ public final class WorkspaceStore {
 
     // MARK: - One occurrence at a time
 
-    /// The earlier occurrences of this block's series that are still open.
-    ///
-    /// Empty means acting on this one is unambiguous and needs no question. A
-    /// non-empty answer is the backlog behind it, oldest first, with anything
-    /// already resolved — completed, skipped, moved, or from before a calendar
-    /// was connected — already taken out.
+    /// The earlier occurrences of this block's series that are still open, oldest first, with
+    /// resolved ones (completed, skipped, moved, or from before a calendar was connected) taken out.
+    /// Empty means acting on this one is unambiguous.
     public func backlog(behind entry: CalendarEntry) async -> [String] {
         guard let workspace, entry.isRecurring else { return [] }
         do {
             return try await workspace.occurrenceBacklog(
                 pageId: entry.pageId, occurrenceDate: occurrence(of: entry).originalDate)
         } catch {
-            // A question that cannot be asked is not worth an alert: the caller
-            // falls back to acting on the one occurrence, which is the
-            // conservative half of the choice anyway.
+            // A question that cannot be asked isn't worth an alert; acting on the one occurrence is the
+            // conservative half.
             return []
         }
     }
 
-    /// Skip this occurrence and every open day behind it.
-    ///
-    /// Nothing is destroyed, so the action needs no confirmation: a
-    /// confirmation before every skip would make the common case — clearing
-    /// one week's standup — two taps and a decision. The undo is offered
-    /// afterwards through `notice`, where it costs nothing when it is not
-    /// wanted, which is almost always. The gestured date goes first so the
-    /// count in the notice matches what the sheet offered.
+    /// Skip this occurrence and every open day behind it. Nothing is destroyed, so no confirmation:
+    /// that would make clearing one standup two taps and a decision. Undo is offered through
+    /// `notice`. The gestured date goes first so the notice's count matches what the sheet offered.
     public func skipOccurrences(
         _ entry: CalendarEntry, andBacklog backlog: [String], title: String
     ) async -> [String] {
@@ -1768,16 +1553,10 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Move one occurrence of a series to a new time.
-    ///
-    /// Returns whether it took, so the sheet knows whether to close. Only a
-    /// projected block can be moved this way: a real one is a row, and a row
-    /// moves through `setSchedule`. The guard is here rather than only in the
-    /// menu because a calendar can be a refresh out of date by the time a sheet
-    /// is confirmed.
-    ///
-    /// The timezone is the one the phone is in, which is the zone the new wall
-    /// clock is written in.
+    /// Move one occurrence of a series to a new time; returns whether it took. Only a projected
+    /// block can be moved this way, a real one moving through `setSchedule`. The guard is here, not
+    /// only in the menu, because a calendar can be a refresh out of date when a sheet is confirmed.
+    /// The zone is the phone's, which the new wall clock is written in.
     @discardableResult
     public func moveOccurrence(_ entry: CalendarEntry, to start: String, end: String?) async
         -> Bool
@@ -1796,13 +1575,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Which occurrence a drawn block is, in the terms the sets are keyed by.
-    ///
-    /// A projected block carries the rule's own date already. A real one — the
-    /// series head, drawn from its row — does not, and its date is the first ten
-    /// characters of its start: the same slice `pikos-db` takes when it resolves
-    /// the head's occurrence itself, so the two cannot disagree about which day
-    /// was meant.
+    /// Which occurrence a drawn block is, in the terms the sets are keyed by. A projected block
+    /// carries the rule's own date; the series head, drawn from its row, uses the first ten characters
+    /// of its start, the slice `pikos-db` takes, so the two can't disagree about which day was meant.
     private func occurrence(of entry: CalendarEntry) -> Occurrence {
         Occurrence(
             originalDate: entry.originalDate ?? String(entry.scheduledStart.prefix(10)),
@@ -1810,11 +1585,8 @@ public final class WorkspaceStore {
             scheduledEnd: entry.scheduledEnd)
     }
 
-    /// What is in the trash, newest first.
-    ///
-    /// Fetched on demand rather than held: the trash is a screen someone opens
-    /// rarely and deliberately, so keeping it live would be paying for it on
-    /// every refresh of a list nobody is looking at.
+    /// What is in the trash, newest first, fetched on demand: a rarely opened screen shouldn't be
+    /// kept live on every refresh.
     public func trashedPages() async -> [TrashedPage] {
         guard let workspace else { return [] }
         do {
@@ -1831,13 +1603,8 @@ public final class WorkspaceStore {
         workspace?.trashRetentionDays() ?? 30
     }
 
-    /// Move a page to the trash, and offer the way back for a few seconds.
-    ///
-    /// The delete was always soft, but until the notice existed the only way
-    /// back was the Trash screen, two menus away — and a mis-swipe
-    /// on a phone is the commonest accidental delete there is. `title` is what
-    /// the notice names; the caller has it and a lookup here would miss a page
-    /// that is not in the current list.
+    /// Move a page to the trash, and offer the way back for a few seconds. `title` is what the
+    /// notice names: the caller has it, and a lookup here would miss a page not in the current list.
     public func trash(pageId: String, title: String = "") async {
         guard let workspace else { return }
         do {
@@ -1854,13 +1621,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Stop a page repeating from the list, in one tap.
-    ///
-    /// The page stays on the date it was last on; what goes is the rule. The
-    /// way back is offered when there is one: a rule the picker can hold is
-    /// re-applied by the undo, and a richer one — "the last Friday of the
-    /// month" — cannot be rebuilt from here, so the notice says what happened
-    /// and offers nothing that would only half work.
+    /// Stop a page repeating from the list, in one tap. The page stays on its last date; the rule
+    /// goes. Undo is offered only when the picker can hold the rule: a richer one, such as "the last
+    /// Friday of the month", can't be rebuilt from here, and half an undo is worse than none.
     public func stopRepeating(pageId: String, title: String) async {
         guard let workspace else { return }
         let previous = try? await workspace.pageRepeat(pageId: pageId)
@@ -1890,11 +1653,9 @@ public final class WorkspaceStore {
         }
     }
 
-    /// The document schema this build writes.
-    ///
-    /// A page whose `contentSchemaVersion` exceeds this must be opened
-    /// read-only: saving would re-serialise through an older schema and
-    /// silently drop node types this build cannot represent.
+    /// The document schema this build writes. A page whose `contentSchemaVersion` exceeds this opens
+    /// read-only: saving would re-serialise through an older schema and drop node types this build
+    /// cannot represent.
     public var contentSchemaVersion: Int64 {
         workspace?.contentSchemaVersion() ?? 0
     }

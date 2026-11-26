@@ -9,7 +9,6 @@ const MAX_SAVE_DELAY_MS = 5000;
  *  reaches the cap near 400,000. */
 const DOC_POSITIONS_PER_MS = 500;
 
-/** How long typing pauses before the body is saved, for a document of this ProseMirror size. */
 export function saveDelayFor(docSize: number): number {
   const scaled = docSize / DOC_POSITIONS_PER_MS;
 

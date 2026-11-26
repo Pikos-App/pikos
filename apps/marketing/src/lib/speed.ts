@@ -1,14 +1,11 @@
 /** Milliseconds: the median run, the time 99 in 100 runs beat, and the slowest; then how many runs. */
 export type Op = { ms: number; p99: number; max: number; runs: number };
 
-/** One measured action across every workspace size, `null` where a size produced no number. */
+/** One measured action across every workspace size, `null` where a size has no number. */
 export type Series = {
   key: string;
-  /** Its row in the table. */
   label: string;
-  /** Its button over the bars. */
   button: string;
-  /** Its column heading beside the bars. */
   heading: string;
   values: (Op | null)[];
 };

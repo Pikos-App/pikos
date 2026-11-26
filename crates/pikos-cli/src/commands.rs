@@ -60,7 +60,6 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             }
         };
     }
-    // Opens the files it names, read-only, and never the resolved workspace.
     if let CliCommand::Sync { action } = &cli.command {
         return match action {
             SyncCommand::Diff {

@@ -21,8 +21,6 @@ import { cn } from "@/lib/utils";
 import { weekLabel } from "../utils/weekLabel";
 import { FocusSummary } from "./FocusSummary";
 
-/** The shape now lives on the storage seam (`getUsageStats`); this alias keeps
- *  the panel's long-standing local name for it. */
 export type UsageStatsData = WorkspaceUsageStats;
 
 function formatNumber(n: number): string {
@@ -174,7 +172,6 @@ export function UsageStats({
 
   return (
     <div className="space-y-4">
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-2">
         <StatCard icon={FileText} label="Pages" value={formatNumber(stats.total_pages)} />
         <StatCard icon={BookOpen} label="Words" value={formatNumber(stats.total_words)} />
@@ -195,7 +192,6 @@ export function UsageStats({
         />
       </div>
 
-      {/* Tenure */}
       {stats.first_page_date && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
@@ -207,7 +203,6 @@ export function UsageStats({
         </div>
       )}
 
-      {/* Weekly activity */}
       {stats.weekly_activity.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -220,7 +215,6 @@ export function UsageStats({
 
       <FocusSummary stats={stats} />
 
-      {/* Feature adoption */}
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Layers className="h-3.5 w-3.5" />

@@ -3,14 +3,8 @@ import SwiftUI
 
 /// Connect a CalDAV server, or repair one whose password stopped working.
 ///
-/// One sheet for both because they are the same form minus three fields, and
-/// two nearly-identical screens is two places for the keyboard type, the
-/// autocorrect settings and the submit wiring to drift.
-///
-/// Reconnecting asks for the password *alone*, deliberately. The server and
-/// username already live in the keychain, and re-collecting them would let a
-/// typo in either land a second account rather than repairing this one —
-/// identity is provider plus display name, and a repair must not change it.
+/// One sheet for both so the field settings don't drift. Reconnecting asks for the password
+/// alone, as `CalendarSyncStore.reconnect` does. Identity is provider plus display name.
 struct CaldavAccountSheet: View {
     enum Mode {
         case connect
@@ -48,10 +42,8 @@ struct CaldavAccountSheet: View {
                         }
                     } else {
                         Section {
-                            // No autocapitalisation and no autocorrect on any of
-                            // these: a server URL and a username are not prose, and
-                            // iOS helpfully capitalising the first letter of a
-                            // username is a failed login nobody can see the cause of.
+                            // No autocapitalisation or autocorrect: a capitalised username is a failed login with no
+                            // visible cause.
                             // Verbatim: a localized prompt is Markdown, which turns a URL into a system-blue link.
                             TextField(text: $baseURL, prompt: Text(verbatim: "https://caldav.example.com")) {
                                 Text("Server URL")
@@ -99,9 +91,6 @@ struct CaldavAccountSheet: View {
                                 .submitLabel(.done)
                                 .onSubmit { Task { await submit() } }
                         } footer: {
-                            // Not cosmetic: identity is provider plus this name, so
-                            // it decides whether a later connection repairs this
-                            // account or creates a second one beside it.
                             Text("How it appears in Pikos. Reconnecting later matches on this name, so pick something you will use again.")
                         }
                     }
@@ -118,9 +107,6 @@ struct CaldavAccountSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if isWorking {
-                        // The server is being contacted, which can take a
-                        // while on a bad connection. A spinner where the
-                        // button was says so without moving anything.
                         ProgressView()
                     } else {
                         Button(mode.isReconnect ? "Save" : "Connect") {
@@ -146,11 +132,8 @@ struct CaldavAccountSheet: View {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Closes only on success.
-    ///
-    /// A failed connection leaves the form standing with what was typed still
-    /// in it, because the likely next action is fixing one character. Dismissing
-    /// and showing an error would make the user retype the lot.
+    /// Closes only on success: a failed connection keeps what was typed, since the next action
+    /// is likely fixing one character.
     private func submit() async {
         guard isComplete, !isWorking else { return }
         isWorking = true

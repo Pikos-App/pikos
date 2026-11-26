@@ -1,6 +1,4 @@
-//! Layer-2 reconciler corpus: hand-written `SyncDelta` → expected page writes,
-//! provider-independent. Pins the shared reconciler's correctness before any
-//! real provider exists.
+//! Hand-written `SyncDelta` to expected page writes, independent of any provider.
 
 use super::*;
 use crate::pool::test_pool;
@@ -8,8 +6,6 @@ use crate::sync_delta::{
     EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceDelta, OccurrenceFidelity,
     OccurrenceKind, OccurrenceOverride, Recurrence, Removal, SyncDelta, UpsertItem,
 };
-
-// ─── builders ─────────────────────────────────────────────────────────────────
 
 const ACCOUNT: &str = "a1";
 
@@ -113,8 +109,6 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
     }
 }
 
-// ─── query helpers ────────────────────────────────────────────────────────────
-
 async fn page_count(pool: &sqlx::SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM pages")
         .fetch_one(pool)
@@ -195,7 +189,6 @@ async fn seed_meta(
     .unwrap()
 }
 
-/// (mirror_location, mirror_attendees).
 async fn mirror_meta(pool: &sqlx::SqlitePool, page_id: &str) -> (Option<String>, Option<String>) {
     sqlx::query_as("SELECT mirror_location, mirror_attendees FROM page_sync WHERE page_id = ?")
         .bind(page_id)
@@ -204,8 +197,7 @@ async fn mirror_meta(pool: &sqlx::SqlitePool, page_id: &str) -> (Option<String>,
         .unwrap()
 }
 
-/// Simulate the editor command path: the user rewrites the body and any edit
-/// flips `user_modified`. (Sync never sets that flag — only this path does.)
+/// Simulates the editor path: rewriting the body flips `user_modified`, which only this path sets.
 async fn simulate_user_body_edit(pool: &sqlx::SqlitePool, page_id: &str, body: &str) {
     sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
         .bind(body)
@@ -238,7 +230,6 @@ async fn rule_exdates(pool: &sqlx::SqlitePool, page_id: &str) -> Vec<String> {
     serde_json::from_str(&json).unwrap()
 }
 
-/// (rrule, scheduled_start, timezone) of the single stored recurrence rule.
 async fn rule_row(pool: &sqlx::SqlitePool, page_id: &str) -> (String, String, String) {
     sqlx::query_as(
         "SELECT rrule, scheduled_start, timezone FROM page_recurrence_rules WHERE page_id = ?",
@@ -249,7 +240,6 @@ async fn rule_row(pool: &sqlx::SqlitePool, page_id: &str) -> (String, String, St
     .unwrap()
 }
 
-/// (start, end, timezone) of the override row for a rule + original_date.
 async fn override_row(
     pool: &sqlx::SqlitePool,
     page_id: &str,
@@ -265,8 +255,6 @@ async fn override_row(
     .await
     .unwrap()
 }
-
-// ─── identity / dedup ─────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn single_event_creates_one_page() {
@@ -336,7 +324,6 @@ async fn unchanged_etag_is_a_no_op() {
         .await
         .unwrap();
 
-    // Same etag but a changed title — must be ignored wholesale.
     reconcile(
         &pool,
         &ctx(),
@@ -404,7 +391,6 @@ async fn changed_href_relinks_by_uid() {
     )
     .await
     .unwrap();
-    // Same UID, new href (resource moved) — re-link, don't duplicate.
     reconcile(
         &pool,
         &ctx(),
@@ -421,8 +407,6 @@ async fn changed_href_relinks_by_uid() {
     assert_eq!(external_id, "/new.ics");
     assert_eq!(etag.as_deref(), Some("v2"));
 }
-
-// ─── recurrence shapes ────────────────────────────────────────────────────────
 
 fn weekly_series() -> UpsertItem {
     UpsertItem::Event(EventUpsert {
@@ -517,15 +501,12 @@ async fn exhausted_done_series_rewritten_to_unsupported_rule_unmarks_done() {
     .await
     .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    // Simulate the finite series having exhausted to a terminal-done head.
     force_terminal_done(&pool, &page_id).await;
 
-    // The provider rewrites the rule into a shape the engine rejects — RFC 5545
-    // forbids BYMONTHDAY on a weekly rule, so nothing enumerates and
-    // recompute_recurring_schedule skips it. Without the up-front terminal clear the
-    // page would stay `done` → invisible on the calendar and reminder-excluded.
-    // (The fixture used to be `BYSETPOS`, which C43 brought into the envelope: the
-    // rule then enumerated and `clear_terminal` could have been deleted unnoticed.)
+    // RFC 5545 forbids BYMONTHDAY on a weekly rule, so the engine rejects it, nothing
+    // enumerates and the recompute skips. Without the up-front terminal clear the page
+    // would stay `done`: invisible on the calendar and reminder-excluded. The fixture must
+    // stay a rule the engine rejects, or `clear_terminal` could be deleted unnoticed.
     reconcile(
         &pool,
         &ctx(),
@@ -537,7 +518,7 @@ async fn exhausted_done_series_rewritten_to_unsupported_rule_unmarks_done() {
     let (status, completed_at) = page_status(&pool, &page_id).await;
     assert_eq!(status, "not_started");
     assert!(completed_at.is_none());
-    // Storage still takes the rewrite — the rejection is only in derivation.
+    // Storage takes the rewrite; the rejection is only in derivation.
     assert_eq!(
         rule_row(&pool, &page_id).await.0,
         "FREQ=WEEKLY;BYMONTHDAY=15"
@@ -561,7 +542,6 @@ async fn occurrence_modify_against_stored_rule() {
         .await
         .unwrap();
 
-    // A lone override arrives later, master absent from this delta.
     let occ = UpsertItem::Occurrence(OccurrenceDelta {
         ical_uid: "uid-series".into(),
         series_ref: "uid-series".into(),
@@ -576,8 +556,6 @@ async fn occurrence_modify_against_stored_rule() {
     assert_eq!(ov.unwrap().0, "2026-06-08T14:00:00");
 }
 
-// ─── single ⇄ recurring transitions ─────────────────────────────────────────────
-
 async fn page_scheduled_start(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
     sqlx::query_scalar("SELECT scheduled_start FROM pages WHERE id = ?")
         .bind(page_id)
@@ -586,8 +564,8 @@ async fn page_scheduled_start(pool: &sqlx::SqlitePool, page_id: &str) -> Option<
         .unwrap()
 }
 
-/// Standalone (non-rule) schedule rows for a page — the shape a single event
-/// leaves behind, which the transition to recurring must clear.
+/// Standalone (non-rule) schedule rows: what a single event leaves, which the move to
+/// recurring must clear.
 async fn standalone_schedule_count(pool: &sqlx::SqlitePool, page_id: &str) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM page_schedules WHERE page_id = ? AND rule_id IS NULL")
         .bind(page_id)
@@ -670,9 +648,8 @@ async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
 
 #[tokio::test]
 async fn completed_single_gaining_an_rrule_unmarks_done() {
-    // A completed single that turns recurring upstream must not stay stuck `done`
-    // (invisible + reminder-excluded). The recompute un-marks it once the new series
-    // yields an open occurrence.
+    // A completed single that turns recurring upstream must not stay stuck `done`, invisible and
+    // reminder-excluded; the recompute un-marks it once the new series yields an open occurrence.
     let pool = setup().await;
     reconcile(&pool, &ctx(), &delta(vec![single_1x1("v1")]))
         .await
@@ -721,8 +698,7 @@ async fn cancelling_the_heads_own_occurrence_moves_the_head_in_step() {
             .unwrap()
         }
     };
-    // A synced head floors at the connect day, so it sits on the first occurrence
-    // from today onward rather than the series base — read it rather than assume it.
+    // A synced head floors at the connect day, so read it rather than assume the series base.
     let parked = head(&pool).await.expect("a head to cancel out from under");
 
     reconcile(&pool, &ctx(), &delta(vec![cancel_occurrence(&parked)]))
@@ -770,8 +746,6 @@ async fn occurrence_cancel_adds_exdate() {
     );
 }
 
-// ─── timezone normalization ──────────────────────────────────────────────────
-
 /// Build a timed series with a given RRULE and source zone, no exdates/overrides.
 fn series_with_rrule(rrule: &str, tz: &str) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
@@ -789,7 +763,7 @@ fn series_with_rrule(rrule: &str, tz: &str) -> UpsertItem {
 #[tokio::test]
 async fn until_z_rewritten_to_source_wall_clock_in_dst() {
     let pool = setup().await;
-    // 2026-03-15 is EDT (DST began Mar 8), so UTC-4: 10:00Z → 06:00 wall-clock.
+    // 2026-03-15 is EDT (UTC-4): 10:00Z is 06:00 wall-clock.
     reconcile(
         &pool,
         &ctx(),
@@ -809,7 +783,7 @@ async fn until_z_rewritten_to_source_wall_clock_in_dst() {
 #[tokio::test]
 async fn until_z_rewrite_is_dst_aware() {
     let pool = setup().await;
-    // 2026-01-15 is EST (no DST), so UTC-5: 10:00Z → 05:00 — proving the rewrite
+    // 2026-01-15 is EST (UTC-5): 10:00Z is 05:00, so the rewrite
     // reads the IANA database per-instant, not a fixed offset.
     reconcile(
         &pool,
@@ -830,7 +804,7 @@ async fn until_z_rewrite_is_dst_aware() {
 #[tokio::test]
 async fn floating_and_date_only_until_pass_through() {
     let pool = setup().await;
-    // A floating UNTIL (no Z) is already wall-clock — must not be touched.
+    // A floating UNTIL (no Z) is already wall-clock and must not be touched.
     reconcile(
         &pool,
         &ctx(),
@@ -876,9 +850,8 @@ async fn floating_and_date_only_until_pass_through() {
     assert_eq!(tz, "UTC", "all-day series gets the sentinel zone");
 }
 
-/// Every recurrence instant lands as bare source-zone wall-clock — no trailing
-/// `Z`, no offset — so the pure-wall-clock expansion matches each field by string.
-/// Tests pin `TZ=UTC`, so this asserts per field rather than leaning on the runner.
+/// Every recurrence instant lands as bare source-zone wall-clock, with no `Z` or offset, so the
+/// expansion matches each field by string. Asserted per field because tests pin `TZ=UTC`.
 #[tokio::test]
 async fn every_recurrence_instant_is_wall_clock() {
     let pool = setup().await;
@@ -910,7 +883,6 @@ async fn every_recurrence_instant_is_wall_clock() {
     let (page_id, _, _) = only_page_sync(&pool).await;
     let (rrule, scheduled_start, tz) = rule_row(&pool, &page_id).await;
 
-    // dtstart: bare wall-clock.
     assert_eq!(scheduled_start, "2026-06-01T09:00:00");
     assert_eq!(
         tz, "America/New_York",
@@ -918,12 +890,10 @@ async fn every_recurrence_instant_is_wall_clock() {
     );
     // UNTIL: 13:00Z on 2026-08-31 (EDT, UTC-4) → 09:00 wall-clock, no Z.
     assert_eq!(rrule, "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260831T090000");
-    // EXDATE: bare wall-clock, no zone suffix.
     assert_eq!(
         rule_exdates(&pool, &page_id).await,
         vec!["2026-06-15T09:00:00"]
     );
-    // RECURRENCE-ID → original_date, and the override start: both bare wall-clock.
     let ov = override_row(&pool, &page_id, "2026-06-08T09:00:00")
         .await
         .unwrap();
@@ -942,7 +912,6 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
 
-    // A cancel-occurrence only EXDATEs — the series page survives.
     let cancel = UpsertItem::Occurrence(OccurrenceDelta {
         ical_uid: "uid-series".into(),
         series_ref: "uid-series".into(),
@@ -959,7 +928,6 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
     );
     assert_eq!(sync_state(&pool, &page_id).await, "active");
 
-    // A whole-event removal of this bare series deletes the page outright.
     reconcile(
         &pool,
         &ctx(),
@@ -979,8 +947,6 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
     );
     assert_eq!(rule_count(&pool).await, 0);
 }
-
-// ─── three field layers: mirror / seeded / user ───────────────────────────────
 
 #[tokio::test]
 async fn mirror_metadata_is_written_read_only() {
@@ -1120,8 +1086,7 @@ async fn first_sync_seeds_description_into_body() {
         page_content_text(&pool, &page_id).await,
         "Bring the roadmap drafts."
     );
-    // The rendered body, not just the search projection, must get the seed —
-    // setting content_text alone would render an empty editor.
+    // The rendered body must get the seed too, or an empty editor renders.
     assert_ne!(page_content(&pool, &page_id).await, "{}");
     let (hash, version, pending) = seed_meta(&pool, &page_id).await;
     assert!(hash.is_some(), "seed hash recorded");
@@ -1243,7 +1208,7 @@ async fn projection_version_bump_reseeds_a_pristine_body() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    // Stored hash is from an older projection version — no longer comparable.
+    // The stored hash is from an older projection version, so no longer comparable.
     sqlx::query("UPDATE page_sync SET seeded_description_hash_version = 0 WHERE page_id = ?")
         .bind(&page_id)
         .execute(&pool)
@@ -1297,7 +1262,7 @@ async fn projection_version_bump_still_holds_an_edited_body() {
         .await
         .unwrap();
 
-    // With the hash incomparable, the ownership flag is the fallback — edited stays.
+    // With the hash incomparable the ownership flag decides: the edited body stays.
     assert_eq!(page_content_text(&pool, &page_id).await, "user notes");
     let (_, _, pending) = seed_meta(&pool, &page_id).await;
     assert_eq!(pending.as_deref(), Some("New text"));
@@ -1338,8 +1303,6 @@ async fn parked_notice_clears_when_upstream_matches_the_body_again() {
     );
 }
 
-// ─── two-pass / orphan handling ───────────────────────────────────────────────
-
 #[tokio::test]
 async fn occurrence_before_master_in_same_batch_resolves() {
     let pool = setup().await;
@@ -1360,7 +1323,7 @@ async fn occurrence_before_master_in_same_batch_resolves() {
         }),
     });
 
-    // Occurrence ordered BEFORE its master — two-pass must still resolve it.
+    // The occurrence precedes its master in the delta; the two passes must still resolve it.
     let outcome = reconcile(&pool, &ctx(), &delta(vec![occ, master]))
         .await
         .unwrap();
@@ -1383,7 +1346,6 @@ async fn orphan_occurrence_emits_missing_master_signal() {
     });
     let outcome = reconcile(&pool, &ctx(), &delta(vec![occ])).await.unwrap();
 
-    // Signal emitted; nothing buffered, dropped, or synthesized.
     assert_eq!(
         outcome.missing_masters,
         vec![MissingMaster {
@@ -1398,12 +1360,9 @@ async fn orphan_occurrence_emits_missing_master_signal() {
     );
 }
 
-// ─── all-day exclusive-end decrement ──────────────────────────────────────────
-
 #[tokio::test]
 async fn single_all_day_end_decrements_to_inclusive() {
     let pool = setup().await;
-    // Provider sends a single Jun 15 all-day event as end = Jun 16 (exclusive).
     reconcile(
         &pool,
         &ctx(),
@@ -1426,7 +1385,6 @@ async fn single_all_day_end_decrements_to_inclusive() {
 #[tokio::test]
 async fn multi_day_all_day_span_decrements_by_one() {
     let pool = setup().await;
-    // Jun 15–17 inclusive arrives as end = Jun 18 (exclusive).
     reconcile(
         &pool,
         &ctx(),
@@ -1467,8 +1425,6 @@ async fn timed_end_is_not_decremented() {
         "timed ends pass through untouched"
     );
 }
-
-// ─── idempotency / wholesale-replace ──────────────────────────────────────────
 
 fn series(etag: &str, exdates: Vec<String>, overrides: Vec<OccurrenceOverride>) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
@@ -1601,7 +1557,6 @@ async fn series_update_drops_a_stale_override() {
     )
     .await
     .unwrap();
-    // The override moves to a different occurrence on the next sync.
     reconcile(
         &pool,
         &ctx(),
@@ -1627,8 +1582,6 @@ async fn series_update_drops_a_stale_override() {
         .await
         .is_some());
 }
-
-// ─── bundle rewrite after an occurrence delta (Google's master-only view) ──────
 
 /// The same series as [`series`], delivered as a master-only bundle
 /// (see [`OccurrenceFidelity::MasterOnly`]).
@@ -1698,8 +1651,8 @@ async fn master_only_rewrite_preserves_applied_occurrence_deltas() {
     .await
     .unwrap();
 
-    // A later master-only change (the title edit case) carries neither the exdate
-    // nor the override. A wholesale rewrite here resurrects every cancellation.
+    // A later master-only change carries neither the exdate nor the override; a wholesale rewrite
+    // would resurrect every cancellation.
     reconcile(
         &pool,
         &ctx(),
@@ -1742,8 +1695,6 @@ async fn master_only_rewrite_takes_incoming_over_carried() {
     .await
     .unwrap();
 
-    // The bundle carries its own view of the same two occurrences — one already
-    // known exdate plus a new one, and the same override at a different time.
     reconcile(
         &pool,
         &ctx(),
@@ -1893,8 +1844,7 @@ async fn master_only_rewrite_carries_an_all_day_override_without_shortening_it()
         "the provider's exclusive end is decremented once on the way in"
     );
 
-    // Two polls that change nothing but the etag — each one re-writes the rule and
-    // re-inserts the carried override.
+    // Two polls changing only the etag each rewrite the rule and re-insert the carried override.
     for etag in ["v2", "v3"] {
         reconcile(
             &pool,
@@ -1925,8 +1875,7 @@ async fn complete_rewrite_still_clears_a_dropped_exdate() {
     )
     .await
     .unwrap();
-    // CalDAV's bundle is the whole truth, so an EXDATE it no longer carries was
-    // genuinely un-cancelled upstream — the merge must not leak into this branch.
+    // CalDAV's bundle is the whole truth, so an EXDATE it dropped was un-cancelled upstream.
     reconcile(&pool, &ctx(), &delta(vec![series("v2", vec![], vec![])]))
         .await
         .unwrap();
@@ -1949,14 +1898,12 @@ async fn relink_reactivates_a_detached_page() {
     .await
     .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    // Simulate a prior detach (its full lifecycle is a later pass).
     sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
         .bind(&page_id)
         .execute(&pool)
         .await
         .unwrap();
 
-    // Same UID returns under a new href — re-link in place and reactivate.
     reconcile(
         &pool,
         &ctx(),
@@ -2011,8 +1958,6 @@ async fn occurrence_modify_replaces_a_prior_override() {
     );
 }
 
-// ─── lifecycle: removals, ownership, teardown ─────────────────────────────────
-
 fn removal(external_id: &str) -> SyncDelta {
     SyncDelta {
         removals: vec![Removal {
@@ -2022,8 +1967,7 @@ fn removal(external_id: &str) -> SyncDelta {
     }
 }
 
-/// Sync one bare single event and return its page_id — the starting point for the
-/// ownership tests, which then layer on whatever makes it owned.
+/// Syncs one bare single event and returns its page id, for the ownership tests to build on.
 async fn synced_page(pool: &sqlx::SqlitePool, href: &str, uid: &str) -> String {
     reconcile(
         pool,
@@ -2071,8 +2015,7 @@ async fn add_user_reminder(pool: &sqlx::SqlitePool, page_id: &str) {
     .unwrap();
 }
 
-/// Simulate the local-delete command path: soft-delete the page and tombstone its
-/// sync link (so the reconciler won't resurrect it).
+/// Simulates a local delete: soft-deletes the page and tombstones its sync link.
 async fn tombstone(pool: &sqlx::SqlitePool, page_id: &str) {
     sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
         .bind(now_iso())
@@ -2197,9 +2140,8 @@ async fn removal_of_completed_page_detaches() {
 
 #[tokio::test]
 async fn removal_of_completed_occurrence_series_detaches() {
-    // A synced RECURRING series with a user-completed occurrence is owned even with
-    // no other signal — the completed-set entry alone must force a detach, not the
-    // bare-mirror hard delete that would erase the completion history.
+    // The completed-set entry alone must make the series owned, forcing a detach rather than a hard
+    // delete that erases the completion history.
     let pool = setup().await;
     reconcile(&pool, &ctx(), &delta(vec![weekly_series()]))
         .await
@@ -2226,8 +2168,8 @@ async fn removal_of_completed_occurrence_series_detaches() {
 
 #[tokio::test]
 async fn removal_of_skipped_occurrence_series_detaches() {
-    // Skip-set entry alone makes the series owned → detach, not the hard delete that
-    // would cascade the skip_set away and resurrect dismissed occurrences on resync.
+    // A skip-set entry alone makes it owned; a hard delete would cascade the skip_set away and
+    // resurrect dismissed occurrences on resync.
     let pool = setup().await;
     reconcile(&pool, &ctx(), &delta(vec![weekly_series()]))
         .await
@@ -2337,8 +2279,7 @@ async fn sweep_spares_expired_until_series_but_removes_unbounded() {
     .await
     .unwrap();
 
-    // A re-enumerate returning neither: the window is well after the finite series
-    // ended, but the unbounded one should still have been present.
+    // The window is well past the finite series' end, but the unbounded one should still be present.
     sweep_absent(
         &pool,
         &ctx(),
@@ -2365,8 +2306,7 @@ async fn sweep_spares_expired_until_series_but_removes_unbounded() {
 #[tokio::test]
 async fn sweep_spares_an_ahead_of_utc_window_edge_event() {
     let pool = setup().await;
-    // Wall-clock 2026-06-24T05:00 in Tokyo (UTC+9) = 2026-06-23T20:00Z, so the
-    // UTC-bounded backfill (window start 2026-06-24) legitimately omits it.
+    // 05:00 in Tokyo (UTC+9) is 20:00Z the day before, so the UTC-bounded backfill omits it.
     reconcile(
         &pool,
         &ctx(),
@@ -2500,7 +2440,6 @@ async fn tombstoned_external_id_skipped_on_upsert() {
     let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
     tombstone(&pool, &page_id).await;
 
-    // Upstream sends an update for the same resource — must not resurrect it.
     reconcile(
         &pool,
         &ctx(),
@@ -2634,11 +2573,9 @@ async fn teardown_clears_tombstones_but_keeps_trashed_page() {
 
 #[tokio::test]
 async fn resync_after_teardown_makes_a_fresh_page_and_leaves_the_trashed_one_untouched() {
-    // Teardown clears a trashed page's tombstone by design, so a later resync of the
-    // same UID has nothing suppressing it — the reconciler mints a NEW page. The safe
-    // outcome: the trashed original keeps its content and stays in trash, and the
-    // resynced copy is a distinct live page (an accepted duplicate, not a resurrection
-    // that clobbers the user's trashed notes).
+    // Teardown clears a trashed page's tombstone, so a resync of the same UID mints a new page. The
+    // safe outcome: the trashed original keeps its content in trash and the copy is a distinct live
+    // page, an accepted duplicate rather than a resurrection clobbering the trashed notes.
     let pool = setup().await;
     let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
     mark_completed(&pool, &owned).await; // keeps the folder alive through teardown
@@ -2671,7 +2608,6 @@ async fn resync_after_teardown_makes_a_fresh_page_and_leaves_the_trashed_one_unt
         .unwrap();
     flag_external(&pool, "f1").await; // re-enable re-flags the folder external
 
-    // Resync: the same UID returns from the provider with a changed description.
     reconcile(
         &pool,
         &ctx(),
@@ -2724,8 +2660,8 @@ async fn teardown_severs_every_page_across_batches() {
     let total = 250; // > TEARDOWN_BATCH
     for i in 0..total {
         let page = synced_page(&pool, &format!("/ev{i}.ics"), &format!("uid-{i}")).await;
-        // Owned pages detach and keep their row; bare mirrors are deleted outright.
-        // Mixing both proves the cursor advances past the rows teardown leaves behind.
+        // Mixing owned (detached, row kept) and bare (deleted) pages proves the cursor advances past
+        // the rows teardown leaves behind.
         if i % 2 == 0 {
             mark_completed(&pool, &page).await;
         }
@@ -2929,14 +2865,11 @@ async fn unsync_then_resync_relinks_in_place() {
     );
 }
 
-/// The composition C38 actually decided, which each half is pinned for separately:
-/// while a series is detached the user may move one of its occurrences, and a later
-/// re-link overwrites that move with the provider's time. It reads as data loss and
-/// isn't — the mirror is read-first, so the calendar is the truth, and the
-/// alternative (cloning the occurrence out) leaves it to be re-mirrored *beside* the
-/// clone: one occurrence, two blocks, permanently. What has to survive is the
-/// `original_date` key, since that is what lets the re-link find the row to reclaim
-/// instead of minting a second one.
+/// While a series is detached the user may move one of its occurrences, and a later
+/// re-link overwrites that move with the provider's time. That is not data loss: the
+/// calendar is the truth, and cloning the occurrence out would leave it re-mirrored
+/// beside the clone. What must survive is the `original_date` key, which lets the
+/// re-link find the row to reclaim instead of minting a second.
 #[tokio::test]
 async fn a_relink_reclaims_an_occurrence_the_user_moved_while_detached() {
     let pool = setup().await;
@@ -2958,7 +2891,6 @@ async fn a_relink_reclaims_an_occurrence_the_user_moved_while_detached() {
         .unwrap();
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
 
-    // The user drags the provider-moved instance somewhere else again.
     crate::reschedule_virtual_occurrence_impl(
         &pool,
         crate::RescheduleVirtualInput {
@@ -3072,7 +3004,6 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
     );
     assert!(is_trashed(&pool, &trashed_id).await);
 
-    // Re-enable: the backfill re-enumerates the still-live event (same etag).
     reconcile(
         &pool,
         &ctx(),
@@ -3084,7 +3015,7 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
     .await
     .unwrap();
 
-    // The live event now mirrors to a fresh, visible page — separate from the trashed one.
+    // The live event mirrors to a fresh, visible page, separate from the trashed one.
     let fresh_id: String =
         sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = '/ev.ics'")
             .fetch_one(&pool)
@@ -3101,7 +3032,6 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
     );
     assert!(!is_trashed(&pool, &fresh_id).await, "fresh mirror renders");
 
-    // The trashed copy stays in the trash, keeps the user's content, and is severed.
     assert!(
         is_trashed(&pool, &trashed_id).await,
         "original stays trashed"
@@ -3116,7 +3046,6 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
         "trashed copy severed from sync"
     );
 
-    // Restoring it leaves it severed — there is no sync link to re-lock.
     crate::restore_page_impl(&pool, &trashed_id).await.unwrap();
     assert!(
         !has_page_sync(&pool, &trashed_id).await,
@@ -3145,7 +3074,6 @@ async fn re_enable_under_changed_href_mirrors_fresh_and_leaves_trash_severed() {
         .unwrap();
     assert!(is_trashed(&pool, &trashed_id).await);
 
-    // Re-enable: the same live event re-enumerates under a new href, same UID.
     reconcile(
         &pool,
         &ctx(),
@@ -3157,7 +3085,6 @@ async fn re_enable_under_changed_href_mirrors_fresh_and_leaves_trash_severed() {
     .await
     .unwrap();
 
-    // The live event mirrors to a fresh, visible page under the new href.
     let fresh_id: String =
         sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = '/ev-2.ics'")
             .fetch_one(&pool)
@@ -3174,9 +3101,8 @@ async fn re_enable_under_changed_href_mirrors_fresh_and_leaves_trash_severed() {
     );
     assert!(!is_trashed(&pool, &fresh_id).await, "fresh mirror renders");
 
-    // The trashed copy stays trashed, keeps the user's content, and is NOT
-    // reactivated. Its stale link (the old href) survives severed-in-place —
-    // harmless, since that external_id no longer collides with the live event.
+    // The trashed copy stays trashed and unreactivated. Its stale link survives severed, harmless
+    // since that external_id no longer collides with the live event.
     assert!(
         is_trashed(&pool, &trashed_id).await,
         "original stays trashed"
@@ -3201,8 +3127,6 @@ async fn re_enable_under_changed_href_mirrors_fresh_and_leaves_trash_severed() {
     assert_eq!(page_count(&pool).await, 2, "trashed copy + fresh mirror");
 }
 
-// ─── occurrence deltas only touch an ACTIVE series ────────────────────────────
-
 #[tokio::test]
 async fn occurrence_cancel_against_a_tombstoned_series_is_skipped() {
     let pool = setup().await;
@@ -3212,7 +3136,6 @@ async fn occurrence_cancel_against_a_tombstoned_series_is_skipped() {
     let (page_id, _, _) = only_page_sync(&pool).await;
     tombstone(&pool, &page_id).await;
 
-    // A cancellation arrives upstream for a series the user trashed locally.
     let occ = UpsertItem::Occurrence(OccurrenceDelta {
         ical_uid: "uid-series".into(),
         series_ref: "uid-series".into(),
@@ -3262,8 +3185,6 @@ async fn occurrence_modify_against_a_detached_series_is_skipped() {
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
 }
 
-// ─── a series rewrite must not disturb user-owned completion state ─────────────
-
 #[tokio::test]
 async fn series_rewrite_preserves_user_completed_occurrences() {
     let pool = setup().await;
@@ -3272,9 +3193,7 @@ async fn series_rewrite_preserves_user_completed_occurrences() {
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
 
-    // completed_set is user-owned (set by the completion command, never by the
-    // reconciler). A full rule rewrite below must leave it intact — the set is keyed
-    // by page_id, independent of the page_sync bundle the rewrite replaces.
+    // completed_set is user-owned and keyed by page_id, so a full rule rewrite must leave it intact.
     sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-22', 'clone-abc')")
         .bind(&page_id)
         .execute(&pool)
@@ -3308,8 +3227,6 @@ async fn series_rewrite_preserves_user_completed_occurrences() {
         "completion survives the rewrite"
     );
 }
-
-// ─── head recompute over the sets (reconciler repoint) ─────────────────────────
 
 /// A plain weekly series (no exdate/override), etag-tagged so a re-sync forces a
 /// real rewrite. Occurrences step 7 days from the 2026-06-01 base.
@@ -3409,8 +3326,6 @@ async fn connected_long_ago(pool: &sqlx::SqlitePool, page_id: &str) {
     tx.commit().await.unwrap();
 }
 
-/// (scheduled_start, status, completed_at) of the page denorm — the cache the
-/// recompute owns for a recurring page.
 async fn page_denorm(
     pool: &sqlx::SqlitePool,
     page_id: &str,
@@ -3422,9 +3337,8 @@ async fn page_denorm(
         .unwrap()
 }
 
-/// The reconciler head is the oldest-open occurrence, not the raw base: a rule
-/// rewrite carries the completed + skip sets (keyed by page_id) through, and the
-/// recompute honours both when re-pinning the denorm.
+/// The head is the oldest-open occurrence, not the raw base: a rule rewrite carries the
+/// completed and skip sets through, and the recompute honours both.
 #[tokio::test]
 async fn series_rewrite_recomputes_head_over_both_sets() {
     let pool = setup().await;
@@ -3442,7 +3356,6 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
         "head starts on the base"
     );
 
-    // Complete the base, dismiss the next — the head should skip past both.
     sqlx::query(
         "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
     )
@@ -3493,7 +3406,6 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
 #[tokio::test]
 async fn provider_re_extension_unmarks_exhausted_head() {
     let pool = setup().await;
-    // Only today's occurrence exists.
     reconcile(
         &pool,
         &ctx(),
@@ -3511,7 +3423,6 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     .execute(&pool)
     .await
     .unwrap();
-    // Re-sync the same one-shot rule → sole occurrence excluded → exhausted → done.
     reconcile(
         &pool,
         &ctx(),
@@ -3523,7 +3434,6 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     assert_eq!(status, "done", "its only occurrence was ticked");
     assert!(completed_at.is_some());
 
-    // Provider extends the series → the next occurrence opens → head un-marked.
     reconcile(
         &pool,
         &ctx(),
@@ -3547,7 +3457,6 @@ async fn recurring_to_single_transition_clears_terminal_done() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    // Simulate the terminal state a prior exhausted recompute left.
     sqlx::query("UPDATE pages SET status = 'done', completed_at = ? WHERE id = ?")
         .bind(now_iso())
         .bind(&page_id)
@@ -3591,8 +3500,7 @@ async fn detach_recomputes_head_off_completed_base() {
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
     connected_long_ago(&pool, &page_id).await;
-    // Completed base makes the series owned (→ detach, not hard delete) and moves
-    // the recomputed head forward.
+    // The completed base makes the series owned (detach, not hard delete) and moves the head forward.
     sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
         .bind(&page_id).execute(&pool).await.unwrap();
 
@@ -3608,13 +3516,9 @@ async fn detach_recomputes_head_off_completed_base() {
     );
 }
 
-// ─── detach spends the source-zone stamp ──────────────────────────────────────
-//
-// Tests pin the device zone to UTC (see `device_zone`), so a fixture in
-// Europe/Berlin is +2 in June and +1 in January — the assertions below are
-// machine-independent.
+// Tests pin the device zone to UTC (see `device_zone`), so a Europe/Berlin fixture is +2
+// in June and +1 in January on any machine.
 
-/// (start, end, timezone) of a page's only schedule row.
 async fn zoned_schedule(
     pool: &sqlx::SqlitePool,
     page_id: &str,
@@ -3925,8 +3829,6 @@ async fn relink_returns_the_page_to_its_calendar_folder() {
     assert_eq!(page_folder(&pool, &page_id).await.as_deref(), Some("f1"));
 }
 
-// ─── relink + teardown of a RECURRING series (singles-only before) ─────────────
-
 #[tokio::test]
 async fn relink_reactivates_a_detached_series_in_place() {
     let pool = setup().await;
@@ -3940,7 +3842,6 @@ async fn relink_reactivates_a_detached_series_in_place() {
         .await
         .unwrap();
 
-    // Same uid returns under a new href, still recurring with its exdate + override.
     let mut moved = weekly_series();
     if let UpsertItem::Event(e) = &mut moved {
         e.core.external_id = "/series-new.ics".into();
@@ -3993,8 +3894,6 @@ async fn teardown_keeps_an_owned_recurring_series_rule_and_override() {
         .await
         .is_some());
 }
-
-// ─── all-day exclusive-end decrement: month/year boundary + unparseable ────────
 
 #[tokio::test]
 async fn all_day_end_decrement_crosses_month_and_year_boundaries() {
@@ -4061,8 +3960,6 @@ async fn all_day_end_that_is_not_a_real_date_passes_through() {
     );
 }
 
-// ─── UNTIL rewrite: unknown source zone ───────────────────────────────────────
-
 #[tokio::test]
 async fn until_with_an_unknown_zone_passes_the_rrule_through_unchanged() {
     let pool = setup().await;
@@ -4084,8 +3981,6 @@ async fn until_with_an_unknown_zone_passes_the_rrule_through_unchanged() {
         "an unparseable zone leaves the rrule raw — no panic, no dropped rule"
     );
 }
-
-// ─── seeded description: edge inputs that must not clobber a body ──────────────
 
 #[tokio::test]
 async fn whitespace_only_description_leaves_the_body_untouched() {
@@ -4277,7 +4172,6 @@ async fn a_re_enumerate_does_not_drag_an_advanced_head_backwards() {
     tx.commit().await.unwrap();
     let advanced = page_denorm(&pool, &page_id).await.0.unwrap();
 
-    // Same series, new etag → the full rewrite path a 410 takes.
     reconcile(
         &pool,
         &ctx(),
@@ -4293,7 +4187,6 @@ async fn a_re_enumerate_does_not_drag_an_advanced_head_backwards() {
     );
 }
 
-/// Every page's stored sort inputs agree with what `page_order_inputs` computes now.
 async fn assert_order_inputs_current(pool: &sqlx::SqlitePool) {
     let stale: Vec<String> = sqlx::query_scalar(
         "SELECT p.id FROM pages p JOIN page_order_inputs v ON v.id = p.id
@@ -4500,8 +4393,6 @@ async fn a_synced_series_sorts_by_its_rules_zone() {
     assert!(order_inputs(&pool, &page).await.0);
     assert_order_inputs_current(&pool).await;
 }
-
-// ─── series that ended before the backfill window ─────────────────────────────
 
 fn ctx_now() -> ReconcileContext {
     ReconcileContext {

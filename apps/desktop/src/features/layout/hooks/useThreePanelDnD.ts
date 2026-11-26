@@ -61,7 +61,6 @@ export function useThreePanelDnD() {
 
   const [activePageData, setActivePageData] = useState<PageSummary | null>(null);
   const [activeFolderData, setActiveFolderData] = useState<Folder | null>(null);
-  /** IDs of all pages being dragged (includes the active drag item + selected). */
   const [draggedPageIds, setDraggedPageIds] = useState<string[]>([]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -80,10 +79,8 @@ export function useThreePanelDnD() {
   // ISO start string captured from the last mousemove that was over the calendar.
   // Read in handleDragEnd to decide whether to schedule or reorder.
   const calendarStartRef = useRef<string | null>(null);
-  // Tracks whether cursor is currently over the calendar to avoid redundant state updates.
   const overCalendarRef = useRef(false);
 
-  // Lock cursor to grabbing and disable text selection while any drag is active.
   const isDragging = activePageData !== null || activeFolderData !== null;
   useEffect(() => {
     if (!isDragging) return;
@@ -95,8 +92,6 @@ export function useThreePanelDnD() {
     };
   }, [isDragging]);
 
-  // While a page is being dragged, track cursor position and update the
-  // WeekGrid ghost preview via callExternalDragUpdater.
   useEffect(() => {
     if (!activePageData || activePageData.scheduleLocked) {
       calendarStartRef.current = null;
@@ -141,8 +136,6 @@ export function useThreePanelDnD() {
       const page = lookup(String(active.id)) ?? null;
       setActivePageData(page);
 
-      // If dragging a selected item, drag all selected pages (in list order).
-      // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
         // Today and Upcoming are several lists, so the selection drags in the order it was made.
         const visible = cachedListNow(viewCache, activeViewId, sortMode)?.pages;
@@ -191,14 +184,11 @@ export function useThreePanelDnD() {
     setActiveFolderData(null);
     setDraggedPageIds([]);
     calendarStartRef.current = null;
-    // Clear the WeekGrid ghost immediately (don't wait for the effect cleanup).
     callExternalDragUpdaterRef.current(-1, -1, undefined);
 
-    // Calendar drop takes priority over list reorder.
     if (calendarStart && pageData) {
       const targets = unlockedIds(idsToMove.length > 0 ? idsToMove : [pageData.id], lookup);
       if (targets.length === 1) {
-        // Single-page drop: preserve existing behavior (keep duration)
         const target = lookup(targets[0] ?? "") ?? pageData;
         let calendarEnd: string | undefined;
         if (isTimedIso(calendarStart)) {
@@ -212,11 +202,8 @@ export function useThreePanelDnD() {
         }
         void scheduleOnce(target.id, calendarStart, calendarEnd);
       } else if (targets.length > 1) {
-        // Multi-page drop
         const isTimedDrop = isTimedIso(calendarStart);
         if (isTimedDrop) {
-          // Stagger pages sequentially, preserving each page's existing duration
-          // (15min gap after timed pages, 30min slots for point-in-time pages).
           const baseTime = parseLocalISO(calendarStart);
           let offset = 0;
           for (const id of targets) {
@@ -234,7 +221,6 @@ export function useThreePanelDnD() {
               (durationMin != null ? MULTI_DROP_GAP_MIN : MULTI_DROP_POINT_GAP_MIN);
           }
         } else {
-          // All-day drop: all pages become all-day for that date
           for (const id of targets) {
             void scheduleOnce(id, calendarStart);
           }
@@ -252,14 +238,12 @@ export function useThreePanelDnD() {
     const ot = over.data.current?.["type"] as string | undefined;
 
     if (at === "page" && ot === "page") {
-      // Only reorder in manual sort mode — other modes lock DnD.
       if (isDateGroupedView(activeViewId)) return;
       if (sortMode !== "manual") return;
       const cached = cachedListNow(viewCache, activeViewId, sortMode);
       if (cached)
         moveBetweenNeighbours(cached.pages, idsToMove, String(active.id), String(over.id));
     } else if (at === "page" && ot === "folder") {
-      // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
       for (const id of unlockedIds(
         idsToMove.length > 0 ? idsToMove : [String(active.id)],
@@ -269,9 +253,8 @@ export function useThreePanelDnD() {
       }
       clearSelection();
     } else if (at === "page" && ot === "view-today") {
-      // Drop on the Today nav row: replace each dragged page's head schedule
-      // with an all-day occurrence for today. For recurring pages this also
-      // shifts the rule anchor (see scheduleOnce).
+      // Drop on the Today nav row: replace each dragged page's head schedule with an all-day occurrence
+      // for today (for recurring pages this also shifts the rule anchor; see scheduleOnce).
       const today = format(new Date(), "yyyy-MM-dd");
       for (const id of unlockedIds(
         idsToMove.length > 0 ? idsToMove : [String(active.id)],

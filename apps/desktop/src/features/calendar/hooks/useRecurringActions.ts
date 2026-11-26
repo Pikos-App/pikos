@@ -6,16 +6,12 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
 interface UseRecurringActionsResult {
-  /** True when the page is a virtual rrule occurrence (not a real DB page). */
   isVirtual: boolean;
   /**
-   * Whether the block offers a checkbox. A synced-origin occurrence is ticked
-   * where it renders — completion records that this instance is resolved. A
-   * native virtual shows the repeat glyph instead and funnels to its head,
-   * which is always the next thing due.
+   * Whether the block offers a checkbox. A synced-origin occurrence is ticked where it renders;
+   * a native virtual shows the repeat glyph and funnels to its head, the next thing due.
    */
   showsCheckbox: boolean;
-  /** Toggle status — routes through recurring completion for recurring pages. */
   toggleStatus: () => void;
   /**
    * The block's delete gesture. A rendered occurrence — a virtual, or a moved

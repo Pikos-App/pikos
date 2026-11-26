@@ -1,20 +1,14 @@
-//! Multi-writer concurrency tests against a REAL on-disk WAL pool.
-//!
-//! The in-memory `test_pool` (single connection) cannot reproduce the
-//! `SQLITE_BUSY_SNAPSHOT` (517) that bit bulk completion in production: a
-//! deferred read-then-write transaction takes a read snapshot, a second
-//! connection commits a write, and the first transaction's write then fails
-//! because its snapshot is stale. These tests use [`wal_test_pool`] so the race
-//! is real, and assert the writer functions survive it.
+//! Multi-writer tests against a real on-disk WAL pool: the single-connection `test_pool` can't
+//! reproduce `SQLITE_BUSY_SNAPSHOT`, where a deferred read-then-write transaction's snapshot goes
+//! stale after another connection commits. [`wal_test_pool`] makes the race real.
 
 use super::*;
 use crate::pool::{insert_test_page, wal_test_pool, TestPage};
 use crate::tx::is_retryable_busy;
 use crate::AppError;
 
-/// Force a deferred read-then-write transaction to lose the snapshot race, and
-/// return the resulting error. c1 opens a transaction and reads (snapshot @ V);
-/// c2 commits a write (V+1); c1's write is then rejected with 517.
+/// Forces a deferred read-then-write transaction to lose the snapshot race and returns the
+/// error: c1 reads, c2 commits, then c1's write is rejected with 517.
 async fn provoke_busy_snapshot(pool: &sqlx::SqlitePool) -> AppError {
     let mut c1 = pool.acquire().await.unwrap();
     sqlx::query("BEGIN").execute(&mut *c1).await.unwrap();
@@ -37,8 +31,6 @@ async fn provoke_busy_snapshot(pool: &sqlx::SqlitePool) -> AppError {
     AppError::Db(err)
 }
 
-// ─── The race is real, and the retry classifier recognises it ────────────────
-
 #[tokio::test]
 async fn busy_snapshot_race_is_classified_retryable() {
     let db = wal_test_pool().await;
@@ -50,7 +42,6 @@ async fn busy_snapshot_race_is_classified_retryable() {
         .await
         .unwrap();
 
-    // A deferred read-then-write that loses the race produces a 517 …
     let busy = provoke_busy_snapshot(pool).await;
     match &busy {
         AppError::Db(sqlx::Error::Database(e)) => {
@@ -58,14 +49,12 @@ async fn busy_snapshot_race_is_classified_retryable() {
         }
         other => panic!("expected a database error, got {other:?}"),
     }
-    // … which retry_on_busy must treat as retryable.
     assert!(
         is_retryable_busy(&busy),
         "517 (BUSY_SNAPSHOT) must be retryable"
     );
 
-    // A genuine logic error (duplicate PK → SQLITE_CONSTRAINT) must NOT be
-    // retried — retrying a deterministic failure would just spin.
+    // A deterministic failure (duplicate PK) must not be retried; it would just spin.
     let dup = insert_test_page(pool, TestPage::new("a", "A"))
         .await
         .unwrap_err();
@@ -75,18 +64,14 @@ async fn busy_snapshot_race_is_classified_retryable() {
     );
 }
 
-// ─── an editor write survives a concurrent read-then-write writer ────────────
+// Why the editor's write needs the retry is on `apply_page_update`. A single held lock is the
+// wrong way to test it, since the busy handler waits that out with or without the retry; it
+// takes another writer committing repeatedly (a teardown retrying, a sync poll batching) to
+// catch the editor mid-upgrade.
 //
-// Why the editor's write needs the retry at all is on `apply_page_update`. What
-// this file adds is the shape that provokes it: a single *held* lock is the wrong
-// one to test with — the busy handler waits that out, so such a test passes with
-// or without the retry. It takes another writer committing *repeatedly* (a
-// teardown retrying, a sync poll batching) to catch the editor mid-upgrade.
-//
-// Reproduction is probabilistic even so. Measured: red ~3 runs in 8 without
-// `retry_on_busy` on the editor path, green 8 of 8 with it. Weak as a detector,
-// stable as a gate; the load reproduction (several suites concurrently while
-// looping `teardown_heals_a_racing_editor_write`) is the stronger signal.
+// Reproduction is probabilistic: red about 3 runs in 8 without `retry_on_busy` on the editor
+// path, green 8 of 8 with it. Weak as a detector, stable as a gate; running several suites
+// concurrently while looping `teardown_heals_a_racing_editor_write` is the stronger signal.
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_editor_write_survives_a_concurrent_writer() {
@@ -96,9 +81,8 @@ async fn an_editor_write_survives_a_concurrent_writer() {
         .await
         .unwrap();
 
-    // Churn for exactly as long as the editor writes: a fixed count finishes early
-    // and leaves the tail of the editor loop uncontended, which is what makes a
-    // count-based version of this test pass with the bug present.
+    // Churn as long as the editor writes: a fixed count finishes early and leaves the editor's
+    // tail uncontended, so the test would pass with the bug present.
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let churn_done = done.clone();
     let churn_pool = pool.clone();
@@ -106,9 +90,8 @@ async fn an_editor_write_survives_a_concurrent_writer() {
         let mut i = 0u32;
         while !churn_done.load(std::sync::atomic::Ordering::Relaxed) {
             i += 1;
-            // Shaped like every other writer here — deferred read-then-write, under
-            // the retry. Raw BEGIN/COMMIT on a pooled connection would return it to
-            // the pool mid-transaction on the first BUSY and poison the next caller.
+            // Raw BEGIN/COMMIT on a pooled connection would return it to the pool mid-transaction
+            // on the first BUSY and poison the next caller.
             crate::tx::retry_on_busy(|| async {
                 let mut tx = churn_pool.begin().await?;
                 let _snapshot: String =
@@ -149,13 +132,9 @@ async fn an_editor_write_survives_a_concurrent_writer() {
     assert_eq!(text.as_deref(), Some("edit 499"), "the last edit landed");
 }
 
-// ─── complete_recurring_page heals a real snapshot conflict ──────────────────
-//
-// End-to-end on the actual writer: hold a read snapshot open on another
-// connection while completing a recurring page, then commit a racing write so
-// the completion's first attempt loses the snapshot. retry_on_busy must re-read
-// and succeed. This is the realistic shape — a user completing a recurring page
-// while one other writer (e.g. the notification scheduler) commits.
+// End to end on the real writer: a racing write commits while a recurring page is being
+// completed, so the first attempt loses the snapshot and retry_on_busy must re-read and
+// succeed, as when the notification scheduler commits mid-completion.
 
 #[tokio::test]
 async fn recurring_completion_recovers_from_a_racing_commit() {
@@ -174,7 +153,7 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     insert_test_page(pool, TestPage::new("other", "Other"))
         .await
         .unwrap();
-    // A rule is required: completion derives the head advance via recompute.
+    // Completion derives the head advance via recompute, so a rule is required.
     crate::create_recurrence_rule_impl(
         pool,
         crate::NewRecurrenceRule {
@@ -189,8 +168,6 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     .await
     .unwrap();
 
-    // A second connection commits a write — simulating a concurrent writer that
-    // advances the WAL while the completion is in flight.
     let mut racer = pool.acquire().await.unwrap();
     sqlx::query("UPDATE pages SET subtitle = 'touched' WHERE id = 'other'")
         .execute(&mut *racer)
@@ -198,7 +175,6 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
         .unwrap();
     drop(racer);
 
-    // The completion still lands: head advanced, clone created.
     complete_recurring_page_impl(
         pool,
         CompleteRecurringInput {
@@ -227,13 +203,10 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     assert_eq!(clones, 1, "completion clone created");
 }
 
-// ─── two writers, one occurrence ─────────────────────────────────────────────
-//
 // A native head carries no occurrence key, so both writers resolve the date off
-// `pages.scheduled_start` inside their own transaction. Serialized, the second
-// therefore reads the already-advanced head and completes the FOLLOWING
-// occurrence — one gesture, two occurrences consumed. The desktop's in-flight
-// guard is per-webview and cannot see the CLI, which is the second writer.
+// `pages.scheduled_start` in their own transaction; serialized, the second completes the
+// following occurrence, consuming two for one gesture. The desktop's in-flight guard is
+// per-webview and can't see the CLI.
 
 async fn daily_head_at(pool: &sqlx::SqlitePool, start: &str) {
     insert_test_page(

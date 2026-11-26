@@ -7,10 +7,10 @@
 //   node scripts/check-release-qa.mjs <version> --ledger   date every row the pass drove
 //
 // A copy is finished when it was written for this commit (or nothing since reaches a row),
-// holds every row of the master with a mark, no manual row is one a test could take
-// (`PKOS-0193`), every row a person drives is ticked, every row
-// marked both or deferred says why, every automated row still has its tests, and the sign-off
-// names who ran the pass. A deferred row needs no tick, so the record names each one. A hotfix signs the copy's hotfix block instead of driving the rows.
+// holds every row of the master with a mark, no manual row is one a test could take, every row
+// a person drives is ticked, every row marked both or deferred says why, every automated row
+// still has its tests, and the sign-off names who ran the pass. A deferred row needs no tick, so
+// the record names each one. A hotfix signs the copy's hotfix block instead of driving the rows.
 //
 // `release.sh` runs the check before it bumps the version and writes the record and the ledger
 // after it tags, so an aborted release records nothing.

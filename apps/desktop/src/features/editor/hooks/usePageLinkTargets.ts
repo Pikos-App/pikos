@@ -30,7 +30,6 @@ export function linkTargetFinder(
   };
 }
 
-/** Points the editor's `[[` picker at this workspace. */
 export function usePageLinkTargets(editor: Editor | null, pageId: string | null): void {
   const { searchPages } = usePages();
   const { storage } = useWorkspace();

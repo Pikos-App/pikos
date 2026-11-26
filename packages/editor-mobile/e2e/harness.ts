@@ -14,16 +14,12 @@ declare global {
 }
 
 /**
- * Install a stand-in for the WKWebView host before the page loads.
- *
- * `addInitScript` runs before any page script, which matters: the editor sends
- * `ready` during startup, and a handler installed after load would miss it —
- * the one message whose timing is part of what is being tested.
+ * Install a stand-in for the WKWebView host before the page loads, so the `ready` the editor
+ * sends during startup is not missed.
  */
 export async function installFakeHost(page: Page): Promise<void> {
   await page.addInitScript(() => {
     window.__pikosMessages = [];
-    // Shape matches what WKWebView injects.
     (window as unknown as Record<string, unknown>)["webkit"] = {
       messageHandlers: {
         pikos: {
@@ -36,17 +32,14 @@ export async function installFakeHost(page: Page): Promise<void> {
   });
 }
 
-/** Every message the editor has sent so far. */
 export async function messages(page: Page): Promise<HostMessage[]> {
   return page.evaluate(() => window.__pikosMessages ?? []);
 }
 
-/** Messages of one type. */
 export async function messagesOfType(page: Page, type: string): Promise<HostMessage[]> {
   return (await messages(page)).filter((m) => m.type === type);
 }
 
-/** Send a message to the editor, as the host would. */
 export async function sendToEditor(
   page: Page,
   type: string,
@@ -61,14 +54,12 @@ export async function sendToEditor(
   );
 }
 
-/** Clear the captured messages, so an assertion is about what follows. */
 export async function clearMessages(page: Page): Promise<void> {
   await page.evaluate(() => {
     window.__pikosMessages = [];
   });
 }
 
-/** A document with one paragraph of the given text. */
 export function docWithText(text: string): string {
   return JSON.stringify({
     content: [{ content: [{ text, type: "text" }], type: "paragraph" }],
@@ -76,7 +67,6 @@ export function docWithText(text: string): string {
   });
 }
 
-/** A document with one paragraph containing a single link. */
 export function docWithLink(text: string, href: string): string {
   return JSON.stringify({
     content: [

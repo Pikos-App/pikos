@@ -1,11 +1,5 @@
-// Regression: delete → undo must not duplicate pages.
-//
-// QA soft-launch cluster A (§8 "delete pages then undo → duplicates them +
-// breaks list rendering", §18 undo jank). `completedPages` is derived from the
-// PagesContext `pages` array, so a duplicate id there renders twice in the
-// Completed section and confuses the virtualizer. The two invariants below
-// guard the fix: restore must dedupe (never blind-append), and soft-delete must
-// remove from local state synchronously so a fast undo can't interleave.
+// A duplicate id in `pages` renders twice in the Completed section and confuses the virtualizer,
+// so restore must dedupe and soft-delete must remove from local state synchronously.
 
 import { act } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -38,9 +32,6 @@ describe("PagesContext delete → undo", () => {
       id = p.id;
     });
 
-    // Restore while the page is still in the list — exactly what happens when
-    // undo interleaves with a still-pending soft-delete. Must not create a
-    // second copy. (Pre-fix this blind-appended → two entries.)
     await act(async () => {
       await hook.result.current.pages.restorePage(id);
     });
@@ -56,8 +47,6 @@ describe("PagesContext delete → undo", () => {
       id = p.id;
     });
 
-    // Fire-and-forget like UndoDeleteContext does (`void softDeletePage`). The
-    // page must be gone from `pages` immediately, not only after the await.
     act(() => {
       void hook.result.current.pages.softDeletePage(id);
     });
@@ -87,7 +76,6 @@ describe("PagesContext delete → undo", () => {
     for (const id of ids) {
       expect(present.filter((x) => x === id)).toHaveLength(1);
     }
-    // No duplicate ids anywhere in the array.
     expect(new Set(present).size).toBe(present.length);
   });
 });

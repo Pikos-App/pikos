@@ -2,12 +2,9 @@ import XCTest
 
 @testable import PikosCore
 
-/// Tests for the workspace binding as Swift sees it.
-///
-/// The Rust side has its own tests for the translation layer. These cover what
-/// those cannot: that the async bridge actually suspends and resumes correctly,
+/// Covers what the Rust tests cannot: that the async bridge suspends and resumes,
 /// that errors surface as thrown Swift errors, and that the read-only handle is
-/// read-only in a way the compiler enforces rather than the documentation.
+/// read-only by the compiler.
 final class WorkspaceTests: XCTestCase {
     private var path: String!
 
@@ -34,9 +31,8 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(fetched.id, created.id)
     }
 
-    /// A deleted page's id can outlive it — in a widget's timeline, a deep
-    /// link, a restored navigation state. The caller has to tell that apart
-    /// from a database that is broken, so it arrives as a distinct case.
+    /// A deleted page's id can outlive it (widget timeline, deep link), and must
+    /// be distinguishable from a broken database.
     func testMissingPageThrowsNotFound() async throws {
         let workspace = try await Workspace.open(path: path)
         do {
@@ -51,8 +47,6 @@ final class WorkspaceTests: XCTestCase {
         }
     }
 
-    /// The editor's save path: hand back the document and its extracted text
-    /// together, so the search index never lags the content.
     func testSavingContentAlsoStampsTheSchemaVersion() async throws {
         let workspace = try await Workspace.open(path: path)
         let page = try await workspace.createPage(
@@ -65,9 +59,8 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(saved.contentSchemaVersion, workspace.contentSchemaVersion())
     }
 
-    /// iOS must refuse to save over a document written by a newer editor:
-    /// re-serialising through an older schema silently drops node types it
-    /// cannot represent. This is the check the app is expected to make.
+    /// The app refuses to save over a document from a newer editor, since an
+    /// older schema silently drops node types it cannot represent.
     func testSchemaVersionGuardIsExpressible() async throws {
         let workspace = try await Workspace.open(path: path)
         let page = try await workspace.createPage(
@@ -110,8 +103,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(hits.map(\.pageId), [page.id])
     }
 
-    /// A widget must never create an empty workspace — to the user that looks
-    /// exactly like their notes disappearing.
+    /// An empty workspace created by a widget looks like the notes disappearing.
     func testReadOnlyOpenRefusesToCreateADatabase() async throws {
         do {
             _ = try await ReadOnlyWorkspace.openExisting(path: path)
@@ -134,9 +126,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(pages.map(\.title), ["Visible"])
     }
 
-    /// Concurrent reads must not serialise behind one another. The runtime is
-    /// multi-threaded precisely so a widget refresh and a foreground query can
-    /// overlap; if this ever deadlocks, that is the reason to look at.
+    /// A widget refresh and a foreground query must be able to overlap.
     func testConcurrentReadsComplete() async throws {
         let workspace = try await Workspace.open(path: path)
         for index in 0..<5 {

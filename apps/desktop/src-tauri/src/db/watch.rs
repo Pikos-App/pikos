@@ -14,34 +14,23 @@ use tauri::{AppHandle, Emitter};
 const EXTERNAL_CHANGE_EVENT: &str = "workspace:external-change";
 const DEBOUNCE: Duration = Duration::from_millis(250);
 
-/// The background sync loop writes through the same workspace file this watcher
-/// observes — even a no-change poll stamps `sync_calendar.last_synced_at` — so
-/// without a gate every poll would emit an external-change and reload the frontend.
-/// The sync driver brackets each pass with [`suppress_begin`]/[`suppress_end`] (it
-/// emits its own signal when a pass actually changed page data). A pass of any
-/// length is covered for its full duration, plus a short trailing window for writes
-/// flushing just after. A genuinely external write landing inside the bracket is
-/// missed — indistinguishable from the pass's own echoes — but bounded: the next
-/// write reloads.
+/// Even a no-change sync poll stamps `sync_calendar.last_synced_at`, so without a gate every
+/// poll would emit an external-change and reload the frontend. The sync driver brackets each
+/// pass with [`suppress_begin`]/[`suppress_end`], covering the whole pass plus a short
+/// trailing window. A genuinely external write inside the bracket is missed (it looks like
+/// the pass's own echo), but the next write reloads.
 static SUPPRESS_DEPTH: AtomicU32 = AtomicU32::new(0);
-/// Trailing debounce deadline armed by [`suppress_end`]; covers writes still
-/// flushing just after the bracket closes.
 static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
-/// Open the suppression bracket (pass start). Balanced by [`suppress_end`].
 pub fn suppress_begin() {
     SUPPRESS_DEPTH.fetch_add(1, Ordering::Relaxed);
 }
 
-/// Close the bracket (pass end), arming a short trailing window first so no echo
-/// leaks in the gap before the depth drops.
 pub fn suppress_end(tail: Duration) {
     SUPPRESS_UNTIL_MS.store(now_ms() + tail.as_millis() as u64, Ordering::Relaxed);
     SUPPRESS_DEPTH.fetch_sub(1, Ordering::Relaxed);
 }
 
-/// Covers the watcher's debounce tail after a bracket's last write (the bracket itself is what
-/// suppresses the writes inside it).
 pub const TRAILING_COVER: Duration = Duration::from_secs(2);
 
 /// The bracket around the app's own background checkpoints, which write the database file as
@@ -67,8 +56,6 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Spawn a background watcher on the workspace file's directory. Best-effort:
-/// any setup failure is logged and the app simply runs without live-refresh.
 pub fn start(app: AppHandle, db_path: String) {
     std::thread::spawn(move || {
         if let Err(e) = run(app, &db_path) {
@@ -91,7 +78,6 @@ fn run(app: AppHandle, db_path: &str) -> notify::Result<()> {
         .unwrap_or_default();
 
     let (tx, rx) = channel::<notify::Result<Event>>();
-    // The watcher must stay alive for the lifetime of this loop.
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     watcher.watch(&dir, RecursiveMode::NonRecursive)?;
 
@@ -104,9 +90,7 @@ fn run(app: AppHandle, db_path: &str) -> notify::Result<()> {
     Ok(())
 }
 
-/// Event-classification + debounce pump. Extracted so tests can drive it with
-/// a real notify watcher (or synthetic events) and an arbitrary emit closure,
-/// without needing a Tauri AppHandle.
+/// Extracted so tests can drive it without a Tauri AppHandle.
 fn pump<F: FnMut()>(
     rx: &Receiver<notify::Result<Event>>,
     prefix: &str,
@@ -119,7 +103,6 @@ fn pump<F: FnMut()>(
                 if !is_relevant(&event, prefix) {
                     continue;
                 }
-                // Coalesce the burst of events a single commit produces into one emit.
                 loop {
                     match rx.recv_timeout(debounce) {
                         Ok(_) => continue,
@@ -177,8 +160,6 @@ mod tests {
         })
     }
 
-    /// Drive the pump on a worker thread; return the join handle + a count of
-    /// emits via the supplied Arc<Mutex<u32>>.
     fn spawn_pump(
         rx: Receiver<notify::Result<Event>>,
         prefix: String,
@@ -292,7 +273,6 @@ mod tests {
         let (h, count) = spawn_pump(rx, "default.sqlite".into(), Duration::from_millis(50));
 
         let db = PathBuf::from("/tmp/whatever/default.sqlite");
-        // Burst of 5 modify events on the db file.
         for _ in 0..5 {
             tx.send(synthetic(
                 EventKind::Modify(notify::event::ModifyKind::Any),
@@ -300,7 +280,6 @@ mod tests {
             ))
             .unwrap();
         }
-        // Wait past the debounce window so the pump emits.
         thread::sleep(Duration::from_millis(200));
         drain(tx);
         h.join().unwrap();
@@ -330,16 +309,12 @@ mod tests {
         assert_eq!(*count.lock().unwrap(), 0);
     }
 
-    /// End-to-end against a real notify watcher: write to the workspace file
-    /// and confirm an emit happens; touch an unrelated file and confirm no
-    /// extra emit. This is the closest auto-verifiable proxy for the GUI
-    /// live-refresh smoke test (which requires a Tauri AppHandle).
+    /// The closest automated proxy for the GUI live-refresh smoke test, which needs an AppHandle.
     #[test]
     fn real_notify_watcher_fires_on_db_writes_only() {
         let dir = tempdir_for("e2e");
         let db = dir.join("default.sqlite");
         let other = dir.join("readme.txt");
-        // Seed both files.
         fs::write(&db, b"seed").unwrap();
         fs::write(&other, b"seed").unwrap();
 
@@ -351,7 +326,6 @@ mod tests {
 
         let (h, count) = spawn_pump(rx, "default.sqlite".into(), Duration::from_millis(150));
 
-        // Let the watcher settle, then touch the db file.
         thread::sleep(Duration::from_millis(50));
         fs::write(&db, b"changed").unwrap();
         thread::sleep(Duration::from_millis(400));
@@ -361,7 +335,6 @@ mod tests {
             "expected at least one emit after touching the db file (got {after_db})",
         );
 
-        // Touch unrelated file; emit count must not move.
         fs::write(&other, b"changed").unwrap();
         thread::sleep(Duration::from_millis(400));
         let after_other = *count.lock().unwrap();
@@ -374,8 +347,6 @@ mod tests {
         h.join().unwrap();
     }
 
-    /// Mirrors production's `suppressed()` gate in the emit closure; see
-    /// `SUPPRESS_DEPTH` for the suppression contract.
     #[test]
     fn bracketed_pass_suppresses_regardless_of_duration_then_releases() {
         SUPPRESS_DEPTH.store(0, Ordering::Relaxed);
@@ -394,8 +365,7 @@ mod tests {
         });
         let db = PathBuf::from("/tmp/whatever/default.sqlite");
 
-        // Inside the bracket with zero time-based cover, depth alone suppresses —
-        // pass length is irrelevant.
+        // With zero time-based cover, depth alone suppresses.
         suppress_begin();
         tx.send(synthetic(
             EventKind::Modify(notify::event::ModifyKind::Any),

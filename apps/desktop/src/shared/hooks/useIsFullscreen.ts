@@ -1,5 +1,3 @@
-// Always false in test mode / non-Tauri environments.
-
 import { useEffect, useState } from "react";
 
 import { IS_TAURI } from "@/shared/constants/platform";

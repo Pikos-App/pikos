@@ -25,9 +25,8 @@ describe("eatNextClick", () => {
   });
 
   it("lets a later deliberate click through (the move-then-checkbox case)", () => {
-    // Regression: a move-drag emits no synthetic click, so the guard used to
-    // linger and swallow the user's next deliberate click — the "first checkbox
-    // click after moving a block does nothing" bug.
+    // A move-drag emits no synthetic click, so the guard must not linger and swallow the user's
+    // next deliberate click.
     let t = 1000;
     eatNextClick(() => t);
     t = 1600; // 600ms later — the user deliberately clicking a checkbox

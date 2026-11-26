@@ -9,10 +9,8 @@ import { usePages } from "@/shared/context/PagesContext";
 
 export interface FolderChipProps {
   folders: Folder[];
-  /** Currently selected folder ID, or null for Inbox. */
   value: string | null;
   onChange: (folderId: string | null) => void;
-  /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
 }
 

@@ -47,7 +47,6 @@ export interface ListSection {
   tail?: number;
 }
 
-/** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
 export interface PageListDaySection {
   date: string;
   label: string;
@@ -60,11 +59,8 @@ export interface BuildPageListRowsInput {
   overdue: PageSummary[];
   today: PageSummary[];
   overdueCollapsed: boolean;
-  /**
-   * Day sections for the Upcoming view; empty everywhere else. Unlike Today's
-   * two fixed sections, these are open-ended and every one keeps its header even
-   * when it is the only one — the day IS the information the view exists to give.
-   */
+  /** Upcoming's day sections. Unlike Today's two fixed sections, every one keeps its header even
+   *  when it is the only one, because the day is the information the view gives. */
   daySections?: PageListDaySection[];
   completedCollapsed: boolean;
   completedPages: PageSummary[];
@@ -78,7 +74,7 @@ export interface BuildPageListRowsInput {
 
 export interface BuildPageListRowsResult {
   rows: VirtualRow[];
-  /** Maps page.id → row index (for scroll-to-index). */
+  /** For scroll-to-index. */
   pageToRowIndex: Map<string, number>;
 }
 

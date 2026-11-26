@@ -1,13 +1,11 @@
 import { mergeAttributes, Node } from "@tiptap/core";
 
 /**
- * A link from one page to another, stored by the target's id so a rename never
- * breaks it.
+ * A link to another page, stored by the target's id so a rename never breaks it.
  *
- * `title` is the target's title when the link was made. It is a fallback, not
- * the source of truth: a platform shows the target's current title when it has
- * one, and falls back to this for a target it hasn't loaded or that is gone.
- * Markdown writes the link as `[[title]]`, the form the CLI reads back.
+ * `title` is a fallback for a target that isn't loaded or is gone; a platform shows the
+ * target's current title when it has one. Markdown writes `[[title]]`, the form the CLI
+ * reads back.
  */
 export const PageLink = Node.create({
   addAttributes() {

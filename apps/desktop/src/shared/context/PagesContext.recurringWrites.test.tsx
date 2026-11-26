@@ -1,5 +1,4 @@
-// Regression tests for the recurring-cluster write races (pre-launch audit
-// 2026-06-10): re-entrant clone-minting calls, exdate read-modify-write
+// Write races in the recurring cluster: re-entrant clone-minting calls, exdate read-modify-write
 // clobbering, and completion racing the per-page mutation queue.
 
 import { formatLocalISO, resolveSyncedInstant } from "@pikos/core";
@@ -46,11 +45,9 @@ async function setupRecurringPage() {
 }
 
 describe("completeRecurringPage idempotency", () => {
-  // Completion advances the head AND inserts a fresh-UUID clone via the
-  // backend. The checkbox path is fire-and-forget with no disabled state, so a
-  // double-fire would complete two occurrences for one gesture — and now that
-  // completion runs on the mutation queue, an unguarded second call would
-  // SERIALIZE into a deterministic double completion instead of a racy one.
+  // The checkbox path is fire-and-forget, so a double-fire would complete two occurrences for one
+  // gesture. Completion runs on the mutation queue, so an unguarded second call would serialize
+  // into a deterministic double completion.
   it("drops a re-entrant completion — adapter is hit once, no duplicate clone", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
@@ -105,8 +102,6 @@ describe("completeRecurringPage idempotency", () => {
 });
 
 describe("completeRecurringPage payload", () => {
-  // Date is faked (only Date) to make the gap deterministic; the head sits 5 days
-  // before "today" on a daily rule.
   const NOW = "2099-01-10T12:00:00";
 
   beforeEach(() => {
@@ -147,9 +142,8 @@ describe("completeRecurringPage payload", () => {
   });
 
   it("completes the head off the passed-in override, not the lagging pages state", async () => {
-    // The "all to today" run chains each step off the previous call's recomputed
-    // head; reading React state instead would re-send the same occurrence and the
-    // backend's idempotency would silently stall the run after one completion.
+    // Each step chains off the previous call's recomputed head: React state would re-send the same
+    // occurrence and the backend's idempotency would stall the run after one completion.
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
     const stale = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
@@ -180,8 +174,6 @@ describe("completeRecurringToToday", () => {
   });
 
   it("clones every open occurrence up to today and leaves the head on today", async () => {
-    // Head 2099-01-05 on a daily rule, today 2099-01-10 → 05..09 complete, and the
-    // head lands on today rather than running past it.
     const { hook, pageId } = await setupRecurringPage();
 
     await act(async () => {
@@ -214,7 +206,7 @@ describe("completeRecurringToToday", () => {
   });
 
   it("does nothing when the head is not overdue", async () => {
-    vi.setSystemTime(new Date("2099-01-01T12:00:00")); // before the 2099-01-05 head
+    vi.setSystemTime(new Date("2099-01-01T12:00:00"));
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
@@ -227,11 +219,8 @@ describe("completeRecurringToToday", () => {
 });
 
 describe("completeRecurringPage serialization behind the mutation queue", () => {
-  // Drag-then-complete: scheduleOnce queues its DB writes (ending with the
-  // trailing denorm updatePage). Completion used to bypass the queue, so that
-  // trailing write could commit AFTER the completion's head advance and rewind
-  // pages.scheduledStart to the just-completed occurrence — the page showed
-  // both a done clone and a still-scheduled head at the same time.
+  // Completion outside the queue would let the drag's trailing denorm write commit AFTER the head
+  // advance and rewind pages.scheduledStart to the just-completed occurrence.
   it("waits for an in-flight scheduleOnce before advancing the head", async () => {
     const { hook, pageId } = await setupRecurringPage();
 
@@ -246,7 +235,6 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
       id,
       patch
     ) {
-      // Hold open only the drag's denorm write (the one carrying scheduledStart).
       if ("scheduledStart" in patch) await gate;
       callOrder.push("updatePage");
       return origUpdatePage.call(this, id, patch);
@@ -261,14 +249,10 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
       return origComplete.call(this, data);
     });
 
-    // Drag the head to a new time. Its queued DB writes are gated open; the
-    // act lets React flush the optimistic state (as a render would between a
-    // real drag and a click).
     let drag!: Promise<void>;
     act(() => {
       drag = hook.result.current.pages.scheduleOnce(pageId, "2099-01-06T10:00:00");
     });
-    // Complete while the drag's writes are still in flight.
     let complete!: Promise<unknown>;
     act(() => {
       complete = hook.result.current.pages.completeRecurringPage(pageId);
@@ -278,10 +262,8 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
       await Promise.all([drag, complete]);
     });
 
-    // The completion must run after the drag's full write sequence.
     expect(callOrder.indexOf("complete")).toBeGreaterThan(callOrder.indexOf("updatePage"));
 
-    // Head advanced from the DRAGGED date and stayed there — no rewind.
     const head = hook.result.current.pages.pages.find((p) => p.id === pageId);
     expect(head?.scheduledStart).toBe("2099-01-07T10:00:00");
   });
@@ -289,9 +271,8 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
 
 describe("rescheduleVirtualOccurrence", () => {
   it("an in-place override move adds no page and bumps overridesVersion", async () => {
-    // A provider-moved occurrence already has an override row, so the backend
-    // moves that row and returns no clone. Nothing enters the page list, and no
-    // dep the calendar's override fetch watches changes — hence the counter.
+    // A provider-moved occurrence already has an override row, so the backend moves it and returns
+    // no clone: nothing enters the page list, hence the counter.
     const { hook, ruleId } = await setupRecurringPage();
     const pageCount = hook.result.current.pages.pages.length;
     const version = hook.result.current.pages.overridesVersion;
@@ -342,16 +323,14 @@ describe("rescheduleVirtualOccurrence", () => {
 });
 
 describe("synced recurring completion routing", () => {
-  // Both kinds now go through the one unified command; a synced series must call it
-  // with the client-supplied occurrence (occurrenceDate/scheduledStart), never the
-  // bare native shape, so no entry point (incl. the gap dialog and bulk select, which
-  // both funnel here) advances the reconciler-pinned head off a server-derived date.
+  // A synced series must call the unified command with the client-supplied occurrence, never the
+  // bare native shape, so no entry point advances the reconciler-pinned head off a server date.
   it("routes an active synced series through the unified command with the client occurrence", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const storage = hook.result.current.workspace.storage as MockStorageAdapter;
     await act(async () => {
-      // Tokyo, not London: the runner is pinned to UTC, so a January London source
-      // converts to itself and an unconverted wall-clock would read as correct.
+      // Tokyo, not London: the runner is pinned to UTC, so a January London source converts to itself
+      // and an unconverted wall-clock would read as correct.
       storage.markPageSynced(pageId, { state: "active", timezone: "Asia/Tokyo" });
       await hook.result.current.workspace.reload();
     });
@@ -363,9 +342,8 @@ describe("synced recurring completion routing", () => {
     });
 
     expect(completeSpy).toHaveBeenCalledTimes(1);
-    // The occurrence keeps its source-zone day — that is what the completed set is
-    // keyed by — while the clone's wall-clock is the viewer's, so the done copy
-    // lands at the hour the event was rendered at.
+    // The occurrence keeps its source-zone day (the completed set's key) while the clone's
+    // wall-clock is the viewer's.
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
       occurrenceDate: "2099-01-05",
       pageId,
@@ -375,21 +353,17 @@ describe("synced recurring completion routing", () => {
 });
 
 describe("skipOccurrences", () => {
-  // A skip is per-occurrence state in the skip-set (page.skippedOccurrences), not
-  // a rule EXDATE. Undo removes only its own dates, leaving a skip written inside
-  // the undo-toast window intact.
+  // Undo removes only its own dates, leaving a skip written inside the undo-toast window intact.
   it("preserves a skip written between the skip and its undo", async () => {
     const { hook, pageId } = await setupRecurringPage();
 
     let undo!: () => void;
     await act(async () => {
       undo = await hook.result.current.pages.skipOccurrences(pageId, ["2099-01-12"]);
-      // Interleaved writer inside the undo window: a second skip.
       await hook.result.current.pages.skipOccurrences(pageId, ["2099-01-19"]);
     });
     await act(async () => {
       undo();
-      // The undo's adapter write is fire-and-forget; let it settle.
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -398,8 +372,8 @@ describe("skipOccurrences", () => {
   });
 
   it("a bulk dismissal covering the head's own date advances the head", async () => {
-    // Only the delete dialog's "all to today" arm can skip the head's date, and
-    // the local skip list alone would leave the head sitting on a dismissed day.
+    // Only the delete dialog's "all to today" arm can skip the head's date; the local skip list
+    // alone would leave the head on a dismissed day.
     const { hook, pageId } = await setupRecurringPage();
 
     await act(async () => {
@@ -430,12 +404,8 @@ describe("skipOccurrences", () => {
   });
 });
 
-// ─── completeSyncedOccurrence + viewerWallClock ────────────────────────────────
-// Completing a rendered occurrence of a synced series writes against that
-// occurrence's own date (never the head's) and stores the done clone at the
-// viewer-local wall clock for a zoned timed event. Which gesture reaches this
-// writer is the gap dialog's job (RecurringGapDialogContext); what it writes is
-// pinned here.
+// Completion writes against the occurrence's own date (never the head's) and stores the done
+// clone at the viewer-local wall clock for a zoned timed event.
 
 type Hook = Awaited<ReturnType<typeof setupRecurringPage>>["hook"];
 
@@ -605,8 +575,7 @@ describe("viewerWallClock", () => {
       });
     });
 
-    // Under TZ=UTC the viewer zone is UTC: 15:00 Los_Angeles → its absolute
-    // instant, read back as a UTC wall clock.
+    // Under TZ=UTC the viewer zone is UTC.
     const expectedStart = formatLocalISO(
       resolveSyncedInstant("2099-01-05T15:00:00", "America/Los_Angeles")
     );
@@ -622,9 +591,8 @@ describe("viewerWallClock", () => {
   });
 
   it("converts the head's wall-clock too, when a head tick drives it", async () => {
-    // A synced head names its own occurrence, so the conversion has to be applied
-    // on the completeRecurringPage path as well — otherwise a head tick would clone
-    // the source-zone wall-clock.
+    // A synced head names its own occurrence, so the conversion applies on the
+    // completeRecurringPage path too, or a head tick would clone the source-zone wall-clock.
     const { hook, pageId } = await setupSyncedRecurring(
       "2099-01-05T15:00:00",
       "America/Los_Angeles",
@@ -666,10 +634,8 @@ describe("viewerWallClock", () => {
   });
 });
 
-// ─── U6-F1: off-pattern head-drag snapping ──────────────────────────────────
-// 2099-01-05 = Mon, 06 = Tue, 07 = Wed. A head dragged onto Tue (a day M/W/F
-// can't yield) must land on the next rule day (Wed) and survive an on-load heal —
-// in 0.3.x the recompute silently reverted the drag.
+// 2099-01-05 = Mon, 06 = Tue, 07 = Wed. A head dragged onto Tue (a day M/W/F can't yield) must
+// land on the next rule day (Wed) and survive an on-load heal.
 describe("scheduleOnce head-drag snapping (U6-F1)", () => {
   async function setupWeeklyMWF() {
     const hook = renderHookWithProviders(() => ({
@@ -713,9 +679,8 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
     expect(head(hook, pageId).scheduledStart).toBe("2099-01-07T10:00:00");
   });
 
-  // Asserted on the rule row, not the head: the head is re-derived from the rule,
-  // and that derivation rebuilds the end from its time-of-day — so it repairs an
-  // end that landed before its start and hides the very thing under test.
+  // Asserted on the rule row: the head is re-derived and its end rebuilt from time-of-day, which
+  // would hide an end that landed before its start.
   it("carries the block's end the same distance, so it can't precede the start", async () => {
     const { hook, pageId } = await setupWeeklyMWF();
     await act(async () => {
@@ -731,9 +696,6 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
   });
 });
 
-// ─── The realign rewrites BYDAY through parse→build ──────────────────────────
-// Terms the round-trip carries must survive it; a rule it can't carry must not
-// be rewritten at all.
 describe("scheduleOnce head-drag realign fidelity", () => {
   async function setupWeeklyRule(rrule: string) {
     const hook = renderHookWithProviders(() => ({
@@ -767,14 +729,12 @@ describe("scheduleOnce head-drag realign fidelity", () => {
   });
 
   it("leaves a degrade-locked rule verbatim", async () => {
-    // BYHOUR is outside the engine's envelope, so the series renders nowhere
-    // either way — the point is that the drag doesn't quietly drop the term.
+    // BYHOUR is outside the engine's envelope, so the series renders nowhere either way.
     const rule = await setupWeeklyRule("FREQ=WEEKLY;BYDAY=MO;BYHOUR=9");
     expect(rule.rrule).toBe("FREQ=WEEKLY;BYDAY=MO;BYHOUR=9");
   });
 });
 
-// ─── U6-F2: un-done of a recurring head routes through uncomplete ────────────
 describe("uncompleteRecurringHead (U6-F2)", () => {
   async function setupFiniteSeries() {
     const hook = renderHookWithProviders(() => ({
@@ -817,7 +777,6 @@ describe("uncompleteRecurringHead (U6-F2)", () => {
     await act(async () => {
       await hook.result.current.workspace.reload();
     });
-    // The heal must NOT re-mark the head done — the completed-set entry is gone.
     expect(head(hook, pageId).status).toBe("not_started");
   });
 

@@ -38,19 +38,17 @@ import type {
   ViewWindow,
 } from "./types";
 
-// ─── Page input helpers ───────────────────────────────────────────────────────
-// sort_order excluded — backend assigns max+1 on create
-
-// Three kinds of field are excluded from both write shapes, for one reason:
-// none of them is the caller's to state.
+// Fields none of which is the caller's to state are excluded from both write shapes.
 //
 // scheduleLocked (an active page_sync row) and isRecurring (a
-// page_recurrence_rules row exists) are derived — a page becomes recurring by
+// page_recurrence_rules row exists) are derived: a page becomes recurring by
 // gaining a rule, not by being written as one.
 //
-// contentSchemaVersion is stamped by whichever build wrote the content (see
-// CONTENT_SCHEMA_VERSION), so accepting it from a caller would let a client
-// claim a document shape it did not actually produce.
+// contentSchemaVersion is stamped by whichever build wrote the content, so
+// accepting it from a caller would let a client claim a document shape it did
+// not produce.
+//
+// sortOrder is excluded from NewPage because the backend assigns max+1.
 export type NewPage = Omit<
   Page,
   | "id"
@@ -82,8 +80,8 @@ export type PageUpdate = Partial<
   /** The body `content` was typed over: a body changed elsewhere since is merged, not overwritten. */
   baseContent?: string | null;
 };
-// isExternalCalendar is system-managed (set by the calendar-sync enable path),
-// never via createFolder/updateFolder — so it's excluded from both input shapes.
+// isExternalCalendar is set by the calendar-sync enable path, never by
+// createFolder/updateFolder, so both input shapes exclude it.
 export type NewFolder = Omit<
   Folder,
   "id" | "createdAt" | "updatedAt" | "sortOrder" | "isExternalCalendar"
@@ -92,16 +90,12 @@ export type FolderUpdate = Partial<
   Omit<Folder, "id" | "createdAt" | "updatedAt" | "isExternalCalendar">
 >;
 
-// ─── Calendar-sync input helpers ──────────────────────────────────────────────
-
 export interface NewCaldavConnection {
   baseUrl: string; // autodiscovery starts here
   username: string;
   password: string; // app-specific password
   displayName: string;
 }
-
-// ─── Schedule input helpers ───────────────────────────────────────────────────
 
 export interface NewPageSchedule {
   pageId: string;
@@ -118,26 +112,19 @@ export interface PageScheduleUpdate {
   status?: PageSchedule["status"];
 }
 
-// ─── Reminder input helpers ──────────────────────────────────────────────────
-
 export interface NewPageReminder {
   pageId: string;
   minutesBefore: number;
 }
 
-// ─── Focus session input helpers ─────────────────────────────────────────────
-
-/** One finished focus session. The caller times it and writes on stop, so the
- *  wall-clock span is the user's, not the backend's — `durationS` is stored
- *  rather than derived so a suspend or a clock change can't rewrite history. */
+/** One finished focus session. `durationS` is stored rather than derived so a
+ *  suspend or a clock change can't rewrite history. */
 export interface NewFocusSession {
   pageId: string;
   startedAt: string;
   endedAt: string;
   durationS: number;
 }
-
-// ─── Recurrence rule input helpers ────────────────────────────────────────────
 
 export interface NewRecurrenceRule {
   pageId: string;
@@ -156,10 +143,6 @@ export interface RecurrenceRuleUpdate {
   timezone?: string;
 }
 
-// ─── StorageAdapter ───────────────────────────────────────────────────────────
-
-// ─── Workspace data lifecycle ─────────────────────────────────────────────────
-
 /** Formats the Export panel offers. A SQLite backup is `backupDatabase`, not
  *  an export: it round-trips, the others are one-way renderings. */
 export type WorkspaceExportFormat = "csv" | "ics" | "markdown";
@@ -170,7 +153,6 @@ export interface WorkspaceExportOptions {
   includeSynced: boolean;
 }
 
-/** One bar of the "what you did" chart on the Data settings panel. */
 export interface WorkspaceWeekActivity {
   week: string;
   created: number;
@@ -179,11 +161,8 @@ export interface WorkspaceWeekActivity {
   focus_minutes: number;
 }
 
-/**
- * Aggregate counts for the Data settings panel. snake_case throughout: this is
- * the backend's serde shape, and renaming the keys here would only move the
- * translation somewhere less visible.
- */
+/** snake_case throughout: this is the backend's serde shape, and renaming the keys here would
+ *  only move the translation somewhere less visible. */
 export interface WorkspaceUsageStats {
   total_pages: number;
   total_folders: number;
@@ -206,7 +185,6 @@ export interface WorkspaceUsageStats {
 }
 
 export interface StorageAdapter {
-  // Pages
   getPage(id: string): Promise<Page | null>;
   createPage(data: NewPage): Promise<Page>;
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
@@ -221,7 +199,7 @@ export interface StorageAdapter {
   /** The withheld description as Tiptap JSON shaped like a seed, addresses linked, or null once
    *  nothing is parked. */
   pendingDescriptionDocument(id: string): Promise<string | null>;
-  /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
+  /** Hides the page from all queries; recoverable with `restorePage`. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;
   /** The trash, newest deletion first: soft-deleted pages the retention sweep
@@ -236,25 +214,24 @@ export interface StorageAdapter {
    * count can be lower than what the trash listed.
    */
   purgeTrashedPages(olderThanDays: number): Promise<number>;
-  /** List pages without content — use getPage() for full content. */
+  /** Summaries without content; `getPage` has the full page. */
   listPages(filter?: PageFilter): Promise<PageSummary[]>;
-  /** Pages with any page_schedules row <= today, status != done, sorted by sortOrder. */
+  /** Open pages with any schedule row on or before today, sorted by sortOrder. */
   listPagesToday(): Promise<PageSummary[]>;
-  /** orderedIds = complete ordered list for that folderId (null = inbox/no folder) */
+  /** `orderedIds` is the complete order for `folderId` (null: inbox). */
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
   /**
-   * Bulk-set status (+ completedAt) for many pages in ONE transaction. Backs
-   * multi-select complete/uncomplete (Cmd+A → Space) — a single atomic write
-   * instead of N concurrent updatePage calls that race the WAL pool and drop
-   * some completions. Skips soft-deleted ids; returns the updated summaries.
-   * Recurring heads must not be passed here (use completeRecurringPage).
+   * Set status and completedAt for many pages in one transaction, skipping soft-deleted ids;
+   * returns the updated summaries. One atomic write, because N concurrent `updatePage` calls
+   * race the WAL pool and drop some completions. Recurring heads must not be passed here (use
+   * `completeRecurringPage`).
    */
   setPagesStatus(
     ids: string[],
     status: PageStatus,
     completedAt: string | null
   ): Promise<PageSummary[]>;
-  /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
+  /** Completed pages, a page of results at a time. */
   listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse>;
   /** The next window of a list after `after`, or from the top; its total on the first window. */
   listView(key: ViewKey, after: ViewCursor | null, limit: number): Promise<ViewWindow>;
@@ -300,102 +277,90 @@ export interface StorageAdapter {
   movePages(ids: string[], place: Placement): Promise<MoveOutcome>;
   /** The change counter, its epoch, and how many changes this process made. */
   changeState(): Promise<ChangeState>;
-  /** Unified FTS5 search — title matches ranked above content matches via bm25(). */
+  /** Title matches rank above content matches. */
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse>;
-  /** Returns tag names whose prefix matches query — for autocomplete. */
+  /** Tag names that start with `query`. */
   searchTags(query: string): Promise<string[]>;
 
-  // Folders
   getFolder(id: string): Promise<Folder | null>;
   createFolder(data: NewFolder): Promise<Folder>;
   updateFolder(id: string, updates: FolderUpdate): Promise<Folder>;
   deleteFolder(id: string): Promise<void>;
-  /** Soft-delete: sets deleted_at on folder and all its pages. Recoverable via restoreFolder. */
+  /** Soft-deletes the folder and all its pages; recoverable with `restoreFolder`. */
   softDeleteFolder(id: string): Promise<void>;
-  /** Restore a soft-deleted folder and all its pages by clearing deleted_at. */
+  /** Restores a soft-deleted folder and all its pages. */
   restoreFolder(id: string): Promise<void>;
   listFolders(): Promise<Folder[]>;
   reorderFolders(orderedIds: string[]): Promise<void>;
 
-  // Schedules
-  /** Insert a block. Also refreshes pages.scheduled_start/end denorm. */
+  /** Also refreshes the page's denormalised scheduled_start/end. */
   createPageSchedule(data: NewPageSchedule): Promise<PageSchedule>;
   updatePageSchedule(id: string, updates: PageScheduleUpdate): Promise<PageSchedule>;
-  /** Remove a block. Also refreshes pages.scheduled_start/end denorm. */
+  /** Also refreshes the page's denormalised scheduled_start/end. */
   deletePageSchedule(id: string): Promise<void>;
-  /** All explicit blocks for a page (no virtual rrule occurrences). */
+  /** Explicit blocks only, no virtual rrule occurrences. */
   listPageSchedules(pageId: string): Promise<PageSchedule[]>;
-  /** The given rules' override rows (`ruleId` set), regardless of moved position
-   *  — feeds the calendar's occurrence-exclusion set for cross-week moves. */
+  /** The given rules' override rows (`ruleId` set), wherever they were moved to; the calendar
+   *  needs them to exclude occurrences moved across weeks. */
   listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]>;
 
-  // Recurrence rules
-  /** A page has at most one rule. Errors if a rule already exists — call getRecurrenceRule first. */
+  /** A page has at most one rule; errors if one exists, so call `getRecurrenceRule` first. */
   createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule>;
   updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule>;
-  /** Add EXDATEs to a rule, merged DB-side (read-merge-write in one transaction),
-   * then recompute the head. Native user dismissals use skipOccurrence; this is for
-   * provider/manual EXDATE writes. Never updateRecurrenceRule with a full array
-   * computed client-side, which races other writers and erases their dates. */
+  /** Add EXDATEs to a rule, merged in the database in one transaction, then recompute the head.
+   * For provider and manual EXDATE writes; user dismissals use `skipOccurrence`. Never send
+   * `updateRecurrenceRule` a full array computed client-side: it races other writers and erases
+   * their dates. */
   addRuleExdates(id: string, dates: string[]): Promise<PageRecurrenceRule>;
-  /** Remove exactly one EXDATE from a rule's current set, then recompute. */
   removeRuleExdate(id: string, date: string): Promise<PageRecurrenceRule>;
   deleteRecurrenceRule(id: string): Promise<void>;
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null>;
-  /** All recurrence rules (for non-deleted pages). */
+  /** Rules of non-deleted pages. */
   listRecurrenceRules(): Promise<PageRecurrenceRule[]>;
-  /** Batched raw rrule expansion for the visible range via the Rust engine — see
-   * {@link RawRuleExpansion}. The completed/skip exclusion union is applied by the
-   * caller, not here. */
+  /** Raw rrule expansion for the range; see {@link RawRuleExpansion}. The caller applies the
+   * completed and skipped exclusions. */
   expandRecurrenceRange(
     rules: PageRecurrenceRule[],
     rangeStart: string,
     rangeEnd: string
   ): Promise<RawRuleExpansion[]>;
 
-  // Recurring completion
-  /** Complete one occurrence of a recurring page (native or synced): done clone +
-   * completed-set entry, then recompute the head onto the next open occurrence (or
-   * done). Native completes the head's own occurrence (server-derived); synced passes
-   * the client-rendered virtual (occurrenceDate/scheduledStart). */
+  /** Complete one occurrence of a recurring page, native or synced: a done clone and a
+   * completed-set entry, then the head moves to the next open occurrence (or done). Native
+   * completes the head's own occurrence; synced passes the client-rendered virtual
+   * (occurrenceDate/scheduledStart). */
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
-  /** Reverse a recurring completion (native or synced) by occurrence date (delete the
-   * clone via its back-link, drop the completed-set entry, recompute the head). */
+  /** Reverse a recurring completion by occurrence date: delete the clone, drop the
+   * completed-set entry, recompute the head. */
   uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void>;
-  /** Dismiss one recurring occurrence to the skip-set, recomputing the head (native or
-   * synced — the skip-set is user state, distinct from provider EXDATEs). */
+  /** Dismiss one occurrence to the skip-set and recompute the head. The skip-set is user state,
+   * distinct from provider EXDATEs. */
   skipOccurrence(data: SkipOccurrenceInput): Promise<void>;
-  /** Undo a skip: drop the skip-set entry and recompute. */
   undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void>;
-  /** Heal the display cache for every native recurring series on load; returns the
-   * summaries whose head materially changed so the caller patches only those. */
+  /** Heal the display cache of every native recurring series; returns the summaries whose head
+   * changed so the caller patches only those. */
   recomputeRecurringSchedules(): Promise<PageSummary[]>;
-  /** Materialize a virtual occurrence at a new time: clone head + schedule the
-   * clone + exdate the original date, in ONE transaction. */
+  /** Materialize a virtual occurrence at a new time: clone the head, schedule the clone and
+   * exdate the original date, in one transaction. */
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult>;
 
-  // Focus sessions
-  /** Record a finished focus session. Write-only: the Data panel reads the
-   *  totals through `getUsageStats`, which aggregates the table rather than
-   *  listing it. Refuses a non-positive duration or a page that does not exist —
-   *  a bad row here would only ever surface as a total nobody can explain. */
+  /** Record a finished focus session. Write-only: the Data panel reads totals through
+   *  `getUsageStats`. Refuses a non-positive duration or a page that does not exist, since a
+   *  bad row would only surface as a total nobody can explain. */
   createFocusSession(data: NewFocusSession): Promise<FocusSession>;
 
-  // Reminders
   createPageReminder(data: NewPageReminder): Promise<PageReminder>;
-  /** All reminders for a page, sorted by minutesBefore ascending. */
+  /** Sorted by minutesBefore ascending. */
   listPageReminders(pageId: string): Promise<PageReminder[]>;
   deletePageReminder(id: string): Promise<void>;
-  /** Delete all reminders for a page (reset to global default). */
+  /** Resets the page to the global default. */
   deletePageReminders(pageId: string): Promise<void>;
-  /** The notification log, newest first, capped at `limit` — what the scheduler
-   * fired, and what quiet hours silenced. Read-only: the log's only writer is
-   * the Rust scheduler, so there is no create/update counterpart here. */
+  /** The notification log, newest first: what the scheduler fired and what quiet hours
+   * silenced. Read-only, since the Rust scheduler is its only writer. */
   listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]>;
 
-  // Calendar sync
-  /** Validate a CalDAV connection (autodiscovery), then persist the account +
-   * its discovered (disabled) calendars; credentials go to the OS keychain. */
+  /** Validate a CalDAV connection (autodiscovery), then persist the account and its discovered
+   * (disabled) calendars; credentials go to the OS keychain. */
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars>;
   /** Replace a CalDAV account's stored password and clear `reconnectNeeded`. Takes
    * no server URL or username: both come from the keychain blob, so a reconnect
@@ -408,11 +373,11 @@ export interface StorageAdapter {
   /** Whether this build ships the Google OAuth client. False hides the option
    * rather than offering a connect that can only fail. */
   googleSyncAvailable(): Promise<boolean>;
-  /** Tear down the account's synced pages/folders and remove its keychain entry. */
+  /** Tears down the account's synced pages and folders and removes its keychain entry. */
   disconnectSyncAccount(accountId: string): Promise<void>;
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]>;
-  /** Enable (materialize folder + colour) or disable (teardown) a calendar.
-   * `syncCalendarId` is the sync_calendar ROW id, not the provider calendarId. */
+  /** Enable (create folder and colour) or disable (tear down) a calendar.
+   * `syncCalendarId` is the sync_calendar row id, not the provider calendarId. */
   toggleSyncCalendar(
     syncCalendarId: string,
     enabled: boolean,
@@ -424,17 +389,14 @@ export interface StorageAdapter {
   setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar>;
   /** Poll every enabled calendar on the account; returns per-calendar outcomes. */
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
-  /** Same poll, but from scratch: drops each calendar's cursor first so the
-   * provider re-sends everything. The repair path when a mirror looks out of
-   * date; re-delivered events that haven't changed are left untouched. */
+  /** Same poll from scratch: drops each calendar's cursor so the provider re-sends everything.
+   * The repair path when a mirror looks out of date; unchanged events are left untouched. */
   refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
-  /** Account-centric status tree for the Calendar Sync panel. */
   getSyncStatus(): Promise<AccountWithCalendars[]>;
 
-  // Workspace data lifecycle
-  // These are storage operations, not shell ones: they read, copy, render or
-  // destroy the workspace's own data. The file dialog that shows the user
-  // where a backup landed is the platform's job; producing it is this one's.
+  // The workspace data lifecycle methods below read, copy, render or destroy the workspace's
+  // own data, so they belong here and not on the platform. The file dialog that shows where a
+  // backup landed is the platform's job.
   /** Write a full database backup; resolves to where it landed. */
   backupDatabase(): Promise<string>;
   /** Snapshots sitting beside the workspace, newest first. Written by the
@@ -452,9 +414,8 @@ export interface StorageAdapter {
   exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
   /** Write one page as Markdown, for sharing on its own; resolves to its `.md` file. */
   exportPageMarkdown(id: string): Promise<string>;
-  /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the
-   *  activity chart, since the counting happens where the rows are and the
-   *  preference lives with the user. */
+  /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the activity chart,
+   *  because the counting happens where the rows are and the preference lives with the user. */
   getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats>;
   /** Dev tool: empty every table so a seed scenario can start from nothing.
    *  Leaves the database file and the workspace registry in place — unlike

@@ -6,9 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface OverflowPillProps {
   pill: OverflowPillData;
-  /** All pages on this day — used to look up titles + times for the listed events. */
   pagesById: Map<string, PageSummary>;
-  /** Same callback the calendar uses for any event open — opens the page editor. */
   onOpen: (pageId: string) => void;
 }
 

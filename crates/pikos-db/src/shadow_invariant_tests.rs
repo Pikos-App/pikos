@@ -1,16 +1,10 @@
-//! Shadow-invariant harness — ACTIVE (the permanent `cache == f(truth)` gate for
-//! the native head).
+//! The `cache == f(truth)` gate for the native head: after any sequence of completions and
+//! skips, the stored head (`pages.scheduled_start`) equals `oldest_open_for_page` derived from
+//! scratch over (base anchor, rrule, exclusion union). It gates completion, recompute and cache
+//! end to end across the corpus, so a union bug desyncs it.
 //!
-//! Pins the load-bearing fact behind the occurrence-sets swap: after any sequence
-//! of completions and skips, the stored native head (`pages.scheduled_start`)
-//! equals `oldest_open_for_page` derived from scratch over `(base anchor, rrule,
-//! exclusion union)`. Completion recomputes the head from truth, and this gates
-//! that path — completion → recompute → cache — end-to-end across the corpus, so a
-//! union bug desyncs it.
-//!
-//! What it does **not** reach: the harness drives rule-EXDATEs and native heads
-//! only. Skip-set entries and the synced floor take other triggers into the same
-//! cache, and neither is exercised here.
+//! It drives rule-EXDATEs and native heads only; skip-set entries and the synced floor reach the
+//! same cache through other triggers and aren't exercised here.
 
 use super::*;
 use crate::pool::{insert_test_page, test_pool, TestPage};
@@ -29,10 +23,9 @@ async fn head_status(pool: &sqlx::SqlitePool) -> String {
         .unwrap()
 }
 
-/// Drives a fresh series through `skip_indices` (future occurrences skipped
-/// up-front, like a user dismissing them) then `completions` head completions,
-/// asserting `head == oldest_open(base, rrule, completed ∪ skipped)` at every
-/// step. Completion derives its own advance via recompute — no client next date.
+/// Drives a fresh series through `skip_indices` (future occurrences skipped up front) then
+/// `completions` head completions, asserting `head == oldest_open(base, rrule, completed ∪
+/// skipped)` at every step.
 async fn assert_invariant(
     rrule: &str,
     base_start: &str,
@@ -64,8 +57,7 @@ async fn assert_invariant(
     .await
     .unwrap();
 
-    // Skip a few future occurrences up-front — the head must later advance
-    // *over* them, never onto one.
+    // The head must later advance over the skipped occurrences, never onto one.
     let mut exdates: Vec<String> = Vec::new();
     let upcoming = pikos_recurrence::expand_range(
         rrule,
@@ -90,8 +82,6 @@ async fn assert_invariant(
     }
 
     for step in 0..completions {
-        // The head was advanced imperatively by prior completions; check it
-        // against oldest_open recomputed from scratch.
         let Some(head_occ) = crate::oldest_open_for_page(&pool, "head").await.unwrap() else {
             assert_eq!(
                 head_status(&pool).await,
@@ -106,8 +96,6 @@ async fn assert_invariant(
             "invariant before step {step}: rrule={rrule}, exdates={exdates:?}"
         );
 
-        // Track the completed date for the error context; the backend records it
-        // in completed_set and recomputes the head.
         exdates.push(head_occ.original_date.clone());
         complete_recurring_page_impl(
             &pool,
@@ -133,8 +121,7 @@ async fn assert_invariant(
     }
 }
 
-/// Rule + a matching base anchor (an occurrence of the rule, mirroring the
-/// frontend's `snapAnchorToRule`).
+/// Rule plus a base anchor that is an occurrence of it, as the frontend's `snapAnchorToRule` does.
 const CORPUS: &[(&str, &str, Option<&str>)] = &[
     (
         "FREQ=DAILY",

@@ -1,21 +1,10 @@
-//! The search operators, graded against the TypeScript they replace.
+//! The search operators, graded against `nlp/searchQuery.ts`.
 //!
-//! `tests/corpus/search.json` is the output of `nlp/searchQuery.ts` over every
-//! query the TS suite exercises, plus a supplementary set, at each of the
-//! seven reference times — regenerate with
-//! `pnpm --filter @pikos/core gen:parity`.
+//! Seven reference times because `due:` reads a clock: `due:week` on a Sunday and a Wednesday
+//! name different windows, and `due:tomorrow` on 2026-12-31 crosses a year.
 //!
-//! Seven reference times for a grammar of five keywords looks excessive until
-//! you notice that `due:` is the half that reads a clock: `due:week` on a
-//! Sunday and on a Wednesday name different windows, and `due:tomorrow` on
-//! 2026-12-31 crosses a year. The other operators are constant across the
-//! references, and the cost of grading them seven times is nothing.
-//!
-//! What this catches that a hand-written test would not is the *negative*
-//! half. Every case records the text that was left behind, so a port that
-//! recognises one token too many — swallowing `ratio:1.5`, or accepting
-//! `priority:9` as a priority — fails on the text even when its filter looks
-//! right.
+//! Every case records the text left behind, so a port that recognises one token too many
+//! (`ratio:1.5`, `priority:9`) fails even when its filter looks right.
 
 use std::fs;
 use std::path::PathBuf;
@@ -85,8 +74,7 @@ fn every_query_parses_the_way_the_reference_does() {
 
     for case in &corpus.cases {
         let Some(expected) = &case.parsed.value else {
-            // The reference never throws on this input; if it starts to, the
-            // corpus says so and the assumption below is worth failing on.
+            // If the reference starts throwing on this input, the corpus says so.
             assert!(!case.parsed.ok, "a successful capture must carry a value");
             continue;
         };
@@ -176,7 +164,6 @@ fn every_query_parses_the_way_the_reference_does() {
     );
 }
 
-/// A corpus that shrank is a corpus that stopped testing something.
 #[test]
 fn the_corpus_covers_every_operator_and_both_kinds_of_near_miss() {
     let corpus = corpus();
@@ -192,9 +179,7 @@ fn the_corpus_covers_every_operator_and_both_kinds_of_near_miss() {
             "no case exercises {needle}"
         );
     }
-    // The two ways a token can look like an operator and not be one: a keyword
-    // the grammar does not have, and a value the grammar rejects. Both must
-    // survive as text, and a corpus with neither cannot tell.
+    // A keyword the grammar lacks and a value it rejects must both survive as text.
     assert!(queries.iter().any(|q| q.contains("ratio:")));
     assert!(queries.iter().any(|q| q.contains("priority:9")));
 }

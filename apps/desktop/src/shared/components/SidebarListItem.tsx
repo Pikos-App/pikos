@@ -3,33 +3,26 @@ import { forwardRef, type RefCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 
-/** Every sidebar entry wears this box, smart views and folders alike, so a
- *  selection reads the same wherever it lands. The border closes on all four
- *  sides and is merely transparent when the row is at rest, which reserves its
- *  width so selecting a row cannot nudge the label. */
+/** Every sidebar entry wears this box so a selection reads the same wherever it lands. The border
+ *  closes on all four sides and is merely transparent at rest, which reserves its width so
+ *  selecting a row cannot nudge the label. */
 export const SIDEBAR_ENTRY_BOX = "rounded-md border border-transparent px-2";
 
 interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "prefix"> {
   isActive: boolean;
   isRenaming: boolean;
-  /** Default value for the inline rename input. */
   label: string;
   onSelect: () => void;
   onRenameStart: () => void;
   onRenameCommit: (value: string) => void;
   onRenameCancel: () => void;
-  /** inputRef from useInlineRename — attached to the rename input. */
   inputRef: React.RefObject<HTMLInputElement | HTMLSpanElement | null>;
-  /** Extra flex layout classes, e.g. "items-center gap-2" or "flex-col gap-0.5". */
   className?: string;
   isDragOver?: boolean;
   dragRef?: RefCallback<HTMLDivElement>;
   dragStyle?: React.CSSProperties;
-  /** Merged dnd-kit attributes + listeners ({ ...attributes, ...listeners }). */
   dragProps?: Record<string, unknown>;
-  /** Always rendered before children/input (e.g. an icon that stays visible during rename). */
   prefix?: React.ReactNode;
-  /** Rendered when not renaming. */
   children: React.ReactNode;
 }
 

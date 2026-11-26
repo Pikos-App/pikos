@@ -2,10 +2,6 @@ import type { Folder } from "./generated/Folder";
 import type { PageSummary } from "./generated/PageSummary";
 import type { SearchResult } from "./generated/SearchResult";
 
-// ─── Workspace ───────────────────────────────────────────────────────────────
-// Multi-workspace: each workspace is a separate SQLite file. The list of known
-// workspaces lives in @tauri-apps/plugin-store (JSON config, not SQLite).
-
 export interface Workspace {
   id: string; // UUID
   name: string;
@@ -14,13 +10,8 @@ export interface Workspace {
   lastOpenedAt: string | null;
 }
 
-// ─── Folder ──────────────────────────────────────────────────────────────────
-
-// ─── Page ────────────────────────────────────────────────────────────────────
-
-// Wire types are generated from the Rust structs that produce them — see
-// scripts/gen-ts-bindings.sh. Re-exported here so consumers keep one import path
-// and the shapes cannot drift from the backend.
+// Wire types are generated from the Rust structs that produce them (scripts/gen-ts-bindings.sh)
+// and re-exported here so consumers keep one import path and the shapes cannot drift.
 export type { BackupEntry } from "./generated/BackupEntry";
 export type { BackupKind } from "./generated/BackupKind";
 export type { ChangeState } from "./generated/ChangeState";
@@ -50,63 +41,37 @@ export type { ViewWindow } from "./generated/ViewWindow";
 
 export type PageStatus = "not_started" | "done";
 
-// 0 = none  1 = urgent  2 = high  3 = medium  4 = low
+// 0 none, 1 urgent, 2 high, 3 medium, 4 low
 export type PagePriority = 0 | 1 | 2 | 3 | 4;
 
 /**
  * The Tiptap document schema this build writes and can safely read.
  *
- * Mirror of `pikos_db::CONTENT_SCHEMA_VERSION` — the Rust constant is the
- * authority, since the database outlives any one client. A test in
- * `crates/pikos-db` reads this file and fails if the two drift apart, so
- * bumping one side without the other is caught rather than discovered later
- * as corrupted documents.
- *
- * The `Page` interface that used to sit here is gone: page types are generated
- * from the Rust structs by ts-rs now, so `contentSchemaVersion` reaches
- * TypeScript from the same declaration the database uses rather than from a
- * hand-written copy of it.
+ * Mirrors `pikos_db::CONTENT_SCHEMA_VERSION`, which is the authority since the database
+ * outlives any one client. A test in `crates/pikos-db` reads this file and fails if the two
+ * drift apart.
  */
 export const CONTENT_SCHEMA_VERSION = 2;
 
-// ─── PageSchedule ─────────────────────────────────────────────────────────────
-// One explicit calendar block (from page_schedules table).
-// All-day vs timed is inferred from scheduledStart format:
-//   'YYYY-MM-DD'          → all-day (no timezone needed)
-//   'YYYY-MM-DDTHH:MM:SS' → timed   (timezone required)
-// ruleId + originalDate are only set when this row overrides a virtual
-// recurrence occurrence; both are null for plain one-off schedules.
-
-// ─── PageRecurrenceRule ────────────────────────────────────────────────────────
-// One row per recurring page. Calendar expands virtual occurrences via rrule.js.
-// Exceptions: rruleExdates (skip) or a page_schedules row with ruleId set (override).
-
-/** One raw rrule occurrence from a batched engine expansion — rule-level EXDATEs
- * applied, but NOT the completed/skip exclusion union (that stays client-side). */
+/** Rule-level EXDATEs are applied; the completed and skip exclusions are not (the client
+ * applies them). */
 export interface RawOccurrence {
   originalDate: string;
   scheduledStart: string;
   scheduledEnd: string | null;
 }
 
-/** A rule's raw occurrences for a range, keyed by rule id. A rule the engine
- * can't parse is absent from the batch — the caller falls back to the rrule.js
- * expansion for it. */
+/** A rule's raw occurrences for a range. A rule the engine can't parse is absent from the
+ * batch, and the caller falls back to the rrule.js expansion for it. */
 export interface RawRuleExpansion {
   ruleId: string;
   occurrences: RawOccurrence[];
 }
 
-// ─── PageReminder ────────────────────────────────────────────────────────────
-
-// ─── FolderNode ───────────────────────────────────────────────────────────────
-// In v1, children is always [] (flat list); the type supports nesting for later.
-
+// `children` is always [] today (a flat list); the type allows nesting.
 export interface FolderNode extends Folder {
   children: FolderNode[];
 }
-
-// ─── Tag ──────────────────────────────────────────────────────────────────────
 
 export interface Tag {
   name: string;
@@ -114,37 +79,21 @@ export interface Tag {
   pageIds: string[];
 }
 
-// ─── Search ──────────────────────────────────────────────────────────────────
-
 export interface SearchResponse {
   results: SearchResult[];
-  /** Number of completed pages matching the query (always counted, even when excluded from results). */
+  /** Completed pages matching the query, counted even when excluded from `results`. */
   completedCount: number;
   /** The query matched more pages than search scanned, so `completedCount` may be short. */
   completedCountCapped: boolean;
 }
 
-// ─── FocusSession ─────────────────────────────────────────────────────────────
-// The shape was hand-written and speculative while nothing wrote a row — every
-// field past `id` optional, for an in-progress session the table never held. The
-// writer only ever inserts finished sessions, so the generated type (re-exported
-// above) is the shape now, and the running one lives in the timer's own state.
-
-// ─── PageSummary ─────────────────────────────────────────────────────────
-// Lightweight projection for list views — excludes the body.
-// Used by listPages / listPagesToday to avoid pulling large Tiptap JSON
-// blobs over IPC for every page in a folder.
-
-// ─── Recurring completion ────────────────────────────────────────────────────
-
-/** Input for completing the head occurrence of a native recurring page. The
- * completed occurrence is the head's own date (derived server-side); the backend
- * records it in `completed_set` and recomputes the head. */
+/** Completes one occurrence of a recurring page; the backend records it in `completed_set` and
+ * recomputes the head. */
 export interface CompleteRecurringInput {
   pageId: string;
-  /** Synced series only: the client-rendered occurrence being completed, since the
-   * reconciler pins the head at the base. Native omits these — its occurrence is the
-   * head's own oldest-open date, derived server-side. */
+  /** Synced series only: the client-rendered occurrence being completed, since the reconciler
+   * pins the head at the base. Native omits these; its occurrence is the head's own
+   * oldest-open date, derived server-side. */
   occurrenceDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
@@ -161,24 +110,22 @@ export interface CompleteRecurringResult {
   head: PageSummary;
 }
 
-/** Reverse a recurring completion (native or synced) by occurrence date: deletes the
- * done clone via its back-link, drops the completed-set entry, and recomputes. */
+/** Reverses a recurring completion by occurrence date. */
 export interface UncompleteRecurringInput {
   pageId: string;
   occurrenceDate: string;
 }
 
-/** Dismiss (or, via undo, restore) one recurring occurrence to/from the skip-set
- * (native or synced — the skip-set is user state, distinct from provider EXDATEs). */
+/** Dismisses (or, undone, restores) one occurrence. The skip-set is user state, distinct from
+ * provider EXDATEs. */
 export interface SkipOccurrenceInput {
   pageId: string;
   occurrenceDate: string;
 }
 
-/** Input for materializing a virtual rrule occurrence at a new time. */
 export interface RescheduleVirtualInput {
   ruleId: string;
-  /** The rule-generated date being detached (YYYY-MM-DD) — added to exdates. */
+  /** The rule-generated date being detached (YYYY-MM-DD), added to exdates. */
   originalDate: string;
   scheduledStart: string;
   scheduledEnd?: string;
@@ -186,15 +133,12 @@ export interface RescheduleVirtualInput {
 }
 
 export interface RescheduleVirtualResult {
-  /** The independent clone page, scheduled at the new time (denorm set). Null
-   *  when the occurrence already had an override row and that row moved in
-   *  place — no clone, no exdate change. */
+  /** Null when the occurrence already had an override row and that row moved in place: no
+   *  clone, no exdate change. */
   clone: PageSummary | null;
-  /** Post-merge exdates for the rule. */
+  /** The rule's exdates after the merge. */
   ruleExdates: string[];
 }
-
-// ─── Filters ─────────────────────────────────────────────────────────────────
 
 export interface PageFilter {
   folderId?: string | null;
@@ -204,27 +148,22 @@ export interface PageFilter {
   query?: string;
   scheduledAfter?: string; // ISO 8601
   scheduledBefore?: string; // ISO 8601
-  /** When true, only pages with a non-null scheduledStart match — used to
-   * pull scheduled completed pages into the calendar view without also
-   * loading every unscheduled completed page ever created. */
+  /** Only pages with a scheduledStart match, so the calendar can pull scheduled completed pages
+   * without loading every unscheduled one. */
   hasSchedule?: boolean;
 }
 
-// ─── Completed pages (lazy-loaded) ──────────────────────────────────────────
-
 export interface CompletedPagesFilter {
   folderId?: string | null; // null = inbox, undefined = all folders
-  completedSince?: string; // ISO 8601 date — e.g. today's date for Today view
+  completedSince?: string; // ISO 8601 date
   limit: number;
   offset: number;
 }
 
 export interface CompletedPagesResponse {
   pages: PageSummary[];
-  total: number; // total matching count (ignoring limit/offset)
+  total: number; // matching count, ignoring limit/offset
 }
-
-// ─── Calendar sync ─────────────────────────────────────────────────────────────
 
 export interface SyncAccount {
   id: string;
@@ -232,8 +171,8 @@ export interface SyncAccount {
   displayName: string; // email (Google) / server·username (CalDAV)
   authKind: string; // 'basic' | 'oauth'
   createdAt: string;
-  // A poll hit a rejected credential. The scheduler skips the account while this is
-  // set, so the panel has to surface it — nothing else will.
+  // A poll hit a rejected credential. The scheduler skips the account while this is set, so the
+  // panel has to surface it.
   reconnectNeeded: boolean;
 }
 
@@ -246,18 +185,16 @@ export interface SyncCalendar {
   enabled: boolean; // per-calendar opt-in
   lastSyncedAt: string | null;
   folderId: string | null; // the calendar's system folder, set while enabled
-  // Pages left behind when the calendar was unsynced. Re-enabling re-links them and
-  // takes back their title, time, and folder, so the toggle confirms first — and
-  // stays instant at zero, which is every calendar that was never on.
+  // Pages left behind when the calendar was unsynced. Re-enabling re-links them and takes back
+  // their title, time and folder, so the toggle confirms first, and only when this is above zero.
   detachedPages: number;
 }
 
-/** An account plus its calendars — the account-centric panel read (getSyncStatus). */
+/** An account plus its calendars, as `getSyncStatus` returns it. */
 export interface AccountWithCalendars extends SyncAccount {
   calendars: SyncCalendar[];
 }
 
-/** One calendar's resync outcome (resyncSyncAccount). */
 export interface CalendarSyncResult {
   calendarId: string;
   status: "synced" | "offline" | "reconnectNeeded";

@@ -1,5 +1,5 @@
 //! The Calendar API transport seam. Sync logic talks to this trait so it can be
-//! exercised against recorded fixtures (Layer 1) with no network and no OAuth
+//! exercised against recorded fixtures with no network and no OAuth
 //! client; production uses [`ReqwestGoogle`].
 //!
 //! Only GET is modelled — sync is read-only end to end, so there is no verb here

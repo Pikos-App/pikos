@@ -1,9 +1,3 @@
-// Shared fixture for the calendar suites. `allDayLayout.test.ts` and
-// `calendarLayout.test.ts` both build `PageSummary` rows by the hundred and
-// only ever vary a handful of scheduling fields, so the full-shape default
-// lives here once instead of being copied into each file when the aggregate
-// suite was split apart.
-
 import type { PageSummary } from "../types";
 
 export function makePage(overrides: Partial<PageSummary> = {}): PageSummary {

@@ -18,9 +18,7 @@ export function ImportSection({
   state,
 }: ImportSectionProps) {
   async function handleMarkdownImport() {
-    // Test-mode escape hatch: skip the native dialog and use a path injected
-    // by the e2e harness. The matching readVaultFiles hook returns prebuilt
-    // VaultFile content for that path.
+    // Test-mode escape hatch: use a path injected by the e2e harness; readVaultFiles returns prebuilt content.
     const testPath =
       import.meta.env["VITE_TEST_MODE"] === "true"
         ? (window as unknown as { __PIKOS_TEST_VAULT__?: { path: string } }).__PIKOS_TEST_VAULT__

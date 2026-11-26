@@ -1,6 +1,3 @@
-// Applies .dark class to <html>, listens for OS preference changes in system mode,
-// manages theme-transitioning class for smooth switches, and updates <meta name="theme-color">.
-
 import { tokenHex } from "@pikos/ui";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
@@ -16,15 +13,12 @@ export type ResolvedTheme = "dark" | "light";
 
 export interface ThemeContextValue {
   mode: ThemeMode;
-  /** Actual applied theme after resolving "system" to dark or light. */
   resolvedTheme: ResolvedTheme;
-  /** Change the theme mode. Persists to the preference store and applies immediately. */
   setTheme: (mode: ThemeMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-/** Surface colors used for <meta name="theme-color">, read from the same tokens app.css is generated from. */
 const META_COLORS: Record<ResolvedTheme, string> = {
   dark: tokenHex("surface-primary", "dark"),
   light: tokenHex("surface-primary", "light"),
@@ -88,7 +82,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", handler);
   }, [mode]);
 
-  // Sync meta tag on mount (index.html inline script handles .dark class but not meta).
   useEffect(() => {
     applyToDOM(resolvedTheme);
     log.debug(`Applied theme on mount: mode=${mode} resolved=${resolvedTheme}`);

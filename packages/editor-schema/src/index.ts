@@ -1,33 +1,13 @@
-// @pikos/editor-schema — the Tiptap document schema, and nothing else.
+// The Tiptap document schema, and nothing else. A document written on one device must
+// parse identically on the other, so this holds exactly what changes `getJSON()`.
 //
-// Every Pikos editor builds on this: the desktop app, the iOS webview, and the
-// import round-trip tests. The point is narrow and load-bearing — a document
-// written on one device must parse identically on the other, and that is
-// decided entirely by which nodes and marks exist and what attributes they
-// carry.
+// The test for a new extension is whether omitting it on one platform would change
+// `getJSON()`, not whether it is a node or a mark. TabIndent adds `indent` to paragraph and
+// heading, and Markdown adds `tight` to lists; omitting either drops those attributes on
+// the next save from the other platform. Check the snapshot test rather than the name.
 //
-// The dividing question for anything new is the only one that matters:
-// *would omitting this on one platform change what `getJSON()` produces?*
-//
-// That question does NOT map onto "is it a node or a mark". Two extensions here
-// look purely behavioural and are not:
-//
-//   TabIndent  adds an `indent` attribute to paragraph and heading
-//   Markdown   adds a `tight` attribute to bullet and ordered lists
-//
-// Both were initially classified as behaviour and left out, and a schema
-// snapshot caught it. Had they shipped that way, every document edited on the
-// phone would have silently lost its indentation and list tightness on the next
-// desktop save — a data-loss bug that no amount of reading the extension names
-// would have predicted.
-//
-// What genuinely does not belong here: placeholders, slash menus, smart-quote
-// input rules, node views, drop handling. Those differ legitimately between a
-// keyboard-driven desktop app and a thumb-driven phone, and none of them can
-// change a stored document.
-//
-// When adding an extension, check the snapshot test rather than reasoning about
-// the name.
+// Placeholders, slash menus, input rules, node views and drop handling stay out: they
+// differ by platform and cannot change a stored document.
 
 import type { Extensions } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
@@ -51,21 +31,11 @@ export { Markdown } from "tiptap-markdown";
 export type { ResolveAssetUrl };
 
 export interface DocumentSchemaOptions {
-  /** Platform-specific asset path → loadable URL. See `ResolveAssetUrl`. */
   resolveAssetUrl: ResolveAssetUrl;
   /**
-   * Replaces the default image node.
-   *
-   * Every platform needs its own image *rendering* — desktop draws through
-   * Tauri's asset protocol and handles file drops, a phone will do neither —
-   * while the image *attributes* must stay identical. Pass
-   * `createPikosImageNode(resolveAssetUrl).extend({ ... })` so the platform
-   * half is layered on rather than replacing the schema half.
-   *
-   * This is an option rather than something callers splice into the returned
-   * array because splicing means reassembling the list, and reassembling is
-   * how two platforms end up with schemas that differ in a way nobody notices
-   * until a document round-trips wrong.
+   * Replaces the default image node. Pass
+   * `createPikosImageNode(resolveAssetUrl).extend({ ... })` so the platform's rendering is
+   * layered on and the image attributes stay identical.
    */
   image?: Extensions[number];
   /**
@@ -74,13 +44,10 @@ export interface DocumentSchemaOptions {
    */
   codeBlock?: Extensions[number];
   /**
-   * Replaces the default Markdown extension.
-   *
-   * Parsing options legitimately differ by context — the Obsidian importer
-   * needs `breaks: true` because Obsidian renders a single newline as a line
-   * break, which CommonMark does not — while the *schema* contribution (a
-   * `tight` attribute on lists) must stay identical. Pass a reconfigured
-   * `Markdown` so the attribute survives and only the parsing changes.
+   * Replaces the default Markdown extension. Pass a reconfigured `Markdown` so the `tight`
+   * list attribute survives and only parsing changes. The Obsidian importer needs
+   * `breaks: true` because Obsidian renders a single newline as a line break and CommonMark
+   * does not.
    */
   markdown?: Extensions[number];
   /** Replaces the default page link node, as `image` does: pass `PageLink.extend({ ... })`. */
@@ -90,22 +57,17 @@ export interface DocumentSchemaOptions {
 }
 
 /**
- * The complete set of schema-bearing extensions, in a fixed order.
- *
- * Order matters for extensions that override one another's attributes, so it is
- * fixed here rather than left to each caller to reassemble — reassembling is
- * precisely how two platforms end up with schemas that differ in a way nobody
- * notices until a document round-trips wrong.
- *
- * Callers append their own behavioural extensions after these.
+ * The schema-bearing extensions in a fixed order, which matters where extensions override
+ * one another's attributes. Callers append their own behavioural extensions after these and
+ * swap a piece through the options rather than reassembling the list, which is how two
+ * platforms end up with schemas that differ unnoticed.
  */
 export function createDocumentExtensions(options: DocumentSchemaOptions): Extensions {
   return [
     StarterKit.configure({
       codeBlock: options.codeBlock ? false : { HTMLAttributes: { class: "editor-code-block" } },
       heading: { levels: [1, 2, 3] },
-      // StarterKit ships its own link mark; disabled so the configured one
-      // below is the only definition in the schema rather than one of two.
+      // The configured Link below must be the only link definition in the schema.
       link: false,
     }),
     ...(options.codeBlock ? [options.codeBlock] : []),
@@ -121,10 +83,7 @@ export function createDocumentExtensions(options: DocumentSchemaOptions): Extens
     options.image ?? createPikosImageNode(options.resolveAssetUrl),
     PikosTable,
     options.pageLink ?? PageLink,
-    // Schema-bearing despite appearances — see the note at the top of the file.
-    // Markdown contributes `tight` to lists; TabIndent contributes `indent` to
-    // paragraph and heading. Omitting either on one platform loses those
-    // attributes on the next save from the other.
+    // Markdown and TabIndent are schema-bearing; see the header.
     options.markdown ??
       Markdown.configure({
         transformCopiedText: false,

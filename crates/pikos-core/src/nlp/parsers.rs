@@ -38,10 +38,6 @@ fn matches(pattern: &str, text: &str) -> bool {
         .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// Casual references — the fixed points "today", "noon" and friends resolve to.
-// ---------------------------------------------------------------------------
-
 fn reference_now(reference: Reference) -> ParsingComponents {
     let mut components = ParsingComponents::new(reference);
     components.assign_similar_date(reference.instant);
@@ -199,10 +195,6 @@ fn days_to_weekday(reference: JsDate, weekday: i64, modifier: Option<&str>) -> i
     }
 }
 
-// ---------------------------------------------------------------------------
-// ISO 8601: 2026-03-08, optionally with a time.
-// ---------------------------------------------------------------------------
-
 pub struct IsoFormatParser;
 
 impl Parser for IsoFormatParser {
@@ -264,10 +256,6 @@ impl Parser for IsoFormatParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Slashed numbers: 3/16, 7/12/2020.
-// ---------------------------------------------------------------------------
 
 pub struct SlashDateFormatParser;
 
@@ -344,10 +332,6 @@ impl Parser for SlashDateFormatParser {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Year-first numbers: 2026/03/08. Distinct from ISO in accepting a month name.
-// ---------------------------------------------------------------------------
-
 pub struct YearMonthDayParser;
 
 impl Parser for YearMonthDayParser {
@@ -395,10 +379,6 @@ impl Parser for YearMonthDayParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Month name first: "april 18", "march 20 - 25, 2026".
-// ---------------------------------------------------------------------------
 
 pub struct MonthNameMiddleEndianParser;
 
@@ -459,10 +439,6 @@ impl Parser for MonthNameMiddleEndianParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Day first: "18 april", "18 - 25 april 2026".
-// ---------------------------------------------------------------------------
 
 pub struct MonthNameLittleEndianParser;
 
@@ -527,10 +503,6 @@ impl Parser for MonthNameLittleEndianParser {
     }
 }
 
-// ---------------------------------------------------------------------------
-// A bare month name: "march", "in december 2026".
-// ---------------------------------------------------------------------------
-
 pub struct MonthNameParser;
 
 impl Parser for MonthNameParser {
@@ -587,10 +559,6 @@ impl Parser for MonthNameParser {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Month and year only: "06/2026".
-// ---------------------------------------------------------------------------
-
 pub struct SlashMonthFormatParser;
 
 impl Parser for SlashMonthFormatParser {
@@ -615,10 +583,6 @@ impl Parser for SlashMonthFormatParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Weekdays: "monday", "on friday", "next wednesday", "this weekend".
-// ---------------------------------------------------------------------------
 
 pub struct WeekdayParser;
 
@@ -701,10 +665,6 @@ impl Parser for WeekdayParser {
     }
 }
 
-// ---------------------------------------------------------------------------
-// "today", "tomorrow", "tonight".
-// ---------------------------------------------------------------------------
-
 pub struct CasualDateParser;
 
 impl Parser for CasualDateParser {
@@ -751,10 +711,6 @@ impl Parser for CasualDateParser {
     }
 }
 
-// ---------------------------------------------------------------------------
-// "morning", "noon", "midnight".
-// ---------------------------------------------------------------------------
-
 pub struct CasualTimeParser;
 
 impl Parser for CasualTimeParser {
@@ -788,10 +744,6 @@ impl Parser for CasualTimeParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// "next week", "this month", "last year".
-// ---------------------------------------------------------------------------
 
 pub struct RelativeDateFormatParser;
 
@@ -877,10 +829,6 @@ impl Parser for RelativeDateFormatParser {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Durations: "in 3 days", "2 weeks ago", "3 days later", "next 2 weeks".
-// ---------------------------------------------------------------------------
 
 /// `in 3 days`. With `forwardDate` set the prefix becomes optional, so a bare
 /// "3 days" is read as a future offset — chrono-node's own behaviour, and the
@@ -996,10 +944,6 @@ fn relative_or_none(reference: Reference, text: Option<&str>, backward: bool) ->
         None => Extracted::None,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Clock times, including ranges: "3pm", "14:00", "at 9am", "3pm to 5pm".
-// ---------------------------------------------------------------------------
 
 pub struct TimeExpressionParser;
 

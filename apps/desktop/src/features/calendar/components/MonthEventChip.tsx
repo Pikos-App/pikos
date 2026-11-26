@@ -16,24 +16,17 @@ import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
 interface MonthEventChipProps {
   event: MonthCellEvent;
-  /** Folder/calendar colour, resolved by the grid from the same folder map the
-   * week grid's all-day section uses. */
   folderColor: string | undefined;
   onDoubleClick: (pageId: string) => void;
-  /** The event's first day is drawn in an earlier row of this grid, whose bar carries the
-   * checkbox, so this row's bar goes without one. */
+  /** Its first day is drawn in an earlier row, whose bar carries the checkbox. */
   startShownAbove: boolean;
-  /** Set when the chip is a bar reaching past its own cell. */
   width?: string | undefined;
 }
 
 /**
- * One event inside a month cell. Deliberately gesture-light compared to
- * `PageBlock`/`AllDayBar`: month view has no drag, resize or drag-to-create
- * (a month cell is far too coarse to express a time), so the chip only carries
- * the click → popover and double-click → open-page behaviours. Everything
- * downstream of the click — the popover pair, the recurring/synced action
- * routing — is the same code path the week grid takes.
+ * One event inside a month cell. Gesture-light next to `PageBlock`/`AllDayBar`: a month cell is too
+ * coarse for drag or resize, so the chip only carries click to popover and double-click to open.
+ * The popover pair and recurring/synced routing are the week grid's code path.
  */
 export function MonthEventChip({
   event,

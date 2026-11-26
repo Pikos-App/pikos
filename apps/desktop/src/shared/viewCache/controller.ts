@@ -8,9 +8,6 @@ import type {
   ViewCounts,
   ViewKey,
 } from "@pikos/core";
-// The view cache as the app drives it: loads a list's first window when it's shown and more as it
-// scrolls, refreshes the shown list after every write, evicts what wasn't shown recently, and in
-// test lanes checks every cached list it shows against a fresh query.
 import { getLocalTimezone } from "@pikos/core";
 import { evict, PageStore, summaryBytes, toPageSummary, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
@@ -26,7 +23,6 @@ const log = createLogger("viewCache");
  *  is a condition on the write rather than a field: a write of only these refetches its row. */
 const ROW_ONLY_FIELDS = new Set(["baseContent", "content", "lastOpenedAt"]);
 
-/** The page an `updatePage` of only row-only fields wrote, else null. */
 function rowOnlyWrite(method: string, args: unknown[]): string | null {
   if (method !== "updatePage") return null;
   const [id, patch] = args;
@@ -38,23 +34,17 @@ const QUIET_POLL_MS = 10;
 /** Long enough to outlast a burst of writes, short enough that a stream of them still shows. */
 const QUIET_WAIT_MS = 500;
 
-/** A calendar range as `[start, end)` instants. */
 export type Range = readonly [start: string, end: string];
 
 export class ViewCacheController {
   readonly store = new PageStore();
   readonly cache: ViewCache;
-  /** The app's optimistic edits, carried into `store` as pending writes. */
   readonly mirror: WriteMirror;
-  /** The lists on screen: one, or a view's sections. */
   private shown: ViewKey[] = [];
   private loadingMore = new Set<string>();
   private fetchingRows = new Set<string>();
-  /** Views whose first window is being fetched; what's held may be about to be replaced. */
   private loadingFirst = new Set<string>();
-  /** The rows each view has on screen, kept so loading carries on after every fetch lands. */
   private wanted = new Map<string, { first: number; last: number }>();
-  /** A fetch of a view's remaining ids in flight, for a second caller to join. */
   private idsLoading = new Map<string, Promise<string[]>>();
   /** Rows a refresh held but didn't refetch. They show as held to every reader, and a list
    *  refetches each when it next comes on screen there. */
@@ -64,21 +54,15 @@ export class ViewCacheController {
   private bumpQueued = false;
   private leftListeners = new Set<(ids: ReadonlySet<string>) => void>();
   private changedListeners = new Set<() => void>();
-  /** Writes started and not yet settled. */
   private writesInFlight = 0;
-  /** Bumped by every write's start and settle, so a check can tell whether one overlapped it. */
   private writeEpoch = 0;
   private refreshing: Promise<void> | null = null;
-  /** The sidebar's badges, for the day they were counted on; null until first asked for. */
   counts: { today: string; counts: ViewCounts } | null = null;
-  /** The day the sidebar shows badges for, once it has asked; a write recounts it. */
   private countsDay: string | null = null;
   private countsAsked = 0;
-  /** The change counter as the last refresh found it; null until first read. */
   private counter: { epoch: string; seq: number } | null = null;
   private tagList: TagCount[] | null = null;
   private tagListeners = new Set<(tags: TagCount[]) => void>();
-  /** List windows fetched, for the test that typing doesn't refetch lists. */
   listFetches = 0;
   /**
    * Full pages opened or prefetched, least recently used first, each with the change counter when
@@ -87,26 +71,18 @@ export class ViewCacheController {
    */
   private bodies = new Map<string, { page: Page; seen: number; bytes: number }>();
   private bodyBytes = 0;
-  /** The change counter, as the last read found it. */
   private seen = 0;
-  /** Body reads in flight, so a click joins the prefetch its hover started. */
   private bodyReads = new Map<string, Promise<Page | null>>();
-  /** The one prefetch allowed to wait for the one in flight; a later hover replaces it. */
   private waitingPrefetch: string | null = null;
-  /** Body reads that found a current copy, and that had to ask the database: the hit rate. */
   bodyHits = 0;
   bodyMisses = 0;
-  /** Calendar ranges visited while the calendar is mounted, by `start|end`: their pages' ids. */
   private ranges = new Map<string, { ids: string[]; stale: boolean }>();
   private shownRange: { start: string; end: string } | null = null;
-  /** Loads asked of each range, so only the latest is kept. */
   private rangeAsked = new Map<string, number>();
   /** Each range's pages as last read, kept while nothing in them changes: the calendar
    *  re-renders for its own week, not for every write or neighbour prefetch. */
   private rangeRead = new Map<string, PageSummary[]>();
-  /** Every recurring series' head, which a range needs for occurrences of heads outside it. */
   private heads: string[] | null = null;
-  /** The newest change among the heads held, for reading only those changed since. */
   private headsSeq = 0;
   private headsRead: PageSummary[] | null = null;
   /** Bumped by every write, so a range read that a write overlapped is kept but marked stale. */
@@ -155,13 +131,10 @@ export class ViewCacheController {
     else void this.checkCounter();
   }
 
-  /** Another process may have written: refresh if the change counter says so. */
   doorbell(): void {
     void this.checkCounter(true);
   }
 
-  /** Refresh what's on screen unless the counter is where the last refresh left it. A new epoch
-   *  (a restore, an import, a reset) drops everything held. */
   private async checkCounter(rung = false): Promise<void> {
     let state: ChangeState;
     try {
@@ -203,8 +176,7 @@ export class ViewCacheController {
     this.bodyBytes = 0;
   }
 
-  /** The full page: from memory with no database call while nothing has changed since it was
-   *  read, else only a newer copy is fetched. A read already in flight is joined. */
+  /** The full page, from memory with no database call while nothing has changed since it was read. */
   body(id: string): Promise<Page | null> {
     const answer = this.openBody(id);
     if (this.config.shadow) {
@@ -229,7 +201,6 @@ export class ViewCacheController {
     return this.readBody(id);
   }
 
-  /** Read `id`'s body ahead of a click: one read at a time, the latest hover waiting its turn. */
   prefetch(id: string): void {
     const held = this.bodies.get(id);
     if ((held && held.seen === this.seen) || this.bodyReads.has(id)) return;
@@ -240,7 +211,6 @@ export class ViewCacheController {
     void this.readBody(id);
   }
 
-  /** A hover left before its prefetch started. */
   cancelPrefetch(id: string): void {
     if (this.waitingPrefetch === id) this.waitingPrefetch = null;
   }
@@ -262,7 +232,6 @@ export class ViewCacheController {
         this.holdBody(page, seen);
         return page;
       } catch {
-        // Errors aren't kept: the next open reads again.
         return null;
       } finally {
         this.bodyReads.delete(id);
@@ -302,16 +271,12 @@ export class ViewCacheController {
     return null;
   }
 
-  /** The app wrote `patch` to `id`: the held body takes it, so it stays current. */
   private patchBody(id: string, patch: object): void {
     const held = this.bodies.get(id);
     if (held) this.holdBody({ ...held.page, ...patch }, held.seen);
   }
 
-  /**
-   * The calendar shows `start` to `end`: load it unless a current copy is held, then the
-   * `neighbours` a step away, so the step shows its week without waiting on a fetch.
-   */
+  /** Load `start` to `end` unless a current copy is held, then the `neighbours`, so a step shows its week at once. */
   showRange(start: string, end: string, neighbours: readonly Range[] = []): void {
     this.shownRange = { end, start };
     const held = this.ranges.get(`${start}|${end}`);
@@ -331,13 +296,10 @@ export class ViewCacheController {
     void this.loadRange(start, end);
   }
 
-  /** Whether `start` to `end` has loaded at least once, with the series heads its repeats come
-   *  from. */
   rangeLoaded(start: string, end: string): boolean {
     return this.ranges.has(`${start}|${end}`) && this.heads !== null;
   }
 
-  /** Every series head held, unsaved edits included; the same array until one changes. */
   headPages(): PageSummary[] {
     const pages = (this.heads ?? []).flatMap((id) => this.store.get(id) ?? []);
     const last = this.headsRead;
@@ -346,7 +308,6 @@ export class ViewCacheController {
     return pages;
   }
 
-  /** Whether every series head has been read once. */
   headsLoaded(): boolean {
     return this.heads !== null;
   }
@@ -362,8 +323,8 @@ export class ViewCacheController {
   }
 
   /** The calendar unmounted or was hidden: every range but the one on screen goes, and the series
-   *  heads stay. Dropping that one too made going back to the calendar draw its grid empty and its
-   *  blocks a fetch later; kept, it shows at once and reloads behind it if a write marked it stale. */
+   *  heads stay. Dropping the shown one too would draw the grid empty and its blocks a fetch later;
+   *  kept, it shows at once and reloads behind it if a write marked it stale. */
   hideRanges(): void {
     const shown = this.shownRange && `${this.shownRange.start}|${this.shownRange.end}`;
     for (const name of [...this.ranges.keys()]) {
@@ -377,7 +338,6 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** A range's pages, and every series head not among them; the same array until one changes. */
   rangePages(start: string, end: string): PageSummary[] {
     const name = `${start}|${end}`;
     const ids = this.ranges.get(name)?.ids ?? [];
@@ -421,7 +381,6 @@ export class ViewCacheController {
     return this.loadHeads();
   }
 
-  /** After the first load, only heads changed since the newest one held are read. */
   private async loadHeads(): Promise<void> {
     try {
       const since = this.heads === null ? null : this.headsSeq;
@@ -438,10 +397,7 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /**
-   * The lists on screen are `keys`. Loads each one's first window unless a current one is held,
-   * in which case the shadow check runs; then evicts down to the budget, keeping `pinnedPages`.
-   */
+  /** Load each listed view's first window unless a current one is held, then evict to the budget keeping `pinnedPages`. */
   show(keys: ViewKey[], pinnedPages: Iterable<string>): void {
     this.shown = keys;
     for (const key of keys) {
@@ -461,18 +417,15 @@ export class ViewCacheController {
       views: new Set(keys.map(viewName)),
     });
     // A load tells readers itself when it lands; showing what's held changes nothing they read,
-    // and telling them anyway drew a returning list twice.
+    // and telling them anyway would draw a returning list twice.
     if (evicted.views.length > 0) this.bump();
   }
 
-  /** Rows `first` through `last` of `key` are on screen: load them, and keep loading as fetches
-   *  land until they're all held. */
   want(key: ViewKey, first: number, last: number): void {
     this.wanted.set(viewName(key), { first, last });
     this.fill(key);
   }
 
-  /** The sidebar shows badges for `today`: count them unless they're held for that day. */
   watchCounts(today: string): void {
     this.countsDay = today;
     if (this.counts?.today !== today) void this.loadCounts();
@@ -492,7 +445,6 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** Load the next window of `key`, unless one is loading or the list is complete. */
   async loadMore(key: ViewKey): Promise<void> {
     const name = viewName(key);
     const entry = this.cache.entry(key);
@@ -515,7 +467,6 @@ export class ViewCacheController {
     if (loaded) this.fill(key);
   }
 
-  /** Every id in `key`, in order, loading the rest of them without their rows. */
   async allIds(key: ViewKey): Promise<string[]> {
     const entry = this.cache.entry(key);
     if (!entry) return [];
@@ -575,12 +526,10 @@ export class ViewCacheController {
     this.bump();
   }
 
-  /** Every page held, as shown: what the page list is while the view cache is its only copy. */
   heldPages(): PageSummary[] {
     return this.store.ids().flatMap((id) => this.store.get(id) ?? []);
   }
 
-  /** Tags on open pages, most used first; empty until first asked for, then kept current. */
   tags(): TagCount[] {
     if (this.tagList === null) {
       this.tagList = [];
@@ -598,22 +547,19 @@ export class ViewCacheController {
     }
   }
 
-  /** Called with the tags when they load or change, apart from the store's other changes so a
-   *  reader of tags alone doesn't re-render with every edit. Loads them on first use. */
+  /** Called with the tags when they load or change, apart from the store's other changes. */
   onTags(listener: (tags: TagCount[]) => void): () => void {
     this.tagListeners.add(listener);
     listener(this.tags());
     return () => this.tagListeners.delete(listener);
   }
 
-  /** Called when the doorbell finds the workspace changed: another process, a sync, or anything
-   *  that happened while the window was away. The app's own writes don't call it. */
+  /** Called when the doorbell finds the workspace changed. The app's own writes don't call it. */
   onOutsideChange(listener: () => void): () => void {
     this.changedListeners.add(listener);
     return () => this.changedListeners.delete(listener);
   }
 
-  /** Called with the ids a refresh took out of a list on screen. */
   onLeft(listener: (ids: ReadonlySet<string>) => void): () => void {
     this.leftListeners.add(listener);
     return () => this.leftListeners.delete(listener);
@@ -664,8 +610,6 @@ export class ViewCacheController {
     for (const listener of this.leftListeners) listener(left);
   }
 
-  /** Start whatever loading the rows on screen still need. Far past what's loaded, fetching every
-   *  id beats paging there a window at a time. */
   private fill(key: ViewKey): void {
     const name = viewName(key);
     const want = this.wanted.get(name);
@@ -687,7 +631,6 @@ export class ViewCacheController {
     return last - loaded > this.config.windowSize * 2;
   }
 
-  /** Refetch what's on screen. One at a time; writes that land during one run it again after. */
   private async refresh(): Promise<void> {
     if (this.refreshing) {
       this.refreshAgain = true;
@@ -717,7 +660,7 @@ export class ViewCacheController {
   /**
    * Refetch one shown list: its first window, then what's on screen past it. Within paging reach of
    * the window, the windows `fill` loads bring their rows; far down, the ids give the order and
-   * the rows on screen come by id. Refetching every row loaded since read the whole list on each
+   * the rows on screen come by id. Refetching every row loaded would read the whole list on each
    * write once the screen had jumped down it, because a jump loads every id.
    */
   private async refreshView(key: ViewKey): Promise<{ before: string[]; keep: string[] }> {
@@ -751,7 +694,6 @@ export class ViewCacheController {
     return !this.store.has(id) || this.stale.has(id);
   }
 
-  /** Rows read from the database, current whichever stale mark they carried. */
   private confirm(rows: PageSummary[]): void {
     for (const row of rows) this.stale.delete(row.id);
     this.store.confirm(rows);
@@ -799,8 +741,8 @@ export class ViewCacheController {
     log.error(message);
   }
 
-  /** Readers hear of changes at most once a microtask: one write lands as several loads, and each
-   *  told separately re-rendered every reader that many times. */
+  /** Readers hear of changes at most once a microtask: one write lands as several loads, and told
+   *  separately each would re-render every reader that many times. */
   private bump(): void {
     if (this.bumpQueued) return;
     this.bumpQueued = true;

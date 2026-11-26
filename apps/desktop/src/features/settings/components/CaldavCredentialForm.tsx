@@ -1,7 +1,5 @@
-// The credential body shared by the add-account and reconnect dialogs: the
-// same fields, the same app-password help link, the same error line, and the
-// same busy-aware action row. Each dialog keeps its own title, description, and
-// submit callback.
+// The credential body shared by the add-account and reconnect dialogs: same fields, help link, error
+// line and busy-aware action row. Each dialog keeps its own title, description and submit callback.
 
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +19,6 @@ interface CaldavCredentialFormProps {
   error: string | null;
   busy: boolean;
   submitLabel: string;
-  /** Replaces submitLabel while `busy`. */
   busyLabel: string;
   onSubmit: () => void;
   secondaryLabel: string;

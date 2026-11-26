@@ -1,6 +1,3 @@
-// Width → layout decisions. Pure so both the desktop `useLayoutMode` hook and
-// any future mobile shell can read the same thresholds.
-
 export type LayoutMode = "xl" | "lg" | "md" | "sm";
 
 /** Width thresholds in px. A mode applies when width ≥ its threshold. */

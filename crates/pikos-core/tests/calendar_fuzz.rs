@@ -1,20 +1,11 @@
 //! The calendar layout port against randomly composed scenarios.
 //!
-//! `calendar_parity.rs` grades it against 32 hand-written arrangements and
-//! finds nothing. So did the 317-input parser corpus, until a fuzzer found six
-//! divergence classes behind it.
+//! Layout is combinatorial: a column depends on which other events overlap and in what order
+//! they were considered, and an all-day row on span lengths, creation-time ties and gaps, so
+//! hand-written arrangements in `calendar_parity.rs` miss what random ones find.
 //!
-//! Layout is the weakest case for hand-written scenarios, because the behaviour
-//! is combinatorial: which column an event lands in depends on which others it
-//! overlaps and in what order they were considered, and which row an all-day
-//! bar takes depends on span lengths, ties broken by creation time, and gaps a
-//! later event may or may not fit into. Nobody can write the arrangement that
-//! breaks it — the difficulty is precisely that it is not obvious which one
-//! does.
-//!
-//! Scenarios come from `apps/desktop/scripts/fuzz-calendar-parity.ts`, which
-//! records each one at all three rendering densities with that density's
-//! shortest block in minutes.
+//! Scenarios come from `apps/desktop/scripts/fuzz-calendar-parity.ts`, recorded at all three
+//! rendering densities.
 //!
 //! Search wider than the committed corpus by hand:
 //!
@@ -113,8 +104,7 @@ fn load() -> Corpus {
     serde_json::from_str(&raw).unwrap_or_else(|error| panic!("parse {}: {error}", path.display()))
 }
 
-/// A scenario's inputs, for a failure message — without them the diverging
-/// columns are unreproducible.
+/// A scenario's inputs, for a failure message; without them a divergence is unreproducible.
 fn describe(pages: &[CorpusPage]) -> String {
     pages
         .iter()
@@ -137,8 +127,7 @@ fn randomly_composed_timed_days_match_the_reference() {
     let total = corpus.timed.len();
     assert!(total >= 100, "corpus looks truncated: {total} scenarios");
 
-    // A corpus of non-overlapping events would pass while testing nothing —
-    // every column would be zero. Cascades are the behaviour under test.
+    // Non-overlapping events would test nothing: every column would be zero.
     let with_cascade = corpus
         .timed
         .iter()
@@ -154,8 +143,7 @@ fn randomly_composed_timed_days_match_the_reference() {
         let pages: Vec<LayoutPage> = scenario.pages.iter().map(LayoutPage::from).collect();
         let actual = assign_timed_columns(&pages, &scenario.day, scenario.shortest_block_minutes);
 
-        // Keyed, not positional: the reference emits in DOM paint order, which
-        // is pixel-derived and deliberately not reproduced.
+        // Keyed, not positional: the reference emits in pixel-derived DOM paint order.
         let actual_map: BTreeMap<&str, (usize, bool, bool)> = actual
             .iter()
             .map(|block| {
@@ -201,8 +189,7 @@ fn randomly_composed_all_day_weeks_match_the_reference() {
     let total = corpus.all_day.len();
     assert!(total >= 100, "corpus looks truncated: {total} scenarios");
 
-    // Single-row weeks exercise none of the packing, so a corpus of them would
-    // pass while testing nothing.
+    // Single-row weeks exercise none of the packing.
     let stacked = corpus
         .all_day
         .iter()

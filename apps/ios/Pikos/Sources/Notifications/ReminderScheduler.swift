@@ -7,39 +7,28 @@ import PikosSupport
 
 /// Reminders, as local notifications planned ahead.
 ///
-/// The desktop wakes a task every clock minute and asks the workspace what is
-/// due. iOS suspends a process within seconds of backgrounding, so that loop
-/// would fire almost nothing; the model here is the inverse. The workspace is
-/// asked what will fire over the next two weeks, every one of those becomes a
-/// `UNNotificationRequest` the OS delivers on its own, and the whole plan is
-/// thrown away and rebuilt whenever anything could have changed it — a write
-/// to the workspace, the app going to the background, a background refresh
-/// landing days later. Rebuilding is cheap (one query, a few dozen requests)
-/// and is what makes a page moved, completed or deleted stop ringing without
-/// any bookkeeping about which requests to touch.
+/// iOS suspends a process within seconds of backgrounding, so the desktop's wake-every-minute
+/// loop would fire almost nothing. Instead the workspace is asked what fires over the next two
+/// weeks, each becomes a `UNNotificationRequest` the OS delivers on its own, and the whole plan
+/// is rebuilt whenever anything could have changed it. Rebuilding is cheap and is what makes a
+/// page moved, completed or deleted stop ringing with no bookkeeping.
 ///
-/// Two things are deliberately not here. Quiet hours: the desktop suppresses
-/// a reminder inside them, and on the phone the system's Focus modes are the
-/// same control, so a second copy would only ever silence something Focus had
-/// let through. And the fired log the desktop keeps: the OS delivers without
-/// waking the app, so the moment of firing is never seen here — and nothing
-/// needs it, since the plan is rebuilt from the workspace, not from history.
+/// Not here, deliberately: quiet hours, because Focus is the same control on the phone, and the
+/// desktop's fired log, because the OS delivers without waking the app and the plan is rebuilt
+/// from the workspace, not from history.
 @MainActor
 @Observable
 public final class ReminderScheduler {
-    /// Whether the OS will show anything at all. Read on every sync and after
-    /// the request, so the settings row can say which of the two switches —
-    /// ours or the system's — is the one that is off.
+    /// Whether the OS will show anything at all, so the settings row can say which switch, ours or
+    /// the system's, is off.
     public private(set) var authorization: UNAuthorizationStatus = .notDetermined
 
-    /// What the last plan produced, for the settings screen to show. A count
-    /// of zero with reminders enabled and permission granted is not a fault:
-    /// there is simply nothing in the next two weeks that asked.
+    /// What the last plan produced. A count of zero with reminders enabled and permission granted
+    /// is not a fault: nothing in the next two weeks asked.
     public private(set) var plannedCount = 0
 
-    /// The soonest reminder in the plan, for the settings row — "Dentist,
-    /// today at 2:30 PM" says more about whether reminders work than a count
-    /// does, and is the one a person can check against their own day.
+    /// The soonest reminder in the plan: a named time can be checked against the day, a count
+    /// cannot.
     public private(set) var nextPlanned: UpcomingReminder?
 
     /// The task identifier the OS wakes the app under. Declared once here and
@@ -47,10 +36,8 @@ public final class ReminderScheduler {
     /// refresh ever lands.
     public nonisolated static let refreshTaskIdentifier = "app.pikos.reminders.refresh"
     nonisolated static let categoryIdentifier = "app.pikos.reminder"
-    /// `nonisolated`, all three: these are names on the wire, not state. The
-    /// notification delegate reads them on whatever queue the system calls it
-    /// on, and inheriting the class's main-actor isolation would make a
-    /// constant string something to await.
+    /// `nonisolated`, all three: names on the wire that the notification delegate reads on whatever
+    /// queue the system calls it on.
     nonisolated static let completeActionIdentifier = "app.pikos.reminder.complete"
 
     private let workspace: @MainActor () -> Workspace?
@@ -73,10 +60,8 @@ public final class ReminderScheduler {
             .authorizationStatus
     }
 
-    /// Ask the system. Asked lazily — the first time there is a reminder to
-    /// plan, or from the settings row — rather than at launch, because a
-    /// permission prompt on a first launch is one nobody has a reason to say
-    /// yes to yet.
+    /// Ask the system. Asked lazily, not at launch: a permission prompt on first launch is one
+    /// nobody has a reason to accept yet.
     public func requestAuthorization() async {
         do {
             _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [
@@ -89,10 +74,8 @@ public final class ReminderScheduler {
         await refreshAuthorization()
     }
 
-    /// The actions a delivered reminder offers without opening the app.
-    ///
-    /// Registered once, at launch, before any notification could be delivered
-    /// — a category the OS has not seen renders the notification with no
+    /// The actions a delivered reminder offers without opening the app. Registered once at launch,
+    /// before any notification could be delivered: an unseen category renders no buttons and no error.
     /// buttons and no error.
     public static func registerCategories() {
         let complete = UNNotificationAction(
@@ -109,12 +92,9 @@ public final class ReminderScheduler {
 
     // MARK: - Planning
 
-    /// Replace every pending reminder with the workspace's current answer.
-    ///
-    /// Idempotent, and safe to call more often than needed — every caller
-    /// does, on purpose. The one thing it must not do is run twice at once and
-    /// interleave removals with additions; `syncing` folds a call that arrives
-    /// mid-sync into one more pass afterwards.
+    /// Replace every pending reminder with the workspace's current answer. Idempotent, and safe to
+    /// call more often than needed. It must not run twice at once and interleave removals with
+    /// additions, so `syncing` folds a mid-sync call into one more pass.
     public func sync() async {
         #if DEBUG
             // A permission prompt over a design screenshot is noise, not a test of reminders.
@@ -192,22 +172,11 @@ public final class ReminderScheduler {
         nextPlanned = planned.first
     }
 
-    /// Take down the reminders that already rang for pages that are now done
-    /// or gone.
-    ///
-    /// The other half of the convention every device-per-device reminder app
-    /// follows: each device rings on its own, and finishing the thing anywhere
-    /// clears it everywhere. Pending requests are rebuilt from the workspace
-    /// on every plan, so they follow a completion for free; the ones that
-    /// have already been delivered sit in Notification Center until something
-    /// removes them, and a banner for a task ticked an hour ago is the kind
-    /// of stale that makes the rest untrusted. Runs on every plan, which is
-    /// after every write — including, once workspaces sync, a write made on
-    /// the desktop.
-    ///
-    /// A page that cannot be read is treated as gone: `NotFound` is the
-    /// routine case (deleted), and any other failure leaves the notification
-    /// where it is — better a stale banner than one removed on a guess.
+    /// Take down delivered reminders for pages that are now done or gone. Pending requests are
+    /// rebuilt on every plan and so follow a completion, but delivered ones sit in Notification
+    /// Center, and a banner for a task ticked an hour ago makes the rest untrusted. Only `NotFound`
+    /// counts as gone; any other failure leaves the notification, since a stale banner beats one
+    /// removed on a guess.
     private func tidyDelivered(in center: UNUserNotificationCenter, workspace: Workspace) async {
         let delivered = await center.deliveredNotifications()
         guard !delivered.isEmpty else { return }
@@ -228,7 +197,7 @@ public final class ReminderScheduler {
             } catch let error as WorkspaceError {
                 if case .NotFound = error { finished.insert(id) }
             } catch {
-                // Left alone — see above.
+                // Left alone, as the doc says.
             }
         }
         guard !finished.isEmpty else { return }
@@ -271,30 +240,20 @@ public final class ReminderScheduler {
 
     // MARK: - Background refresh
 
-    /// Ask the OS to wake the app in a while so the plan is extended.
-    ///
-    /// Called on the way to the background. Twelve hours is a request, not a
-    /// promise — the system decides from the app's usage — which is why the
-    /// horizon is measured in days and this in hours: a refresh that never
+    /// Ask the OS to wake the app in a while so the plan is extended. Twelve hours is a request,
+    /// not a promise, which is why the horizon is days and this is hours: a refresh that never
     /// comes costs nothing until the horizon is used up.
     public static func scheduleBackgroundRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 12 * 60 * 60)
-        // A pending request of the same identifier is replaced; a submission
-        // refused (Simulator, or the identifier missing from Info.plist) is
-        // not worth surfacing to the user — the app still re-plans every time
-        // it is opened.
+        // Replaces a pending request of the same identifier. A refused submission (Simulator, or the
+        // identifier missing from Info.plist) isn't worth surfacing: the app re-plans whenever opened.
         try? BGTaskScheduler.shared.submit(request)
     }
 }
 
-/// Handles a reminder being tapped or acted on.
-///
-/// The system calls back on whichever queue it likes; every path hops to the
-/// main actor before touching the app. Taps go through the router as a
-/// `pikos://page/<id>` link, so a notification opens a page by exactly the
-/// path a widget or a Shortcut does. "Complete" writes without opening
-/// anything, which is the reason it is offered.
+/// Handles a reminder being tapped or acted on, hopping to the main actor before touching the
+/// app. "Complete" writes without opening anything, which is why it is offered.
 final class ReminderNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     private let onOpen: @MainActor (String) -> Void
     private let onComplete: @MainActor (String) async -> Void
@@ -307,9 +266,8 @@ final class ReminderNotificationDelegate: NSObject, UNUserNotificationCenterDele
         self.onComplete = onComplete
     }
 
-    /// A reminder that lands while the app is open is still shown. The user
-    /// may be in another page, and a reminder they asked for and did not see
-    /// is the one failure a reminder cannot have.
+    /// A reminder that lands while the app is open is still shown: the one failure a reminder
+    /// cannot have is the user not seeing it.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification

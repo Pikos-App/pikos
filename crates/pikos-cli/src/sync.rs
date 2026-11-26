@@ -27,7 +27,6 @@ async fn open_read_only(path: &str) -> Result<SqlitePool, CliError> {
         .map_err(|e| classify(e.into()))
 }
 
-/// What a copy's own sync says about itself, which explains a difference still in flight.
 #[derive(Serialize)]
 struct CopyState {
     path: String,

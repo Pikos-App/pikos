@@ -24,14 +24,11 @@ fn expand(
     expand_range(rrule, start, end, rs, re, exdates).unwrap()
 }
 
-/// Start-only view of `next_occurrence_after`, matching the TS return shape.
 fn next(rrule: &str, start: &str, after: &str, exdates: &[String]) -> Option<String> {
     pikos_recurrence::next_occurrence_after(rrule, start, after, exdates)
         .unwrap()
         .map(|(s, _end)| s)
 }
-
-// ─── expand_range ───────────────────────────────────────────────────────────
 
 #[test]
 fn expands_weekly_recurrence_for_a_one_week_range() {
@@ -176,8 +173,6 @@ fn no_occurrences_before_dtstart() {
     let dates: Vec<&str> = occ.iter().map(|o| o.original_date.as_str()).collect();
     assert_eq!(dates, ["2026-03-02"]);
 }
-
-// ─── next_occurrence_after ──────────────────────────────────────────────────
 
 #[test]
 fn next_monday_after_given_date() {
@@ -371,8 +366,6 @@ fn completing_same_day_returns_next_week() {
     );
 }
 
-// ─── snap_anchor_to_rule ────────────────────────────────────────────────────
-
 #[test]
 fn snaps_sunday_anchor_to_mwf_rule() {
     assert_eq!(
@@ -425,11 +418,8 @@ fn snap_unchanged_for_unparseable_rule() {
     );
 }
 
-// ─── align_weekly_rule_to_anchor ────────────────────────────────────────────
-
 #[test]
 fn realigns_single_byday_to_moved_weekday() {
-    // 2099-01-07 is a Wednesday.
     assert_eq!(
         align_weekly_rule_to_anchor("FREQ=WEEKLY;BYDAY=MO", "2099-01-07"),
         "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE"
@@ -476,8 +466,6 @@ fn align_leaves_multi_day_nonweekly_and_no_byday() {
     );
 }
 
-// ─── compute_next_end ───────────────────────────────────────────────────────
-
 #[test]
 fn preserves_end_time_on_new_date() {
     assert_eq!(
@@ -498,8 +486,6 @@ fn next_end_wraps_overnight() {
         Some("2026-03-10T01:00:00")
     );
 }
-
-// ─── parse_rrule / build_rrule ──────────────────────────────────────────────
 
 #[test]
 fn parses_freq_and_defaults_interval() {
@@ -541,8 +527,7 @@ fn parse_rejects_invalid_and_freqless() {
 
 #[test]
 fn parse_strips_byday_ordinals_but_keeps_rich_terms() {
-    // Unlike the historical rrule.js path, bymonthday/wkst are surfaced (the
-    // Ends controls preserve them); BYDAY ordinals still reduce to the weekday.
+    // bymonthday/wkst are surfaced; BYDAY ordinals still reduce to the weekday.
     let opts = parse_rrule("FREQ=MONTHLY;BYDAY=2MO;BYMONTHDAY=15;WKST=SU").unwrap();
     assert_eq!(opts.byweekday, Some(vec![0]));
     assert_eq!(opts.bymonthday, Some(vec![15]));
@@ -600,8 +585,6 @@ fn roundtrips_parse_build() {
         );
     }
 }
-
-// ─── missed_occurrences_between / list_occurrences ──────────────────────────
 
 #[test]
 fn missed_occurrences_strictly_between() {

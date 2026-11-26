@@ -1,16 +1,9 @@
-//! Portable Pikos domain logic, shared by the desktop app, the CLI, and
-//! (via UniFFI) the iOS app.
+//! Portable Pikos domain logic, shared by the desktop app, the CLI, and (via UniFFI) the iOS app.
 //!
-//! This crate is the Rust destination for logic that currently lives in
-//! `packages/core` (TypeScript). Everything here is graded against a golden
-//! corpus generated from the TypeScript reference — see
-//! `packages/core/scripts/gen-parity-corpus.ts` and `tests/parity.rs`. The TS
-//! path is the reference implementation until a module reaches parity; only
-//! then may it be deleted.
-//!
-//! Deliberately dependency-free of `pikos-db`: this is pure logic with no I/O,
-//! which is what makes it testable against a fixture corpus and cheap to bind
-//! from Swift.
+//! Everything here is graded against a golden corpus generated from the TypeScript reference
+//! in `packages/core`, which stays the reference until a module reaches parity and only then
+//! may be deleted. No `pikos-db` dependency: pure logic with no I/O is what makes this
+//! testable against a fixture corpus and cheap to bind from Swift.
 
 pub mod body_merge;
 pub mod body_section;

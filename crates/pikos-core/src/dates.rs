@@ -1,29 +1,17 @@
-//! Local wall-clock date helpers — port of `packages/core/src/utils/dates.ts`.
+//! Local wall-clock date helpers.
 //!
-//! Every date in Pikos is stored as a *local wall-clock* string with no zone
-//! suffix and no UTC conversion:
+//! Every date is a local wall-clock string with no zone suffix and no UTC conversion:
+//! `YYYY-MM-DD` (all-day) or `YYYY-MM-DDTHH:MM:SS` (timed). These helpers produce
+//! byte-identical strings to the TypeScript side, which the parity corpus checks.
 //!
-//!   - `YYYY-MM-DD`            — all-day event
-//!   - `YYYY-MM-DDTHH:MM:SS`   — timed event
-//!
-//! The TS original exists because `new Date('YYYY-MM-DD')` parses as UTC
-//! midnight in JavaScript, shifting the displayed date a day earlier for
-//! anyone west of UTC. Rust has no such trap, but the *storage contract* is
-//! what matters here: these helpers exist so the Rust side produces byte-identical
-//! strings to the TypeScript side, which is what the parity corpus checks.
-//!
-//! `NaiveDateTime` is deliberate. A wall-clock time in this system is not an
-//! instant — "09:00 every day" stays 09:00 across a DST transition. Introducing
-//! a timezone-aware type here would quietly re-introduce the instant semantics
-//! the storage format is designed to avoid.
+//! `NaiveDateTime` is deliberate: a wall-clock time is not an instant, so "09:00 every day"
+//! stays 09:00 across DST. A zone-aware type would reintroduce instant semantics.
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
-/// True for date-only strings (`YYYY-MM-DD`) representing all-day events.
+/// True for date-only strings (`YYYY-MM-DD`), which are all-day events.
 ///
-/// Load-bearing invariant: keep every all-day check routed through here so a
-/// future format change has one site to update, exactly as the TS original
-/// documents.
+/// Route every all-day check through here so a format change has one site to update.
 pub fn is_all_day_iso(iso: &str) -> bool {
     !iso.contains('T')
 }
@@ -35,8 +23,7 @@ pub fn is_timed_iso(iso: &str) -> bool {
 
 /// Parse a Pikos ISO string as a naive local datetime.
 ///
-/// Date-only strings resolve to local midnight, matching the TS helper's use of
-/// `date-fns.parse` rather than `new Date`.
+/// Date-only strings resolve to local midnight.
 pub fn parse_local_iso(iso: &str) -> Option<NaiveDateTime> {
     if is_all_day_iso(iso) {
         NaiveDate::parse_from_str(iso, "%Y-%m-%d")
@@ -47,9 +34,7 @@ pub fn parse_local_iso(iso: &str) -> Option<NaiveDateTime> {
     }
 }
 
-/// Format as a local wall-clock ISO datetime (`YYYY-MM-DDTHH:MM:SS`).
-///
-/// No `Z`, no offset — matches the DB storage format for timed events.
+/// Format as a local wall-clock ISO datetime (`YYYY-MM-DDTHH:MM:SS`), with no `Z` or offset.
 pub fn format_local_iso(dt: &NaiveDateTime) -> String {
     dt.format("%Y-%m-%dT%H:%M:%S").to_string()
 }
@@ -61,9 +46,8 @@ pub fn format_date_only(dt: &NaiveDateTime) -> String {
 
 /// Midnight on the day after `dt`.
 ///
-/// Written against the date's own successor rather than by adding 86,400
-/// seconds: these are wall clocks, and a day is not always that long. Saturates
-/// at the representable maximum rather than wrapping.
+/// Uses the date's own successor rather than adding 86,400 seconds, since a wall-clock day is
+/// not always that long. Saturates at the representable maximum.
 pub fn next_day(dt: NaiveDateTime) -> NaiveDateTime {
     match dt.date().succ_opt().and_then(|d| d.and_hms_opt(0, 0, 0)) {
         Some(next) => next,
@@ -99,8 +83,6 @@ mod tests {
     #[test]
     fn rejects_malformed_input() {
         assert!(parse_local_iso("not-a-date").is_none());
-        // February 30th does not exist; the TS side yields an Invalid Date here,
-        // which the caller checks for. Rust makes that an Option instead.
         assert!(parse_local_iso("2026-02-30").is_none());
     }
 }

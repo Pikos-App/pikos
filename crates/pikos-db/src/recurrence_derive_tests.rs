@@ -1,6 +1,5 @@
-//! Tests for the two backend derivations: the display recompute (cache ==
-//! f(truth), terminal flips) and the reminder-window enumeration (per occurrence
-//! × lead, native + synced, cache-free).
+//! The display recompute (cache equals f(truth), terminal flips) and the reminder-window
+//! enumeration (per occurrence and lead, native and synced, cache-free).
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 
@@ -97,8 +96,6 @@ async fn recompute(pool: &sqlx::SqlitePool, page_id: &str) {
     tx.commit().await.unwrap();
 }
 
-// ─── cache == f(truth): the permanent CI invariant ───────────────────────────
-
 #[tokio::test]
 async fn recompute_materialises_oldest_open_after_each_completion() {
     let pool = test_pool().await;
@@ -123,12 +120,9 @@ async fn recompute_materialises_oldest_open_after_each_completion() {
             "cache must equal f(truth) after completing {date}"
         );
     }
-    // Three days excluded from a daily series → head on the 24th.
     let (cached, _) = head(&pool, "head").await;
     assert_eq!(cached.as_deref(), Some("2026-05-24T09:00:00"));
 }
-
-// ─── terminal flips, both directions ─────────────────────────────────────────
 
 #[tokio::test]
 async fn recompute_flips_head_done_on_exhaustion_and_back_on_reyield() {
@@ -148,7 +142,6 @@ async fn recompute_flips_head_done_on_exhaustion_and_back_on_reyield() {
     let (_, status) = head(&pool, "head").await;
     assert_eq!(status, "done", "exhausted finite series → head done");
 
-    // The 22nd re-opens (uncomplete / provider re-extension) → head un-marks done.
     sqlx::query(
         "DELETE FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-05-22'",
     )
@@ -306,8 +299,6 @@ async fn an_exhausted_detached_series_still_terminates() {
     assert_eq!(head(&pool, "head").await.1, "done");
 }
 
-// ─── reminder derivation ─────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn two_occurrences_in_window_both_fire() {
     let pool = test_pool().await;
@@ -352,7 +343,6 @@ async fn dedup_across_ticks_fires_each_occurrence_once() {
         .unwrap();
     assert_eq!(first.len(), 1);
 
-    // The scheduler records the fire; the same tick again must not re-fire it.
     sqlx::query("INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at) VALUES ('n1', 'head', ?, 'reminder', ?)")
         .bind(&first[0].schedule_id)
         .bind(now_iso())
@@ -373,11 +363,9 @@ async fn an_unsupported_rule_series_is_skipped_not_fatal() {
     let pool = test_pool().await;
     seed_series(&pool, "good", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "good", 30).await;
-    // A rule the engine genuinely rejects: sub-daily frequencies are outside the
-    // day-key model, so this is one of the few shapes that still errors. Before
-    // per-series isolation its `RecurrenceError` failed the whole enumeration and no
-    // reminder fired for any series. (The fixture used to be `FREQ=YEARLY;BYDAY=1SU`,
-    // which C43 brought *into* the envelope — the test then proved nothing.)
+    // Sub-daily frequencies are outside the day-key model, so this rule still errors. Without
+    // per-series isolation its error would fail the whole enumeration and no series would remind.
+    // The fixture must stay a shape the engine rejects, or the test proves nothing.
     seed_series(&pool, "bad", "FREQ=HOURLY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "bad", 30).await;
     let now = local("2026-05-25T08:30:00");
@@ -394,8 +382,7 @@ async fn an_unsupported_rule_series_is_skipped_not_fatal() {
         "the valid series still fires despite the unsupported one",
     );
 
-    // The bad rule persists, so a later tick must stay isolated (the good series
-    // keeps firing) — the enumeration never errors out.
+    // The bad rule persists, so a later tick stays isolated and the good series keeps firing.
     let second = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
         .await
         .unwrap();
@@ -407,7 +394,6 @@ async fn past_occurrence_does_not_fire() {
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "head", 30).await;
-    // 09:00 fires at 08:30; by 10:00 it's an hour past the window — no backfill.
     let now = local("2026-05-25T10:00:00");
 
     let due = occurrences_with_open_reminder_window(&pool, &tick_window(now), 15, 60)
@@ -438,7 +424,6 @@ async fn completed_occurrence_is_silent() {
 
 #[tokio::test]
 async fn skipped_occurrence_is_silent() {
-    // The skip-set arm of the exclusion union (only the completed arm was pinned).
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "head", 30).await;
@@ -482,10 +467,8 @@ async fn legacy_rrule_exdate_occurrence_is_silent() {
 
 #[tokio::test]
 async fn materialized_override_original_date_is_excluded_from_enumeration() {
-    // A moved/edited occurrence lives as a page_schedules override that
-    // `due_synced_override_reminders` fires at its own instant. The enumeration must
-    // exclude the override's original_date, or the occurrence double-fires
-    // (enumeration + override). Asserts the partition from the enumeration side.
+    // A moved occurrence is an override that `due_synced_override_reminders` fires; the enumeration
+    // must exclude its original_date, or the occurrence double-fires.
     let pool = test_pool().await;
     let rule_id = seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "head", 30).await;
@@ -513,8 +496,7 @@ async fn materialized_override_original_date_is_excluded_from_enumeration() {
 #[tokio::test]
 async fn synced_series_fires_at_the_absolute_instant_seeking_from_a_far_base() {
     let pool = test_pool().await;
-    // Base six years before "now" — enumeration must seek to now, not scan from
-    // the pinned base. Zone ≠ device zone; the fire is the resolved UTC instant.
+    // The base is six years back, so enumeration must seek to now rather than scan from it.
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     insert_test_page_sync(&pool, "head", "active")
         .await
@@ -545,13 +527,10 @@ async fn synced_series_fires_at_the_absolute_instant_seeking_from_a_far_base() {
 
 #[tokio::test]
 async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
-    // Pins the DST-widen prefilter pad (recurrence_derive: `hi + 1h`). Occurrence
-    // is 03:30 America/New_York on 2026-03-08 (03:30 EDT, UTC-4 = 07:30Z); a 60-min
-    // lead fires at 06:30Z, which in NY is 01:30 EST — BEFORE the 07:00Z jump. So
-    // `zone_now` (01:30) plus max_lead (60) lands the wall-clock window at 02:30,
-    // an hour short of the 03:30 occurrence: without the +1h pad the occurrence is
-    // never enumerated and the reminder silently drops. The exact absolute check
-    // then keeps it to a single fire.
+    // Pins the `hi + 1h` DST pad. The occurrence is 03:30 EDT on 2026-03-08 (07:30Z); its 60-min
+    // lead fires at 06:30Z, which in New York is 01:30 EST, before the jump. `zone_now` plus
+    // max_lead lands the window at 02:30, an hour short of the occurrence, so without the pad it
+    // is never enumerated and the reminder drops. The exact check then keeps it to one fire.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T03:30:00", None).await;
     insert_test_page_sync(&pool, "head", "active")
@@ -586,12 +565,10 @@ async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
 
 #[tokio::test]
 async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
-    // A synced occurrence whose wall-clock lands IN the spring-forward gap (a
-    // nonexistent local time) has no absolute instant, so its reminder is
-    // accepted-dropped rather than fired at an invented time — a once-a-year miss on
-    // a reminder, not the event. The primitive is pinned by
-    // `synced_fire_instant_spring_forward_gap_never_fires`; this pins the enumeration
-    // level and that the series stays live the next day.
+    // A synced occurrence inside the spring-forward gap has no absolute instant, so its reminder
+    // is dropped rather than fired at an invented time. The primitive is pinned by
+    // `synced_fire_instant_spring_forward_gap_never_fires`; this pins the enumeration level and
+    // that the series stays live the next day.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T02:30:00", None).await;
     insert_test_page_sync(&pool, "head", "active")
@@ -605,9 +582,8 @@ async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
     .unwrap();
     add_reminder(&pool, "head", 0).await;
 
-    // 2026-03-08 02:30 NY doesn't exist (02:00 EST → 03:00 EDT). now_utc = 06:30Z =
-    // 01:30 EST, so the gap occurrence is enumerated in-window yet resolves to no
-    // instant → no fire.
+    // 02:30 doesn't exist in New York that day; now_utc 06:30Z is 01:30 EST, so the gap
+    // occurrence is enumerated in-window yet resolves to no instant.
     let gap_tick = occurrences_with_open_reminder_window(
         &pool,
         &ReminderWindow::for_test(local("2026-03-08T01:30:00"), utc("2026-03-08T06:30:00Z")),
@@ -636,9 +612,7 @@ async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
 
 #[tokio::test]
 async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
-    // Detached falls to the native branch (see
-    // `occurrences_with_open_reminder_window`'s doc): reminders fire on
-    // device-local wall-clock despite the source-zone-stamped stored value.
+    // Detached falls to the native branch (see `occurrences_with_open_reminder_window`).
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-25T09:00:00", None).await; // zone = LA
     insert_test_page_sync(&pool, "head", "detached")
@@ -646,9 +620,8 @@ async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
         .unwrap();
     add_reminder(&pool, "head", 30).await;
 
-    // now_utc is set so the SYNCED interpretation (09:00 LA = 16:00Z, lead 30 →
-    // 15:45Z) would NOT be in-window — only the native (device-local 08:30 + 30 →
-    // 09:00) interpretation fires. Firing here proves the detached row is native.
+    // now_utc puts the synced reading (09:00 LA is 16:00Z, fire 15:45Z) out of window, so only the
+    // native reading fires; firing proves the detached row is native.
     let now_local = local("2026-05-25T08:30:00");
     let due = occurrences_with_open_reminder_window(
         &pool,
@@ -669,9 +642,8 @@ async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
 
 #[tokio::test]
 async fn active_synced_series_fires_the_default_reminder() {
-    // A synced series gets the global default lead like native (no explicit reminder
-    // needed). The default fires at the source-zone → absolute instant: 09:00 LA
-    // (PDT, UTC-7) = 16:00Z, default 15 → 15:45Z.
+    // A synced series gets the global default lead like native, at the absolute instant: 09:00 LA
+    // (UTC-7) is 16:00Z, default 15, so 15:45Z.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-25T09:00:00", None).await; // zone = LA
     insert_test_page_sync(&pool, "head", "active")
@@ -694,7 +666,6 @@ async fn active_synced_series_fires_the_default_reminder() {
 #[tokio::test]
 async fn all_day_series_never_fires() {
     let pool = test_pool().await;
-    // A date-only base is all-day — excluded by the `LIKE '%T%'` gate for both kinds.
     insert_test_page(
         &pool,
         TestPage {
@@ -740,14 +711,12 @@ async fn reminders_ignore_a_corrupted_display_cache() {
     assert_eq!(due[0].scheduled_start, "2026-05-25T09:00:00");
 }
 
-// ─── contention: a 200-recompute batch vs completion's retry budget ──────────
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn recompute_batch_does_not_starve_a_racing_completion() {
     let db = wal_test_pool().await;
     let pool = db.pool.clone();
 
-    // 200 recurring pages the reconciler recomputes in one lock-holding batch tx.
+    // 200 recurring pages recomputed in one lock-holding batch, as the reconciler does.
     for i in 0..200 {
         seed_series(
             &pool,
@@ -758,7 +727,6 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
         )
         .await;
     }
-    // A separate recurring page a user completes concurrently.
     insert_test_page(
         &pool,
         TestPage {
@@ -782,7 +750,6 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
     .await
     .unwrap();
 
-    // Opened and retried as the sync engine runs a reconcile.
     let batch = tokio::spawn({
         let pool = pool.clone();
         async move {
@@ -869,8 +836,6 @@ async fn heal_waits_out_a_write_lock_held_past_the_retry_deadline() {
     );
 }
 
-// ─── the synced head-floor ────────────────────────────────────────────────────
-
 /// `days` from today, local, as the `YYYY-MM-DD` an occurrence is keyed by.
 fn day_str(days: i64) -> String {
     (chrono::Local::now() + chrono::Duration::days(days))
@@ -892,8 +857,8 @@ fn connected_days_ago(days: i64) -> String {
 
 #[tokio::test]
 async fn a_synced_head_floors_at_the_connect_day() {
-    // Simulates a provider returning the master's original DTSTART years back (see
-    // `synced_head_floor`) — the head must floor at the connect day, not 2020.
+    // A provider returns the master's original DTSTART years back (see `synced_head_floor`); the
+    // head must floor at the connect day.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     crate::pool::insert_test_page_sync_connected_at(
@@ -916,10 +881,8 @@ async fn a_synced_head_floors_at_the_connect_day() {
 
 #[tokio::test]
 async fn the_rendered_floor_matches_the_head_floor() {
-    // The calendar bounds its client-side expansion on `synced_since`, and the head
-    // on `synced_head_floor`. Both anchor on `page_sync.created_at`, so one query
-    // resolving a different day than the other would render occurrences that can
-    // never become the head — the state this floor exists to prevent.
+    // Both `synced_since` and `synced_head_floor` anchor on `page_sync.created_at`; if they
+    // resolved different days, occurrences would render that can never become the head.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     crate::pool::insert_test_page_sync_connected_at(
@@ -951,8 +914,7 @@ async fn the_rendered_floor_matches_the_head_floor() {
 
 #[tokio::test]
 async fn a_native_series_carries_no_render_floor() {
-    // Nothing to bound: a native rule's base is the user's own start, not a
-    // provider's, so expansion can't reach back past anything they created.
+    // A native rule's base is the user's own start, so there is nothing to bound.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-01-01T09:00:00", None).await;
 
@@ -965,9 +927,7 @@ async fn a_native_series_carries_no_render_floor() {
 
 #[tokio::test]
 async fn a_detached_series_floors_the_same_way() {
-    // Detaching hands the page to the user but doesn't rewrite the provider's base,
-    // so the floor still applies — and at the same anchor: a detached series has no
-    // more claim on pre-connection occurrences than an active one.
+    // Detaching doesn't rewrite the provider's base, so the floor still applies at the same anchor.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     crate::pool::insert_test_page_sync_connected_at(
@@ -990,8 +950,8 @@ async fn a_detached_series_floors_the_same_way() {
 
 #[tokio::test]
 async fn a_pre_connection_backfilled_occurrence_never_becomes_the_head() {
-    // Backfilled occurrences render below the floor but can't become the head (see
-    // `synced_head_floor`); base sits exactly at -BACKFILL_DAYS to pin the boundary.
+    // Backfilled occurrences render below the floor but can't become the head; the base sits
+    // exactly at -BACKFILL_DAYS to pin the boundary.
     let pool = test_pool().await;
     let base = day_at(-crate::sync::BACKFILL_DAYS, "09:00:00");
     seed_series(&pool, "head", "FREQ=DAILY", &base, None).await;
@@ -1015,8 +975,7 @@ async fn a_pre_connection_backfilled_occurrence_never_becomes_the_head() {
 
 #[tokio::test]
 async fn completion_history_advances_the_head_past_the_floor() {
-    // The floor is a lower bound, not a pin: completing the occurrence it lands on
-    // has to move the head forward rather than leaving it stuck on the floor.
+    // The floor is a lower bound, not a pin: completing its occurrence must advance the head.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     crate::pool::insert_test_page_sync_connected_at(
@@ -1043,10 +1002,8 @@ async fn completion_history_advances_the_head_past_the_floor() {
 
 #[tokio::test]
 async fn a_no_op_recompute_does_not_restamp_updated_at() {
-    // Pins the no-op guard on the `Some(occ)` UPDATE (see
-    // `recompute_recurring_schedule`): an unconditional write would restamp
-    // `updated_at` on every foreground heal pass, floating even an untouched synced
-    // mirror to the top of recently-edited views.
+    // Pins the no-op guard on the UPDATE (see `recompute_recurring_schedule`): an unconditional
+    // write would restamp `updated_at` every heal and float untouched mirrors to the top.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     insert_test_page_sync(&pool, "head", "active")
@@ -1067,14 +1024,10 @@ async fn a_no_op_recompute_does_not_restamp_updated_at() {
     assert_eq!(before, after, "a head that didn't move writes nothing");
 }
 
-// ─── a multi-day all-day span across recurrence ──────────────────────────────
-
 /// A three-day all-day series must stay three days on every occurrence, on the
 /// head that advances past a completion and on the clone that completion mints.
-/// The span used to be measured in minutes, and an all-day base has no clock to
-/// measure, so every occurrence after the first collapsed to a single day. The
-/// functionality matrix claims all-day is orthogonal to recurrence; this is what
-/// makes that claim true rather than asserted.
+/// An all-day base has no clock to measure a span in minutes, which would collapse every
+/// occurrence after the first to one day.
 #[tokio::test]
 async fn completing_a_multi_day_all_day_occurrence_keeps_the_span() {
     let pool = test_pool().await;

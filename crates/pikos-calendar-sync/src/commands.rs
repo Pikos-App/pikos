@@ -1,7 +1,5 @@
-//! Sync-settings orchestration — the networked half of the Calendar Sync panel's
-//! commands. Pairs `pikos-db`'s pure account/calendar writers with the keychain,
-//! the provider's autodiscovery, and the poll engine. The desktop command shims
-//! are thin wrappers over these; the CLI never calls them (sync is desktop-only).
+//! The networked half of the Calendar Sync panel's commands: `pikos-db`'s pure
+//! account/calendar writers paired with the keychain, autodiscovery and the poll engine.
 
 use serde::Serialize;
 use sqlx::SqlitePool;
@@ -22,7 +20,6 @@ use crate::engine::{sync_calendar, SyncOutcome};
 use crate::keychain::Keychain;
 use crate::provider::AnyProvider;
 
-/// One calendar's resync result, flattened for the frontend status display.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarSyncResult {
@@ -54,14 +51,11 @@ impl CalendarSyncResult {
     }
 }
 
-/// Connect a CalDAV account: validate credentials by discovering calendars first
-/// — so a bad URL/password fails before anything is persisted — then persist the
-/// account + its (disabled) calendars and stash the credentials in the keychain.
+/// Discovery runs first, so a bad URL or password fails before anything is persisted.
 ///
-/// Reconnecting an account already known by (provider, display_name) — dormant
-/// via `disconnect_account`, or still active — reuses its row instead of
-/// duplicating: dormant re-links detached pages, active avoids re-syncing every
-/// event twice. The calendar upsert is idempotent and leaves each calendar's
+/// Reconnecting an account already known by (provider, display_name), dormant or
+/// active, reuses its row: dormant re-links detached pages, active avoids syncing
+/// every event twice. The calendar upsert leaves each calendar's
 /// enabled/folder/cursor untouched.
 pub async fn connect_caldav(
     pool: &SqlitePool,
@@ -103,16 +97,13 @@ async fn save_caldav(
     Ok(AccountWithCalendars { account, calendars })
 }
 
-/// Repair a CalDAV account whose password stopped working: swap the stored
-/// password, prove it by discovery, then clear the flag that has the scheduler
-/// skipping this account.
+/// Swap the stored password, prove it by discovery, then clear the flag that has the
+/// scheduler skipping this account.
 ///
 /// Takes the password alone because the base URL and username already live in the
-/// keychain blob. Re-collecting them would let a typo land a *second* account
-/// instead of repairing this one, which is the outcome the flow exists to avoid —
-/// identity is `provider + display_name`, and a reconnect must not change it.
-/// Nothing is persisted until discovery succeeds, so a wrong password leaves the
-/// existing credential in place.
+/// keychain blob; re-collecting them would let a typo land a *second* account
+/// (identity is `provider + display_name`). A wrong password leaves the existing
+/// credential in place.
 pub async fn reconnect_caldav(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -143,14 +134,10 @@ pub async fn reconnect_caldav(
     Ok(AccountWithCalendars { account, calendars })
 }
 
-/// Connect a Google account: run the OAuth grant, label the account with the
-/// primary calendar's id (the signed-in email), then persist it and its
-/// (disabled) calendars. `open_browser` is handed the consent URL between binding
-/// the loopback listener and waiting on it — Google's Desktop client type
-/// requires a real browser, and opening one is the caller's concern.
-///
-/// Same reuse-by-identity as [`connect_caldav`]: reconnecting a known account —
-/// dormant or active — refreshes its row instead of duplicating it.
+/// The account is labelled with the primary calendar's id (the signed-in email).
+/// `open_browser` is handed the consent URL between binding the loopback listener
+/// and waiting on it; Google's Desktop client type requires a real browser.
+/// Reconnecting reuses the row as [`connect_caldav`] does.
 pub async fn connect_google<F>(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -163,8 +150,7 @@ where
     open_browser(pending.authorize_url())?;
     let credentials = pending.complete().await?;
 
-    // Proves the grant actually reads calendars before anything is persisted —
-    // the same validate-first order connect_caldav uses.
+    // Proves the grant reads calendars before anything is persisted.
     let (remote, display_name) = crate::google::GoogleProvider::list_with(&credentials).await?;
     save_google(pool, &keychain, &credentials, &display_name, &remote).await
 }
@@ -186,7 +172,6 @@ pub(crate) async fn save_google(
     Ok(AccountWithCalendars { account, calendars })
 }
 
-/// An account row a connect has taken, and whether this connect is what created it.
 struct Claimed {
     account: pikos_db::sync_commands::SyncAccount,
     /// Only a row this connect created may be taken back out when the credential cannot be
@@ -198,19 +183,16 @@ struct Claimed {
 /// the same user and server written a different way.
 ///
 /// Identity is matched as a string, and the lookup's `COLLATE NOCASE` already absorbs
-/// a difference in case. A trailing slash it does not. Before the connect dialog
-/// reduced the typed URL it stored whatever was typed, so an account added in
-/// `0.4.0-beta` carries `https://caldav.fastmail.com` where a fresh connect now builds
+/// a difference in case but not a trailing slash. An account stored from an unreduced
+/// typed URL carries `https://caldav.fastmail.com` where a fresh connect builds
 /// `https://caldav.fastmail.com/`. Missing that row adds a second account for one
-/// server and leaves the first one's pages detached, which is the failure reducing the
-/// URL was meant to end.
+/// server and leaves the first one's pages detached.
 ///
 /// Resolved on connect rather than by rewriting stored identities, so no migration is
 /// owed and a workspace stays readable by the build that wrote it. The narrower
-/// reductions `URL` also applies — a default port, a dot segment — are deliberately
-/// not matched: comparing two spellings of a whole identity is sound, while reaching
-/// those would mean splitting it into a username and a URL and agreeing with the
-/// frontend on where the seam is.
+/// reductions `URL` also applies (a default port, a dot segment) are deliberately
+/// not matched: reaching them would mean splitting an identity into a username and a
+/// URL and agreeing with the frontend on where the seam is.
 async fn caldav_stored_identity(pool: &SqlitePool, identity: &str) -> AppResult<String> {
     if find_account_by_identity_impl(pool, PROVIDER_CALDAV, identity)
         .await?
@@ -230,9 +212,7 @@ async fn caldav_stored_identity(pool: &SqlitePool, identity: &str) -> AppResult<
 }
 
 /// Reuse an existing account row on (re)connect, else create one. Shared by both
-/// connect paths so reconnect semantics can't drift between providers (see
-/// [`connect_caldav`] for why reuse matters). Reactivate is idempotent, so it's a
-/// no-op cost on an already-active row.
+/// connect paths so reconnect semantics can't drift between providers.
 async fn claim_account(
     pool: &SqlitePool,
     provider: &str,
@@ -299,10 +279,8 @@ pub async fn upsert_calendars(
     Ok(calendars)
 }
 
-/// Disconnect an account: unsync its calendars, mark it dormant, release its
-/// credential. The row, its calendars, and detached `page_sync` identities stay —
-/// a reconnect reuses them and re-links by `ical_uid`, the same path a calendar
-/// unsync already uses.
+/// The row, its calendars, and detached `page_sync` identities stay: a reconnect
+/// reuses them and re-links by `ical_uid`.
 pub async fn disconnect_account(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -316,10 +294,9 @@ pub async fn disconnect_account(
     Ok(())
 }
 
-/// Disconnect every account, for a caller about to wipe the workspace. Active
-/// accounts go dormant through the normal path first — clearing `enabled` is what
-/// keeps a poll from writing pages back over the wipe — and then every credential
-/// is released, dormant rows included.
+/// For a caller about to wipe the workspace. Active accounts go dormant first, since
+/// clearing `enabled` is what keeps a poll from writing pages back over the wipe;
+/// then every credential is released, dormant rows included.
 pub async fn disconnect_all_accounts(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
     for (id, _, disconnected) in all_account_identities_impl(pool).await? {
         // Best-effort: a calendar that won't tear down must not block the wipe.
@@ -332,8 +309,6 @@ pub async fn disconnect_all_accounts(pool: &SqlitePool, keychain: Keychain) -> A
     release_all_credentials(pool, keychain).await
 }
 
-/// The local half of a disconnect: unsync each calendar (detach owned pages, delete
-/// bare mirrors, disable + clear its cursor), then hide the account from the panel.
 async fn go_dormant(pool: &SqlitePool, account_id: &str) -> AppResult<()> {
     for cal in list_sync_calendars_impl(pool, account_id).await? {
         if cal.enabled {
@@ -343,11 +318,9 @@ async fn go_dormant(pool: &SqlitePool, account_id: &str) -> AppResult<()> {
     mark_account_disconnected_impl(pool, account_id).await
 }
 
-/// Revoke every OAuth grant and clear every keychain entry, for a caller about to
-/// delete the workspace wholesale. No DB writes — the rows are going away anyway.
-///
-/// The keychain lives outside `app_data_dir`, so a wipe on its own would strand a
-/// usable refresh token keyed to an account id nothing references any more.
+/// Revokes every OAuth grant and clears every keychain entry, with no DB writes. The
+/// keychain lives outside `app_data_dir`, so a wipe alone would strand a usable
+/// refresh token keyed to an account id nothing references.
 pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
     for (id, provider, _) in all_account_identities_impl(pool).await? {
         release_credential(&keychain, &id, &provider).await;
@@ -355,10 +328,9 @@ pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> A
     Ok(())
 }
 
-/// Drop one account's stored secret. The OAuth grant is revoked first so the
-/// account also drops off the user's connected-apps list, instead of lingering
-/// there with a token Pikos has thrown away. Both steps are best-effort and
-/// idempotent — neither may block a disconnect the user has already asked for.
+/// The OAuth grant is revoked first so the account also drops off the user's
+/// connected-apps list. Both steps are best-effort and idempotent: neither may
+/// block a disconnect the user asked for.
 async fn release_credential(keychain: &Keychain, account_id: &str, provider: &str) {
     if provider == PROVIDER_GOOGLE {
         if let Err(e) = crate::google::revoke(keychain, account_id).await {
@@ -368,9 +340,8 @@ async fn release_credential(keychain: &Keychain, account_id: &str, provider: &st
     let _ = keychain.delete(account_id);
 }
 
-/// Resync an account through whichever provider its `provider` column names.
-/// The manual-resync entry point; the scheduler resolves the provider itself so
-/// it can reuse one per pass.
+/// The manual-resync entry point; the scheduler resolves the provider itself so it
+/// can reuse one per pass.
 pub async fn resync_account_auto(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -381,10 +352,8 @@ pub async fn resync_account_auto(
     resync_account(pool, &provider, account_id).await
 }
 
-/// Resync every enabled calendar on an account through the poll engine. Generic
-/// over the provider so the caller constructs the right one and tests inject a
-/// scripted one. Per-calendar transport/credential failures surface as
-/// `offline`/`reconnectNeeded` results rather than aborting the whole account.
+/// Per-calendar transport/credential failures surface as `offline`/`reconnectNeeded`
+/// results rather than aborting the whole account.
 pub async fn resync_account<P: CalendarProvider>(
     pool: &SqlitePool,
     provider: &P,
@@ -431,8 +400,6 @@ pub async fn resync_account<P: CalendarProvider>(
     Ok(results)
 }
 
-/// Refresh an account through whichever provider its `provider` column names —
-/// the panel's entry point, paired with [`resync_account_auto`].
 pub async fn refresh_account_auto(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -443,21 +410,15 @@ pub async fn refresh_account_auto(
     refresh_account(pool, &provider, account_id).await
 }
 
-/// Re-read an account's calendars in full: discard every enabled calendar's
-/// cursor so the poll that follows enumerates the whole backfill window.
+/// Discards every enabled calendar's cursor so the next poll enumerates the whole
+/// backfill window: the repair for a mirror that drifted (a change the cursor
+/// advanced past, or an upstream deletion made while nothing was polling).
 ///
-/// The repair path for a mirror that has drifted — a change the cursor advanced
-/// past (see the engine's backfill/bootstrap race), or an upstream deletion made
-/// while nothing was polling. Deliberately not a teardown: the reconciler no-ops
-/// on an unchanged etag, so re-delivering the whole calendar leaves pages,
-/// folders and `updated_at` alone. The only lever that forced a re-read before
-/// this was the disable→enable toggle, which deletes un-actioned mirrors and
-/// detaches owned pages first — destructive repair for a read-only copy.
+/// Not a teardown: the reconciler no-ops on an unchanged etag, so pages, folders and
+/// `updated_at` stay put, unlike disable then enable.
 ///
-/// Only a full enumerate marks its upserts authoritative, so for CalDAV this also
-/// re-arms the deletion sweep, which is the half that catches a deletion no
-/// incremental delta ever reported. A Google backfill leaves the sweep disarmed
-/// by design, so a refresh there re-reads without sweeping.
+/// Only a full enumerate is authoritative, so for CalDAV this also re-arms the
+/// deletion sweep. A Google backfill leaves the sweep disarmed by design.
 pub async fn refresh_account<P: CalendarProvider>(
     pool: &SqlitePool,
     provider: &P,

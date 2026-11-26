@@ -70,18 +70,15 @@ async fn series_advances_to_next_open_occurrence() {
     .await
     .unwrap();
 
-    // Clone snapshots the completed occurrence.
     assert_eq!(result.clone.status, "done");
     assert!(result.clone.completed_at.is_some());
     assert_eq!(result.clone.title, "Morning routine");
     assert_eq!(result.clone.tags, vec!["habits".to_string()]);
     assert_eq!(result.clone.scheduled_start.as_deref(), Some("2026-05-21"));
 
-    // Head stays active and the recompute advances it to the next open occurrence.
     assert_eq!(result.head.status, "not_started");
     assert_eq!(result.head.scheduled_start.as_deref(), Some("2026-05-22"));
 
-    // The completed occurrence is recorded in the set, keyed by day.
     let clone_for_date: Option<String> = sqlx::query_scalar(
         "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-05-21'",
     )
@@ -90,14 +87,10 @@ async fn series_advances_to_next_open_occurrence() {
     .unwrap();
     assert_eq!(clone_for_date.as_deref(), Some(result.clone.id.as_str()));
 
-    // Exactly one new row was inserted (the clone).
     assert_eq!(count_pages(&pool).await, 2);
 
-    // Regression: the clone's completed_at MUST be local wall-clock (no `Z`),
-    // matching scheduled_start / the frontend's nowLocalISO() — NOT the UTC
-    // now_iso() used for created_at/updated_at. The Completed view compares
-    // `completed_at.slice(0,10)` against the local day, so a UTC stamp hid the
-    // clone whenever UTC's date ≠ the local date (≈half of every day off-UTC).
+    // The clone's completed_at is local wall-clock, not UTC: the Completed view compares its date
+    // with the local day, so a UTC stamp would hide the clone whenever the dates differ.
     let completed = result.clone.completed_at.expect("clone has completed_at");
     assert!(
         !completed.ends_with('Z') && !completed.contains('Z'),
@@ -117,10 +110,8 @@ async fn series_advances_to_next_open_occurrence() {
 
 #[tokio::test]
 async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
-    // Under the occurrence-sets model native completion writes completed_set and
-    // recomputes — it never merges the completed date into rrule_exdates. A
-    // pre-existing provider/legacy EXDATE must survive unchanged; the completed
-    // date lands in the set and is honored by the derivation's exclusion union.
+    // Native completion writes completed_set and never merges into rrule_exdates, so a
+    // provider EXDATE survives unchanged.
     let pool = test_pool().await;
     insert_test_page(
         &pool,
@@ -175,7 +166,6 @@ async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
     .await
     .unwrap();
     assert_eq!(set_count, 1, "completed date recorded in the set");
-    // Head advanced past both the completed date and the legacy exdate.
     assert_eq!(count_pages(&pool).await, 2);
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
@@ -225,7 +215,6 @@ async fn series_marks_head_done_when_exhausted() {
     .await
     .unwrap();
 
-    // Head is marked done — no next occurrence.
     assert_eq!(fetch_status(&pool, "head").await, "done");
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
@@ -233,7 +222,6 @@ async fn series_marks_head_done_when_exhausted() {
         "scheduled_start is not cleared when series ends"
     );
 
-    // Clone is also done.
     assert_eq!(result.clone.status, "done");
     assert_eq!(count_pages(&pool).await, 2);
 }
@@ -266,7 +254,6 @@ async fn syncs_normalized_tag_tables_on_clone() {
     .await
     .unwrap();
 
-    // Clone's tags should be present in the normalized join table.
     let join_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_tags WHERE page_id = ?")
         .bind(&result.clone.id)
         .fetch_one(&pool)
@@ -295,8 +282,7 @@ async fn missing_head_returns_not_found() {
 
 #[tokio::test]
 async fn rejects_soft_deleted_head() {
-    // Completing a trashed recurring page must not resurrect it as a visible
-    // done clone (fetch_page has no deleted_at filter; the guard lives here).
+    // A trashed series must not resurrect as a visible done clone (fetch_page has no deleted_at filter).
     let pool = test_pool().await;
     insert_test_page(
         &pool,
@@ -325,18 +311,13 @@ async fn rejects_soft_deleted_head() {
     .unwrap_err();
     assert!(matches!(err, crate::error::AppError::NotFound(_)));
 
-    // No clone was created.
     assert_eq!(count_pages(&pool).await, 1);
 }
 
 #[tokio::test]
 async fn advanced_head_survives_later_denorm_refresh() {
-    // Completing a recurring page advanced the head's
-    // pages.scheduled_start, but the stale non-rule anchor page_schedules row
-    // (from the initial scheduleOnce, before the rule was added) lingered. The
-    // next unrelated refresh_schedule_denorm re-read that past anchor and
-    // clobbered the head back — visible as "completed recurring task pops back
-    // to its last date." Denorm now skips rrule-backed pages.
+    // The stale non-rule anchor row lingers after completion advances the head, so a later
+    // refresh_schedule_denorm would clobber the head back to it; the denorm skips rrule-backed pages.
     use crate::schedules::{
         create_page_schedule_impl, create_recurrence_rule_impl, refresh_schedule_denorm,
         NewPageSchedule, NewRecurrenceRule,
@@ -353,8 +334,7 @@ async fn advanced_head_survives_later_denorm_refresh() {
     .await
     .unwrap();
 
-    // The one-time schedule the page was created with, before it became
-    // recurring — a non-rule (rule_id IS NULL) anchor row at the first date.
+    // The one-time schedule the page began with: a non-rule anchor row at the first date.
     create_page_schedule_impl(
         &pool,
         NewPageSchedule {
@@ -369,7 +349,6 @@ async fn advanced_head_survives_later_denorm_refresh() {
     .await
     .unwrap();
 
-    // ...then made recurring.
     create_recurrence_rule_impl(
         &pool,
         NewRecurrenceRule {
@@ -384,7 +363,6 @@ async fn advanced_head_survives_later_denorm_refresh() {
     .await
     .unwrap();
 
-    // Complete the 05-21 occurrence; the recompute advances the head to 05-28.
     complete_recurring_page_impl(
         &pool,
         CompleteRecurringInput {
@@ -402,8 +380,7 @@ async fn advanced_head_survives_later_denorm_refresh() {
         Some("2026-05-28")
     );
 
-    // An unrelated schedule mutation elsewhere triggers a denorm refresh for the
-    // head. Before the fix this clobbered the head back to the 05-21 anchor.
+    // An unrelated schedule mutation triggers a denorm refresh, which must not clobber the head.
     refresh_schedule_denorm(&pool, "head").await.unwrap();
 
     assert_eq!(
@@ -412,8 +389,6 @@ async fn advanced_head_survives_later_denorm_refresh() {
         "completed recurring head must not pop back to its previous occurrence"
     );
 }
-
-// ── occurrence-sets reverse flows + ownership handoff ───────────────────
 
 #[tokio::test]
 async fn uncomplete_reverses_a_native_completion() {
@@ -456,7 +431,6 @@ async fn uncomplete_reverses_a_native_completion() {
     .await
     .unwrap();
 
-    // Clone deleted via the back-link, set entry dropped, head recomputed back.
     assert!(!page_exists(&pool, &result.clone.id).await, "clone removed");
     let set_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = 'head'")
@@ -515,7 +489,6 @@ async fn exhausted_series_uncomplete_unmarks_done() {
         "exhausted → done"
     );
 
-    // Uncomplete the only occurrence: it yields again, so the head un-marks done.
     uncomplete_recurring_occurrence_impl(
         &pool,
         UncompleteRecurringInput {
@@ -550,7 +523,6 @@ async fn skip_advances_head_and_undo_restores_it() {
     .unwrap();
     add_daily_rule(&pool, "head", "2026-05-21").await;
 
-    // Dismiss the head occurrence → recompute advances past it.
     skip_occurrence_impl(
         &pool,
         SkipOccurrenceInput {
@@ -582,9 +554,8 @@ async fn skip_advances_head_and_undo_restores_it() {
 
 #[tokio::test]
 async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
-    // Regression for the head-carry-forward in delete_recurrence_rule_impl: the
-    // surviving non-rule anchor row is frozen at the creation date, so deleting the
-    // rule must not rewind an advanced head back onto it.
+    // The surviving anchor row is frozen at the creation date, so deleting the rule must not
+    // rewind an advanced head onto it.
     use crate::schedules::{
         create_page_schedule_impl, delete_recurrence_rule_impl, NewPageSchedule,
     };
@@ -598,8 +569,7 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
     )
     .await
     .unwrap();
-    // The one-off anchor the page carried before becoming recurring, frozen at the
-    // creation date — completion never advances it.
+    // Frozen at the creation date; completion never advances it.
     create_page_schedule_impl(
         &pool,
         NewPageSchedule {
@@ -627,7 +597,6 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
     .await
     .unwrap();
 
-    // Complete two occurrences so the head advances well past the frozen anchor.
     for _ in 0..2 {
         complete_recurring_page_impl(
             &pool,
@@ -649,15 +618,12 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
 
     delete_recurrence_rule_impl(&pool, &rule.id).await.unwrap();
 
-    // The advanced head survives — NOT rewound to the 05-21 anchor.
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
         Some("2026-05-23"),
         "advanced head preserved, not clobbered by the stale one-off anchor"
     );
 }
-
-// ── soft-delete enforcement ────────────────────────────────────────────
 
 #[tokio::test]
 async fn update_does_not_mutate_soft_deleted_page() {
@@ -692,9 +658,7 @@ async fn re_delete_preserves_original_trash_timestamp() {
         .await
         .unwrap();
 
-    // Backdate the trash timestamp, then delete again. The deleted_at IS NULL
-    // guard must make the second delete a no-op so the auto-purge clock isn't
-    // reset.
+    // A second delete must be a no-op so the auto-purge clock isn't reset.
     sqlx::query("UPDATE pages SET deleted_at = '2020-01-01T00:00:00.000Z' WHERE id = 'p1'")
         .execute(&pool)
         .await
@@ -708,13 +672,10 @@ async fn re_delete_preserves_original_trash_timestamp() {
     assert_eq!(deleted_at, "2020-01-01T00:00:00.000Z");
 }
 
-// ── tags stored lowercase (new-insert path) ────────────────────────────
-
 #[tokio::test]
 async fn tag_variants_collapse_to_one_lowercase_tag() {
     let pool = test_pool().await;
 
-    // Case/whitespace variants all normalize to the same lowercase tag.
     create_page_impl(
         &pool,
         NewPage {
@@ -748,12 +709,9 @@ async fn tag_variants_collapse_to_one_lowercase_tag() {
         1,
         "B's variants must dedupe to one association"
     );
-    // The denorm is stored lowercase too, so B renders "work" — not the
-    // "work"/"  WORK  " the client sent.
+    // The denorm is lowercase too, so B renders "work", not what the client sent.
     assert_eq!(b.tags, vec!["work".to_string()], "denorm must be lowercase");
 }
-
-// ── CRUD round-trips ───────────────────────────────────────────────────
 
 pub(crate) fn new_page(title: &str) -> NewPage {
     NewPage {
@@ -823,7 +781,6 @@ async fn create_page_writes_normalized_tag_rows() {
     .unwrap();
 
     assert_eq!(count_page_tags(&pool, &page.id).await, 2);
-    // pages.tags JSON denorm matches.
     assert_eq!(page.tags, vec!["alpha".to_string(), "beta".to_string()]);
 }
 
@@ -1012,7 +969,6 @@ async fn update_page_rewrites_normalized_tags() {
     .unwrap();
     assert_eq!(count_page_tags(&pool, &page.id).await, 2);
 
-    // Replace tag set entirely.
     update_page_impl(
         &pool,
         page.id.clone(),
@@ -1070,7 +1026,6 @@ async fn soft_delete_then_restore_round_trip() {
             .unwrap();
     assert!(deleted_at.is_some(), "soft delete sets deleted_at");
 
-    // list_pages hides soft-deleted rows.
     let visible = list_pages_impl(&pool, None).await.unwrap();
     assert!(visible.is_empty());
 
@@ -1087,7 +1042,6 @@ async fn soft_delete_then_restore_round_trip() {
 #[tokio::test]
 async fn list_pages_filters_by_status_and_folder() {
     let pool = test_pool().await;
-    // Two pages in inbox; one in a folder.
     insert_test_page(&pool, TestPage::new("inbox-open", "Inbox open"))
         .await
         .unwrap();
@@ -1100,7 +1054,6 @@ async fn list_pages_filters_by_status_and_folder() {
     )
     .await
     .unwrap();
-    // Create a folder so the FK is valid.
     sqlx::query("INSERT INTO folders (id, name, sort_order, created_at, updated_at) VALUES (?, ?, 0, datetime('now'), datetime('now'))")
         .bind("folder-a")
         .bind("A")
@@ -1117,7 +1070,6 @@ async fn list_pages_filters_by_status_and_folder() {
     .await
     .unwrap();
 
-    // Filter: status = not_started → 2 results
     let open = list_pages_impl(
         &pool,
         Some(PageFilter {
@@ -1129,7 +1081,6 @@ async fn list_pages_filters_by_status_and_folder() {
     .unwrap();
     assert_eq!(open.len(), 2);
 
-    // Filter: folder_id = "folder-a" → 1 result
     let in_a = list_pages_impl(
         &pool,
         Some(PageFilter {
@@ -1142,7 +1093,6 @@ async fn list_pages_filters_by_status_and_folder() {
     assert_eq!(in_a.len(), 1);
     assert_eq!(in_a[0].title, "A open");
 
-    // Filter: folder_id = null (inbox) → 2 results (open + done)
     let inbox = list_pages_impl(
         &pool,
         Some(PageFilter {
@@ -1302,7 +1252,6 @@ async fn reorder_pages_assigns_positional_indices() {
     let b = create_page_impl(&pool, new_page("B")).await.unwrap();
     let c = create_page_impl(&pool, new_page("C")).await.unwrap();
 
-    // Reverse the order.
     reorder_pages_impl(&pool, None, &[c.id.clone(), b.id.clone(), a.id.clone()])
         .await
         .unwrap();
@@ -1311,8 +1260,6 @@ async fn reorder_pages_assigns_positional_indices() {
     assert_eq!(fetch_sort_order(&pool, &b.id).await, 1);
     assert_eq!(fetch_sort_order(&pool, &a.id).await, 2);
 }
-
-// ── list_pages_today ───────────────────────────────────────────────────────
 
 async fn insert_schedule(pool: &sqlx::SqlitePool, page_id: &str, scheduled_start: &str) {
     sqlx::query(
@@ -1426,15 +1373,13 @@ async fn list_pages_today_leaves_an_all_day_synced_page_on_its_own_date() {
     assert_eq!(ids, vec!["all-day"]);
 }
 
-/// C111: moving an occurrence onto today puts its original date in the exclusion
-/// set, so the head derives *past* today and a head-only read lists nothing — while
-/// `today_scheduled_count`, which reads the override row, counts it. A reminder
-/// pointing at an empty list is the shape of a page having been lost.
+/// Moving an occurrence onto today puts its original date in the exclusion set, so the head
+/// derives past today and a head-only read lists nothing, while `today_scheduled_count`, which
+/// reads the override row, counts it.
 #[tokio::test]
 async fn list_pages_today_shows_an_occurrence_moved_onto_today() {
     let pool = test_pool().await;
 
-    // Head two weeks out; the series is daily from there.
     insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
     add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
 
@@ -1463,8 +1408,7 @@ async fn list_pages_today_shows_an_occurrence_moved_onto_today() {
         .find(|p| p.id == "series")
         .expect("series is listed");
 
-    // And at the moved time, not the head's — the row has to name the day it is
-    // being listed for.
+    // At the moved time, not the head's.
     assert_eq!(
         listed.scheduled_start.as_deref(),
         Some("2026-08-07T15:00:00")
@@ -1537,9 +1481,8 @@ async fn list_pages_today_excludes_done_and_deleted() {
 #[tokio::test]
 async fn list_pages_today_excludes_a_series_whose_next_occurrence_is_ahead() {
     let pool = test_pool().await;
-    // The stale non-rule anchor the initial scheduleOnce left behind sits in the
-    // past; the head the rule advanced to is weeks out. Reading page_schedules
-    // matches the anchor and lists a series with nothing due.
+    // The stale anchor sits in the past while the head is weeks out; reading page_schedules
+    // would match the anchor and list a series with nothing due.
     insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
     insert_schedule(&pool, "series", "2026-07-01T09:00:00").await;
     add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
@@ -1547,8 +1490,6 @@ async fn list_pages_today_excludes_a_series_whose_next_occurrence_is_ahead() {
     let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
     assert!(pages.is_empty());
 }
-
-// ── list_completed_pages ──────────────────────────────────────────────────
 
 async fn insert_completed_page(pool: &sqlx::SqlitePool, id: &str, completed_at: &str) {
     sqlx::query(
@@ -1592,7 +1533,6 @@ async fn list_completed_pages_paginates_by_limit_offset() {
     .unwrap();
     assert_eq!(first_page.pages.len(), 2);
     assert_eq!(first_page.total, 5, "total ignores limit/offset");
-    // Most-recent first.
     assert_eq!(first_page.pages[0].id, "done-4");
     assert_eq!(first_page.pages[1].id, "done-3");
 
@@ -1647,9 +1587,7 @@ async fn list_completed_pages_filters_by_folder() {
         .execute(&pool)
         .await
         .unwrap();
-    // Inbox completion
     insert_completed_page(&pool, "inbox-done", "2026-05-21T09:00:00").await;
-    // Folder completion — needs explicit folder_id INSERT
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status, priority, tags, sort_order, completed_at, created_at, updated_at)
          VALUES ('work-done', 'work', 'Work done', NULL, '{}', '', 'done', 0, '[]', 0, '2026-05-21T09:00:00', '2026-05-21T09:00:00', '2026-05-21T09:00:00')",
@@ -1708,8 +1646,6 @@ async fn list_completed_pages_filters_by_completed_since() {
     assert_eq!(after.pages[0].id, "recent");
 }
 
-// ── Edge cases that matter for data integrity ─────────────────────────────
-
 #[tokio::test]
 async fn update_page_with_empty_tags_clears_normalized_join_rows() {
     let pool = test_pool().await;
@@ -1724,7 +1660,6 @@ async fn update_page_with_empty_tags_clears_normalized_join_rows() {
     .unwrap();
     assert_eq!(count_page_tags(&pool, &page.id).await, 2);
 
-    // Explicit empty tags vec must clear all tag associations.
     let updated = update_page_impl(
         &pool,
         page.id.clone(),
@@ -1759,13 +1694,11 @@ async fn fts_index_reflects_title_after_update() {
     .await
     .unwrap();
 
-    // Search by old title — hits.
     let before = search_pages_impl(&pool, "Original".into(), None)
         .await
         .unwrap();
     assert_eq!(before.results.len(), 1);
 
-    // Rename.
     update_page_impl(
         &pool,
         page.id.clone(),
@@ -1817,8 +1750,6 @@ async fn fts_index_drops_page_after_hard_delete() {
     );
 }
 
-// ─── set_pages_status_impl (bulk complete/uncomplete) ────────────────────────
-
 #[tokio::test]
 async fn set_pages_status_completes_all_in_one_call() {
     let pool = test_pool().await;
@@ -1833,8 +1764,7 @@ async fn set_pages_status_completes_all_in_one_call() {
         .await
         .unwrap();
 
-    // Every page is returned and persisted as done with the given completed_at —
-    // no silent drops (the Cmd+A → Space "doesn't reliably complete all" defect).
+    // Every page is returned and persisted as done, with no silent drops.
     assert_eq!(updated.len(), 3);
     for id in ["a", "b", "c"] {
         assert_eq!(fetch_status(&pool, id).await, "done");
@@ -1891,8 +1821,7 @@ async fn set_pages_status_skips_soft_deleted_rows() {
         .await
         .unwrap();
 
-    // The trashed page is neither mutated nor returned — a stale selection must
-    // not resurrect/rewrite a deleted row (mirrors update_page_impl's guard).
+    // A stale selection must not rewrite or return a trashed row.
     assert_eq!(updated.len(), 1);
     assert_eq!(updated[0].id, "a");
     assert_eq!(fetch_status(&pool, "a").await, "done");
@@ -1949,7 +1878,6 @@ async fn reschedule_virtual_clones_schedules_and_exdates_in_one_call() {
     .await
     .unwrap();
 
-    // Clone is an independent live page at the new time, content copied.
     let clone = result
         .clone
         .expect("a virtual occurrence materializes a clone");
@@ -1962,13 +1890,12 @@ async fn reschedule_virtual_clones_schedules_and_exdates_in_one_call() {
     );
     assert!(clone.completed_at.is_none());
 
-    // Original date MERGED into existing exdates, not written as a replacement.
+    // The original date is merged into existing exdates, not written over them.
     assert_eq!(
         result.rule_exdates,
         vec!["2026-06-07".to_string(), "2026-06-10".to_string()]
     );
 
-    // The clone got a plain schedule block, detached from the rule.
     let detached: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM page_schedules WHERE page_id = ? AND rule_id IS NULL",
     )
@@ -1978,7 +1905,6 @@ async fn reschedule_virtual_clones_schedules_and_exdates_in_one_call() {
     .unwrap();
     assert_eq!(detached, 1);
 
-    // Head and rule anchor untouched.
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
         Some("2026-06-08T09:00:00")
@@ -2427,10 +2353,7 @@ async fn reschedule_virtual_on_a_native_series_clones_even_beside_an_override() 
 
 #[tokio::test]
 async fn reschedule_virtual_rejects_trashed_head_with_no_partial_writes() {
-    // Atomicity contract: the pre-fix client flow issued clone/schedule/exdate
-    // as three separate writes, so a mid-sequence failure left BOTH the clone
-    // and the still-unexcluded virtual on the calendar. An error must now
-    // leave nothing behind.
+    // Atomic: an error must leave nothing behind, not both the clone and the unexcluded virtual.
     let pool = test_pool().await;
     insert_test_page(
         &pool,
@@ -2491,8 +2414,6 @@ async fn reschedule_virtual_rejects_trashed_head_with_no_partial_writes() {
     );
 }
 
-// ─── schedule_locked / user_modified / placement-lock ────────────────────────
-
 async fn mark_synced(pool: &sqlx::SqlitePool, page_id: &str, sync_state: &str) {
     crate::pool::insert_test_page_sync(pool, page_id, sync_state)
         .await
@@ -2542,7 +2463,6 @@ async fn schedule_locked_true_only_for_active_synced_pages() {
     mark_synced(&pool, "detached", "detached").await;
     mark_synced(&pool, "tombstoned", "tombstoned").await;
 
-    // get_page (full Page) and list_pages (PageSummary) must agree.
     let locked = |id: &'static str| {
         let pool = pool.clone();
         async move { get_page(&pool, id).await.unwrap().unwrap().schedule_locked }
@@ -2626,13 +2546,11 @@ async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
     );
     assert_eq!(page.pending_description.as_deref(), Some("new agenda"));
 
-    // Native page carries none of it.
     let native = get_page(&pool, "native").await.unwrap().unwrap();
     assert!(native.mirror_location.is_none());
     assert!(native.mirror_attendees.is_none());
     assert!(native.pending_description.is_none());
 
-    // PageSummary agrees with the full Page.
     let summaries = list_pages_impl(&pool, None).await.unwrap();
     let summary = summaries.iter().find(|p| p.id == "synced").unwrap();
     assert_eq!(summary.mirror_location.as_deref(), Some("Room 4B"));
@@ -2918,7 +2836,6 @@ async fn reordering_a_synced_page_does_not_mark_it_user_modified() {
 
 #[tokio::test]
 async fn updating_a_native_page_never_touches_page_sync() {
-    // No page_sync row exists — the user_modified write must be a harmless no-op.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p", "Native"))
         .await
@@ -2992,7 +2909,6 @@ async fn moving_a_synced_page_out_of_its_calendar_folder_is_rejected() {
         .await
         .unwrap();
 
-    // Move to a regular folder — rejected.
     let to_regular = update_page_impl(
         &pool,
         "p".into(),
@@ -3005,7 +2921,6 @@ async fn moving_a_synced_page_out_of_its_calendar_folder_is_rejected() {
     .unwrap_err();
     assert!(matches!(to_regular, AppError::Conflict(_)));
 
-    // Move to inbox (folder_id = null) — also rejected (still leaving the folder).
     let to_inbox = update_page_impl(
         &pool,
         "p".into(),
@@ -3068,8 +2983,7 @@ async fn a_detached_page_moves_out_of_its_calendar_folder() {
 }
 
 /// A done clone sits in the calendar folder with no `page_sync` row of its own, so
-/// the re-keyed guard lets it move. Deliberate: it is a completed occurrence the
-/// user owns, and nothing about it is still calendar-managed.
+/// the re-keyed guard lets it move: it is a completed occurrence the user owns.
 #[tokio::test]
 async fn a_done_clone_in_a_calendar_folder_is_filable() {
     let pool = test_pool().await;
@@ -3171,8 +3085,6 @@ async fn moving_a_page_between_regular_folders_is_allowed() {
     assert_eq!(moved.folder_id.as_deref(), Some("b"));
 }
 
-// ─── title/schedule reject · create guard · sync-aware delete/restore ─────────
-
 #[tokio::test]
 async fn editing_title_or_schedule_of_a_synced_page_is_rejected() {
     let pool = test_pool().await;
@@ -3214,7 +3126,6 @@ async fn editing_body_or_status_of_a_synced_page_is_allowed() {
         .unwrap();
     mark_synced(&pool, "p", "active").await;
 
-    // Body + completion are user-layer / ownership actions, never locked.
     update_page_impl(
         &pool,
         "p".into(),
@@ -3238,7 +3149,6 @@ async fn detached_page_title_and_schedule_unlock() {
         .unwrap();
     mark_synced(&pool, "p", "detached").await;
 
-    // Detach unlocks the mirror — the page is now a normal local record.
     let updated = update_page_impl(
         &pool,
         "p".into(),
@@ -3302,7 +3212,6 @@ async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     );
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("tombstoned"));
 
-    // Restore resumes syncing.
     restore_page_impl(&pool, "p").await.unwrap();
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("active"));
 }
@@ -3469,10 +3378,8 @@ async fn today_view_carries_schedule_locked() {
 }
 
 /// The third leg of Today == daily summary == `pikos today`. A past synced one-off
-/// stays open until the user ticks it, exactly like a native one — the carve-out
-/// that used to hide it was removed once the three surfaces were made to agree
-/// (C44). This query is the CLI's, and the axis has already regressed twice, so
-/// re-growing the carve-out here would go unnoticed: nothing else reads it.
+/// stays open until the user ticks it, exactly like a native one. This query is the CLI's, and
+/// nothing else reads it, so a re-grown carve-out here would go unnoticed.
 #[tokio::test]
 async fn today_keeps_a_past_synced_one_off_like_a_native_one() {
     let pool = test_pool().await;
@@ -3857,7 +3764,6 @@ async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
 async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
     let pool = test_pool().await;
     synced_series_from_today(&pool).await;
-    // Complete the oldest-open occurrence → head advances a week.
     let clone = complete_recurring_page_impl(&pool, synced_complete(&occ_date(0), &occ_start(0)))
         .await
         .unwrap()
@@ -3891,8 +3797,7 @@ async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
 
 #[tokio::test]
 async fn synced_uncomplete_and_undo_skip_no_longer_reject_synced() {
-    // The unified reverse commands now handle a synced series (no-op when the date
-    // isn't in the set) instead of rejecting it.
+    // The reverse commands handle a synced series, as a no-op when the date isn't in the set.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
@@ -4101,8 +4006,6 @@ async fn synced_uncomplete_is_a_noop_for_a_different_date() {
     assert_eq!(kept, 1, "original completion kept");
 }
 
-// ─── the foreground heal ──────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn the_foreground_heal_advances_a_stale_active_mirror() {
     // An active mirror's head floors at today, so it goes stale by the calendar
@@ -4151,8 +4054,6 @@ async fn the_foreground_heal_is_a_no_op_on_a_fresh_cache() {
         .unwrap();
     assert_eq!(before, after, "and nothing was rewritten");
 }
-
-// ─── Trash ───────────────────────────────────────────────────────────────────
 
 fn days_ago(n: i64) -> String {
     (chrono::Utc::now() - chrono::Duration::days(n))
@@ -4414,8 +4315,6 @@ async fn emptying_the_trash_is_the_same_sweep_at_zero_days() {
     assert!(list_trashed_pages_impl(&pool).await.unwrap().is_empty());
 }
 
-// ─── content_schema_version (migration 023) ──────────────────────────────────
-
 #[tokio::test]
 async fn new_pages_are_stamped_with_the_current_content_schema_version() {
     let pool = test_pool().await;
@@ -4427,9 +4326,8 @@ async fn new_pages_are_stamped_with_the_current_content_schema_version() {
 
 #[tokio::test]
 async fn existing_rows_backfill_to_version_one() {
-    // Rows written before migration 023 must read as version 1 rather than 0 or
-    // NULL — they came from the single desktop editor, which is what 1 denotes.
-    // Simulated by writing the column's pre-migration absence directly.
+    // Rows written before migration 023 must read as version 1, not 0 or NULL: they came from
+    // the single desktop editor. Simulated by writing the pre-migration absence directly.
     let pool = test_pool().await;
     let page = create_page_impl(&pool, new_page("Versioned"))
         .await

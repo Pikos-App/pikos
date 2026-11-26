@@ -49,11 +49,9 @@ struct EditorScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        // A rename, a new date or a moved folder from the menu is a write
-        // through the store, and the store bumps its version after each. The
-        // facts are re-read so the title and the strip follow; the document is
-        // not re-sent — the editor only loads when the page *id* changes, and
-        // re-pushing content it already holds would fight the caret.
+        // A write from the menu bumps the store's version, so the facts are re-read. The document is
+        // not re-sent: the editor loads only when the page id changes, and re-pushing content it
+        // already holds would fight the caret.
         .onChange(of: store.dataVersion) { _, _ in
             Task { await reloadFacts() }
         }
@@ -97,10 +95,8 @@ struct EditorScreen: View {
                 colorScheme: colorScheme,
                 accentColor: Brand.linkHex(dark: colorScheme == .dark),
                 isEditable: editable,
-                // Every callback hops to the main actor explicitly. They are
-                // invoked from WebKit delegate callbacks, and whether those are
-                // main-actor-isolated depends on the SDK's audit state — hopping
-                // is correct either way and costs nothing.
+                // Every callback hops to the main actor explicitly: whether WebKit delegate callbacks are
+                // main-actor-isolated depends on the SDK's audit state, and hopping is correct either way.
                 onDocumentChanged: { pageId, json, _ in
                     guard editable else { return }
                     Task { @MainActor in
@@ -129,12 +125,9 @@ struct EditorScreen: View {
                 }
             )
         }
-        // The formatting bar sits in the safe area's bottom inset, which the
-        // keyboard shrinks — so it rides up with the keyboard and goes away with
-        // it. Not a `.keyboard` toolbar item: that attaches to the input
-        // accessory of a SwiftUI text field, and a webview brings its own
-        // responder and its own accessory view, so a toolbar placed there is
-        // one nobody would ever see above this editor.
+        // The formatting bar sits in the safe area's bottom inset, which the keyboard shrinks, so it
+        // rides with the keyboard. Not a `.keyboard` toolbar item: a webview brings its own responder
+        // and accessory view, so a toolbar placed there would never be seen.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if editable && isDocumentFocused {
                 FormattingToolbar(
@@ -152,9 +145,7 @@ struct EditorScreen: View {
         }
         .background(.surfacePrimary)
         .animation(.snappy, value: isDocumentFocused)
-        // The system picker runs out of process, so no photo-library
-        // permission is asked for: the app only ever sees the one picture
-        // chosen.
+        // The system picker runs out of process, so no photo-library permission is asked for.
         .photosPicker(isPresented: $isPickingPhoto, selection: $pickedPhoto, matching: .images)
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
@@ -213,13 +204,10 @@ struct EditorScreen: View {
         if page != nil { await store.markOpened(pageId: pageId) }
     }
 
-    /// Write a picked photo into the workspace and put it in the document.
-    ///
-    /// The document stores `assets/<file>`, the form the desktop stores, so a
-    /// page reads the same in both apps — never an absolute path, which would
-    /// be wrong after a restore to a new device. JPEG, PNG and GIF are stored as they are;
-    /// anything else — a HEIC from the camera roll, most often — is re-encoded
-    /// as JPEG so it renders here and on the desktop.
+    /// Write a picked photo into the workspace and put it in the document as `assets/<file>`, the
+    /// desktop's form, never an absolute path, which would be wrong after a restore to a new device.
+    /// JPEG, PNG and GIF are stored as they are; anything else, a HEIC most often, is re-encoded as
+    /// JPEG so it renders here and on the desktop.
     private func insert(photo item: PhotosPickerItem, into assets: URL) async {
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
@@ -245,11 +233,8 @@ struct EditorScreen: View {
         }
     }
 
-    /// Re-read the page after a write from the menu.
-    ///
-    /// Only once it has loaded — the first load owns the failure state, and a
-    /// version bump arriving mid-load must not flip the screen to "deleted"
-    /// over a page that is fine.
+    /// Re-read the page after a write from the menu, only once it has loaded: a version bump
+    /// arriving mid-load must not flip the screen to "deleted".
     private func reloadFacts() async {
         guard page != nil, let latest = await store.page(id: pageId) else { return }
         page = latest

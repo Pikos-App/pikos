@@ -1,4 +1,4 @@
-// In-memory StorageAdapter for tests — injected via VITE_TEST_MODE.
+// In-memory StorageAdapter for tests, injected via VITE_TEST_MODE.
 
 import { StorageError } from "../errors";
 import type {
@@ -78,13 +78,10 @@ import {
 } from "./mockViews";
 
 /**
- * Command-layer guard messages, mirrored verbatim from the Rust writers so a
- * mis-routed write fails identically in test mode and in prod. The mock is the
- * only place e2e and unit tests ever see these rejections, so a message the
- * backend has since reworded still reads as correct here and the test asserting
- * it still passes — against words no user is shown. `guardMessages.test.ts` checks
- * this table against the Rust source rather than trusting lockstep edits, and
- * sweeps the writers for refusals missing from it.
+ * Command-layer guard messages, mirrored verbatim from the Rust writers so a mis-routed write
+ * fails identically in test mode and in prod. A message the backend has since reworded would
+ * still read as correct here, so `guardMessages.test.ts` checks this table against the Rust
+ * source and sweeps the writers for refusals missing from it.
  */
 export const MIRRORED_GUARD_MESSAGES = {
   createdInCalendarFolder: "Pages cannot be created in an external calendar folder",
@@ -251,9 +248,8 @@ function originalDateInRuleBasis(occurrenceDate: string, ruleStart: string): str
   return time ? `${day}T${time}` : day;
 }
 
-// Reduced rather than spread: `Math.max(...array)` passes one argument per element and overflows
-// the stack somewhere around a hundred thousand, so creating a page in a large workspace threw
-// RangeError. Found by the scale benchmark at two million pages.
+// Reduced, not spread: `Math.max(...array)` passes one argument per element and overflows the stack
+// near a hundred thousand, so creating a page in a large workspace would throw RangeError.
 function byText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
@@ -311,9 +307,8 @@ function matchesFilter(page: Page, text: string, filter: PageFilter): boolean {
   if (filter.hasSchedule === true && page.scheduledStart == null) return false;
   if (filter.query !== undefined && filter.query.length > 0) {
     const q = filter.query.toLowerCase();
-    // Title and extracted text only, matching the writer's `title LIKE … OR
-    // content_text LIKE …`. Searching the raw Tiptap JSON instead made "paragraph"
-    // and "doc" match every page here and nothing in the real database.
+    // Title and extracted text only, as the writer's `title LIKE ... OR content_text LIKE ...`;
+    // raw Tiptap JSON would make "paragraph" match every page here and none in the database.
     const haystack = `${page.title} ${text}`.toLowerCase();
     if (!haystack.includes(q)) return false;
   }
@@ -396,22 +391,19 @@ export class MockStorageAdapter implements StorageAdapter {
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
   private reminders = new Map<string, PageReminder>();
-  // `focus_sessions`. Only the timer writes here and only on stop, so this holds
-  // finished sessions — a running one lives in the timer's own state, never here.
+  // `focus_sessions`: finished sessions only. The timer writes on stop, and a running one lives
+  // in its own state.
   private focusSessions: FocusSession[] = [];
-  // The notification log. Its only real writer is the Rust scheduler, which has
-  // no twin here (nothing in test mode ticks a clock or talks to the OS), so
-  // this stays empty unless a test seeds it via `seedNotificationHistory`.
+  // The notification log. The Rust scheduler is its only writer and has no twin here, so it stays
+  // empty unless a test seeds it via `seedNotificationHistory`.
   private notificationHistory: NotificationHistoryEntry[] = [];
-  // `pages.deleted_at`: the id mapped to *when* it was trashed, not just that it
-  // was. The trash sorts on that stamp and the retention sweep compares against
-  // it, so a Set (which is all the hidden-from-lists behaviour ever needed) would
-  // leave both of those untestable here.
+  // `pages.deleted_at`: the id mapped to when it was trashed. The trash sorts on that stamp and
+  // the retention sweep compares against it, which a Set could not support.
   private softDeleted = new Map<string, string>();
   private softDeletedFolders = new Set<string>();
   private syncAccounts = new Map<string, SyncAccount>();
   private syncCalendars = new Map<string, SyncCalendar>();
-  // Disconnected (dormant) accounts: kept for reconnect re-link, hidden from status.
+  // Dormant accounts: kept for reconnect re-link, hidden from status.
   private dormantAccounts = new Set<string>();
   // Pages each calendar's own teardown severed, so a re-enable reclaims those and
   // not whatever else in the folder happens to be detached — see `_relinkCalendar`.
@@ -444,20 +436,18 @@ export class MockStorageAdapter implements StorageAdapter {
     this.providerEvents.clear();
   }
 
-  // ─── Command-layer guards ────────────────────────────────────────────────────
-
-  /** The locked-mirror rejection the backend's `ensure_page_schedule_unlocked`
-   *  throws for a synced (`active`) page, else null. Returned (not thrown) so callers
-   *  reject the promise — a synchronous throw would break `.rejects` matchers. */
+  /** The locked-mirror rejection `ensure_page_schedule_unlocked` throws for an active synced page,
+   *  else null. Returned, not thrown, so callers reject the promise: a synchronous throw would
+   *  break `.rejects` matchers. */
   private lockedMirrorError(pageId: string | undefined): StorageError | null {
     return pageId != null && this.pages.get(pageId)?.scheduleLocked
       ? new StorageError("Conflict", SYNCED_READONLY_MSG)
       : null;
   }
 
-  /** Backend `synced_occurrence_is_valid`: is `day` (YYYY-MM-DD) a real occurrence
-   *  of the page's rule? Guards against a cross-zone off-by-one occurrence key that
-   *  would write an unsuppressable completed-set entry. */
+  /** Backend `synced_occurrence_is_valid`: whether `day` (YYYY-MM-DD) is a real occurrence of the
+   *  page's rule. Guards against a cross-zone off-by-one key writing an unsuppressable
+   *  completed-set entry. */
   private syncedOccurrenceValid(pageId: string, day: string): boolean {
     const rule = [...this.rules.values()].find((r) => r.pageId === pageId);
     const page = this.pages.get(pageId);
@@ -467,16 +457,14 @@ export class MockStorageAdapter implements StorageAdapter {
     return rawExpandRule(rule, page, lo, hi).some((o) => o.originalDate === day);
   }
 
-  // ─── Pages ──────────────────────────────────────────────────────────────────
-
   getPage(id: string): Promise<Page | null> {
     const page = this.pages.get(id);
     return Promise.resolve(page ? { ...page, rowSeq: this.pages.rowSeq.get(id) ?? 0 } : null);
   }
 
   createPage(data: NewPage): Promise<Page> {
-    // Only the reconciler seeds into a calendar folder — a page created there is
-    // trapped by updatePage's placement lock (matches create_page_impl, pages.rs).
+    // Only the reconciler seeds into a calendar folder; a page created there is trapped by
+    // updatePage's placement lock (as in `create_page_impl`).
     if (data.folderId != null && this.folders.get(data.folderId)?.isExternalCalendar) {
       return Promise.reject(new StorageError("Conflict", CREATED_IN_CALENDAR_FOLDER_MSG));
     }
@@ -484,28 +472,23 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   /**
-   * Test/seed-only (NOT on `StorageAdapter`): create a page inside a calendar
-   * folder, which `createPage` refuses. Stands for the reconciler, whose raw SQL
-   * is the only writer that seeds a mirror — the command-layer guard exists so
-   * that nothing reachable from the UI can. Seeding through `createPage` instead
-   * would mean the guard could never be turned on here without breaking every
-   * synced fixture, which is how it stayed unmirrored.
+   * Test/seed-only (NOT on `StorageAdapter`): creates a page inside a calendar folder, which
+   * `createPage` refuses. Stands for the reconciler, the only writer that seeds a mirror. Seeding
+   * through `createPage` would mean the guard could never be turned on here without breaking
+   * every synced fixture.
    */
   seedMirrorPage(data: NewPage): Promise<Page> {
     return Promise.resolve(this.insertPage(data));
   }
 
   /**
-   * Test/seed-only (NOT on `StorageAdapter`): fill the adapter with generated pages so a render
+   * Test/seed-only (NOT on `StorageAdapter`): fills the adapter with generated pages so a render
    * can be timed against a realistic row count.
    *
-   * Does not go through `insertPage`, deliberately. That calls `nextPageOrder` over every existing
-   * page, which is O(n) per insert and O(n^2) for a seed — seeding 50,000 pages through it takes
-   * minutes and measures the seeder rather than the app. Sort order here is just the index, which
-   * is what `nextPageOrder` would have produced anyway for an empty start.
-   *
-   * Bodies are short and varied rather than identical: a list of one repeated string lets the
-   * renderer and the browser's text shaping cache in ways a real workspace never would.
+   * Bypasses `insertPage`, whose `nextPageOrder` is O(n) per insert: seeding 50,000 pages through
+   * it takes minutes and measures the seeder. Sort order here is the index, which is what
+   * `nextPageOrder` would produce from empty. Bodies are short and varied: one repeated string
+   * lets the renderer and text-shaping cache in ways a real workspace never would.
    */
   seedPages(
     count: number,
@@ -566,13 +549,10 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   /**
-   * Test/seed-only (NOT on `StorageAdapter`): stamp a page with the synced
-   * provenance a real `page_sync` row would derive — `scheduleLocked`,
-   * `syncState`, the source `timezone`, and the read-only mirror metadata
-   * (`mirrorLocation`, `mirrorAttendees`, `pendingDescription`). Lets the
-   * synced-pages seed + UI tests exercise the locked/zoned/detached
-   * treatment and the description-changed notice without a reconciler.
-   * `active` locks the schedule; `detached`/`tombstoned` leave it editable.
+   * Test/seed-only (NOT on `StorageAdapter`): stamps a page with the provenance a real
+   * `page_sync` row would derive (`scheduleLocked`, `syncState`, source `timezone`, mirror
+   * metadata), so tests can exercise the locked, zoned and detached treatments without a
+   * reconciler. `active` locks the schedule; `detached` and `tombstoned` leave it editable.
    */
   markPageSynced(
     pageId: string,
@@ -584,13 +564,9 @@ export class MockStorageAdapter implements StorageAdapter {
       pendingDescription?: string | null;
       /** Local day the page first synced; defaults to today, as a fresh sync would. */
       syncedSince?: string | null;
-      /**
-       * `page_sync.user_modified`. In the app only the editor path sets it, so a
-       * fixture that needs an already-owned mirror could not build one — the
-       * seeded state was unreachable, and teardown destroyed a page the real
-       * writer keeps. Seeds pass it the way the SQL seeder binds the column
-       * (db/dev/seed.rs); nothing on `StorageAdapter` can.
-       */
+      /** `page_sync.user_modified`. In the app only the editor path sets it, so a fixture needing an
+       *  already-owned mirror could not otherwise build one. Seeds bind it as the SQL seeder does
+       *  (db/dev/seed.rs). */
       userModified?: boolean;
     } = {}
   ): void {
@@ -612,21 +588,15 @@ export class MockStorageAdapter implements StorageAdapter {
     });
   }
 
-  /**
-   * Test/seed-only (NOT on `StorageAdapter`): read `page_sync.user_modified` back.
-   * The flag is otherwise only observable through what teardown does with the page,
-   * which is too coarse for the seed-conformance table to name it.
-   */
+  /** Test/seed-only (NOT on `StorageAdapter`): reads `page_sync.user_modified` back, which is
+   * otherwise visible only through what teardown does. */
   isPageUserModified(pageId: string): boolean {
     return this.userModified.has(pageId);
   }
 
-  /**
-   * Test-only (NOT on `StorageAdapter`): park the head on a date the derivation
-   * disagrees with. A session left open across midnight produces exactly this, and
-   * no adapter method can — `updatePage` refuses a locked mirror's schedule, which
-   * is the case the foreground heal most needs to be tested on.
-   */
+  /** Test-only (NOT on `StorageAdapter`): parks the head on a date the derivation disagrees with,
+   * as a session left open across midnight does. `updatePage` refuses a locked mirror's schedule,
+   * so nothing else can reach the case the foreground heal most needs tested. */
   setHeadScheduleForTest(pageId: string, scheduledStart: string): void {
     const page = this.pages.get(pageId);
     if (page) this.pages.set(pageId, { ...page, scheduledStart });
@@ -637,10 +607,9 @@ export class MockStorageAdapter implements StorageAdapter {
     const { baseContent: _typedOver, ...updates } = update;
     const existing = this.pages.get(id);
     if (!existing) return Promise.reject(new Error(`Page not found: ${id}`));
-    // Placement lock, keyed on the live sync link rather than the folder: nothing
-    // moves into a calendar folder, and an actively-synced page can't leave. Once
-    // detached it is the user's and files anywhere. The reclaim path writes the
-    // folder directly, as the reconciler does, so it isn't stopped by this.
+    // Placement lock, keyed on the live sync link, not the folder: nothing moves into a calendar
+    // folder and an actively synced page can't leave. A detached page is the user's. The reclaim
+    // path writes the folder directly, as the reconciler does.
     if (updates.folderId !== undefined) {
       const target = updates.folderId != null ? this.folders.get(updates.folderId) : undefined;
       if (target?.isExternalCalendar) {
@@ -650,8 +619,8 @@ export class MockStorageAdapter implements StorageAdapter {
         return Promise.reject(new StorageError("Conflict", SYNCED_PLACEMENT_MSG));
       }
     }
-    // Locked mirror: title + schedule are calendar-owned on a synced page.
-    // Body/meta/status/tags stay editable (matches update_page_impl, pages.rs).
+    // Locked mirror: title and schedule are calendar-owned; body, meta, status and tags stay
+    // editable (as in `update_page_impl`).
     if (
       updates.title !== undefined ||
       updates.scheduledStart !== undefined ||
@@ -660,9 +629,8 @@ export class MockStorageAdapter implements StorageAdapter {
       const locked = this.lockedMirrorError(id);
       if (locked) return Promise.reject(locked);
     }
-    // Editing an authored field claims ownership, so an upstream delete or an
-    // unsync detaches the page instead of destroying it. Reading and arranging
-    // author nothing (`marks_ownership`, pages.rs).
+    // Editing an authored field claims ownership, so an upstream delete or an unsync detaches the
+    // page rather than destroying it. Reading and arranging author nothing (`marks_ownership`).
     if (Object.keys(updates).some((k) => k !== "sortOrder" && k !== "lastOpenedAt")) {
       this.userModified.add(id);
     }
@@ -674,8 +642,7 @@ export class MockStorageAdapter implements StorageAdapter {
 
   deletePage(id: string): Promise<void> {
     this.pages.delete(id);
-    // The schema cascades everything hanging off a page; without this the mock
-    // keeps orphan rows the real database cannot hold.
+    // The schema cascades what hangs off a page; without this the mock keeps orphan rows.
     for (const [rid, r] of this.reminders) if (r.pageId === id) this.reminders.delete(rid);
     for (const [sid, s] of this.schedules) if (s.pageId === id) this.schedules.delete(sid);
     for (const [rid, r] of this.rules) if (r.pageId === id) this.rules.delete(rid);
@@ -734,12 +701,10 @@ export class MockStorageAdapter implements StorageAdapter {
       const folder = page.folderId == null ? null : this.folders.get(page.folderId);
       rows.push({
         deletedAt,
-        // A folder trashed with the page has no surviving name to show — the
-        // Rust subquery filters on `folders.deleted_at IS NULL` for the same reason.
+        // A folder trashed with the page has no name to show, as in the Rust subquery.
         folderName: folder && !this.softDeletedFolders.has(folder.id) ? folder.name : null,
         id,
-        // `EXISTS(page_sync)`: any link at all, which is the predicate the delete
-        // path diverts on — not just an active one.
+        // Any link at all, not just an active one, is what the delete path diverts on.
         isSynced: page.syncState != null,
         title: page.title,
       });
@@ -753,9 +718,8 @@ export class MockStorageAdapter implements StorageAdapter {
     for (const [id, deletedAt] of [...this.softDeleted]) {
       if (deletedAt > cutoff) continue;
       const page = this.pages.get(id);
-      // A mirror keeps its place in the trash: destroying the row would take the
-      // tombstone with it and the next sync pass would re-create the event
-      // (`purge_trashed_pages_older_than`, which reuses the same divert).
+      // A mirror keeps its place in the trash: destroying the row would take the tombstone with
+      // it and the next sync pass would re-create the event (`purge_trashed_pages_older_than`).
       if (page && page.syncState != null) continue;
       this.softDeleted.delete(id);
       void this.deletePage(id);
@@ -1025,10 +989,8 @@ export class MockStorageAdapter implements StorageAdapter {
     let completedCount = 0;
     for (const page of this.pages.values()) {
       if (this.softDeleted.has(page.id)) continue;
-      // Title, subtitle, body text, tags and a mirror's calendar-owned metadata
-      // are one indexed document, so a query spanning two of them still matches.
-      // Extracted text, never the raw Tiptap JSON — the index never returns a
-      // page because the user typed "paragraph".
+      // Title, subtitle, body text, tags and a mirror's metadata are one indexed document, so a
+      // query spanning two still matches. Extracted text, never raw Tiptap JSON.
       const subtitle = page.subtitle ?? "";
       const body = this.pages.textOf(page);
       const mirror = mirrorSearchText(page.mirrorLocation, page.mirrorAttendees) ?? "";
@@ -1039,15 +1001,14 @@ export class MockStorageAdapter implements StorageAdapter {
         completedCount++;
         if (!includeCompleted) continue;
       }
-      // Labelling is the writer's own post-selection heuristic (search.rs), which
-      // is a looser substring test than selection — a row is already a hit by here.
+      // The writer's own post-selection heuristic (search.rs): looser than selection, since a row is
+      // already a hit by here.
       const titleLower = page.title.toLowerCase();
       const titleMatch = terms.some((t) => titleLower.includes(t));
       const subtitleLower = subtitle.toLowerCase();
       const subtitleMatch = terms.some((t) => subtitleLower.includes(t));
-      // Matched on, never quoted: the excerpt is body only (`build_excerpt`, search.rs).
-      // A hit only in the mirror metadata quotes the metadata — same fallback and
-      // display join as `build_mirror_excerpt` (search.rs), which owns why.
+      // The excerpt is body only (`build_excerpt`, search.rs); a hit only in mirror metadata quotes
+      // that, as `build_mirror_excerpt` does.
       const excerpt =
         excerptAround(body, terms) || excerptAround(mirror.replace(/\n/g, " · "), terms);
       const contentMatch = excerpt !== "";
@@ -1077,14 +1038,11 @@ export class MockStorageAdapter implements StorageAdapter {
       if (titleMatch) titleResults.push(result);
       else contentResults.push(result);
     }
-    // Title matches first. Deliberately not a bm25 reproduction: the weighted rank
-    // is not reachable without the index, so order here is an approximation and no
-    // test should assert on it beyond title-before-content.
+    // Title matches first. Not a bm25 reproduction, since the weighted rank needs the index, so
+    // tests shouldn't assert beyond title-before-content.
     const results = [...titleResults, ...contentResults].slice(0, 20);
     return Promise.resolve({ completedCount, completedCountCapped: false, results });
   }
-
-  // ─── Folders ────────────────────────────────────────────────────────────────
 
   getFolder(id: string): Promise<Folder | null> {
     return Promise.resolve(this.folders.get(id) ?? null);
@@ -1106,8 +1064,8 @@ export class MockStorageAdapter implements StorageAdapter {
   updateFolder(id: string, updates: FolderUpdate): Promise<Folder> {
     const existing = this.folders.get(id);
     if (!existing) return Promise.reject(new Error(`Folder not found: ${id}`));
-    // Placement lock: a calendar folder can't be reparented and nothing nests under
-    // one; name and colour stay editable (matches update_folder_impl, folders.rs).
+    // Placement lock: a calendar folder can't be reparented and nothing nests under one; name
+    // and colour stay editable (as in `update_folder_impl`).
     if (updates.parentId !== undefined) {
       const intoExternal =
         updates.parentId != null && this.folders.get(updates.parentId)?.isExternalCalendar;
@@ -1117,7 +1075,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     const updated: Folder = { ...existing, ...updates, id, updatedAt: now() };
     this.folders.set(id, updated);
-    // Mirrors the real writer: a sidebar recolour reaches the calendar too.
+    // A sidebar recolour reaches the calendar too.
     if (typeof updates.color === "string") {
       for (const cal of this.syncCalendars.values()) {
         if (cal.folderId === id) this.syncCalendars.set(cal.id, { ...cal, color: updates.color });
@@ -1130,7 +1088,6 @@ export class MockStorageAdapter implements StorageAdapter {
     if (this.folders.get(id)?.isExternalCalendar) {
       return Promise.reject(new StorageError("Conflict", EXTERNAL_FOLDER_LOCKED_MSG));
     }
-    // Soft-delete all pages in this folder (mirrors Rust backend behavior)
     for (const page of this.pages.values()) {
       if (page.folderId === id) this.setTrashed(page.id, true);
     }
@@ -1172,8 +1129,6 @@ export class MockStorageAdapter implements StorageAdapter {
     });
     return Promise.resolve();
   }
-
-  // ─── Schedules ──────────────────────────────────────────────────────────────
 
   createPageSchedule(data: NewPageSchedule): Promise<PageSchedule> {
     const locked = this.lockedMirrorError(data.pageId);
@@ -1229,8 +1184,7 @@ export class MockStorageAdapter implements StorageAdapter {
     if (ruleIds.length === 0) return Promise.resolve([]);
     const wanted = new Set(ruleIds);
     const results = [...this.schedules.values()].filter((s) => {
-      // Mirrors Rust: schedules of a soft-deleted page are excluded (the SQL
-      // joins pages and filters `deleted_at IS NULL`).
+      // Schedules of a soft-deleted page are excluded, as the SQL join on `deleted_at` does.
       if (this.softDeleted.has(s.pageId)) return false;
       return s.ruleId != null && wanted.has(s.ruleId);
     });
@@ -1239,14 +1193,10 @@ export class MockStorageAdapter implements StorageAdapter {
     );
   }
 
-  // ─── Recurrence rules ────────────────────────────────────────────────────────
-
   createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
     const locked = this.lockedMirrorError(data.pageId);
     if (locked) return Promise.reject(locked);
-    // SQL enforces UNIQUE(page_id) on page_recurrence_rules — a page has at
-    // most one rule. Mirror it so tests that accidentally create two surface
-    // the conflict here instead of passing the mock and failing in prod.
+    // SQL enforces UNIQUE(page_id), so a second rule surfaces here and not only in prod.
     for (const existing of this.rules.values()) {
       if (existing.pageId === data.pageId) {
         return Promise.reject(
@@ -1292,8 +1242,8 @@ export class MockStorageAdapter implements StorageAdapter {
     if (!rule) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
     const locked = this.lockedMirrorError(rule.pageId);
     if (locked) return Promise.reject(locked);
-    // Merge into the CURRENT row (mirrors the Rust read-merge-write tx) — never
-    // a replacement, so exdates written since the caller's snapshot survive.
+    // Merges into the current row, never a replacement, so exdates written since the caller's
+    // snapshot survive.
     const merged = [...rule.rruleExdates];
     for (const d of dates) {
       if (!merged.includes(d)) merged.push(d);
@@ -1324,8 +1274,7 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
-  /** Mirrors the Rust `is_recurring` EXISTS projection, which the mock stores as a
-   * flag rather than deriving per read — same shape as `scheduleLocked`. */
+  /** Mirrors the Rust `is_recurring` EXISTS projection, stored as a flag like `scheduleLocked`. */
   private setRecurringFlag(pageId: string, value: boolean): void {
     const page = this.pages.get(pageId);
     if (page) this.pages.set(pageId, { ...page, isRecurring: value });
@@ -1337,9 +1286,7 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
-    // Rust filters via `pages.deleted_at IS NULL`. Mock soft-delete tracks the
-    // same state in the in-memory Set, so check there — `p.deletedAt` is never
-    // set by softDeletePage and reading it here was always returning everything.
+    // Trashed pages are tracked in the in-memory Set (`p.deletedAt` is never set), so check there.
     return Promise.resolve([...this.rules.values()].filter((r) => !this.softDeleted.has(r.pageId)));
   }
 
@@ -1358,10 +1305,10 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(result);
   }
 
-  /** Re-derives `head.scheduledStart` (or terminal `done`) from truth — the rule
-   * base minus the exclusion union (completed ∪ skip ∪ rruleExdates) — mirroring
-   * the Rust `recompute_recurring_schedule`. The single writer of a recurring
-   * head's cache; every set-changing op calls it. Returns whether anything changed. */
+  /** Re-derives `head.scheduledStart` (or terminal `done`) from the rule base minus the exclusion
+   * union (completed, skipped, rruleExdates), as the Rust `recompute_recurring_schedule` does. The
+   * single writer of a recurring head's cache; every set-changing op calls it. Returns whether
+   * anything changed. */
   private recomputeHead(pageId: string): boolean {
     const head = this.pages.get(pageId);
     const rule = [...this.rules.values()].find((r) => r.pageId === pageId);
@@ -1370,8 +1317,8 @@ export class MockStorageAdapter implements StorageAdapter {
       ...rule.rruleExdates,
       ...Object.keys(head.completedOccurrences ?? {}),
       ...(head.skippedOccurrences ?? []),
-      // Materialised overrides, matching exclusion_union (recurrence_derive.rs) —
-      // without them the head can land back on an occurrence that moved away.
+      // Materialised overrides, as in `exclusion_union` (recurrence_derive.rs); without them the head
+      // can land on an occurrence that moved away.
       ...[...this.schedules.values()]
         .filter((s) => s.ruleId === rule.id && s.originalDate)
         .map((s) => s.originalDate!),
@@ -1435,8 +1382,8 @@ export class MockStorageAdapter implements StorageAdapter {
     if (!head)
       return Promise.reject(new StorageError("NotFound", `Page not found: ${data.pageId}`));
 
-    // Occurrence completion is set-only — a mis-route to a non-recurring page would
-    // mint a clone no series can suppress. Reject it (both kinds), as the backend does.
+    // Occurrence completion is set-only: on a non-recurring page it would mint a clone no series
+    // can suppress, so reject it for both kinds, as the backend does.
     const hasRule = [...this.rules.values()].some((r) => r.pageId === data.pageId);
     if (!hasRule) return Promise.reject(new StorageError("Conflict", NOT_RECURRING_MSG));
 
@@ -1463,9 +1410,8 @@ export class MockStorageAdapter implements StorageAdapter {
       cloneEnd = head.scheduledEnd ?? null;
     }
 
-    // A head a second writer advanced under the caller: already complete means the
-    // race is simply lost, so hand back the winner's clone; any other move refuses
-    // (mirrors the Rust guard).
+    // A head a second writer advanced: already complete means the race is lost, so return the
+    // winner's clone; any other move refuses (as in the Rust guard).
     const expected = data.expectedOccurrenceDate;
     if (expected && expected !== occurrenceDate) {
       const wonId = head.completedOccurrences?.[expected];
@@ -1474,8 +1420,7 @@ export class MockStorageAdapter implements StorageAdapter {
       return Promise.resolve({ clone: toSummary(won), head: toSummary(head) });
     }
 
-    // Idempotency: a repeat completion of the same occurrence returns the existing
-    // live clone rather than minting a duplicate (mirrors the Rust guard).
+    // A repeat completion returns the existing live clone rather than minting a duplicate.
     const existingId = head.completedOccurrences?.[occurrenceDate];
     const existing = existingId ? this.pages.get(existingId) : undefined;
     if (existing) {
@@ -1484,10 +1429,9 @@ export class MockStorageAdapter implements StorageAdapter {
 
     const cloneId = uuid();
     const timestamp = now();
-    // `completedAt` follows the local-wall-clock convention (date-compared against
-    // the local day in the Completed view), unlike created/updated_at which are UTC.
-    // The clone is always a durable NATIVE page (no sync provenance, never locked) —
-    // for a synced series it's the user's own completion record.
+    // `completedAt` is local wall clock (compared with the local day in the Completed view), unlike
+    // created/updated_at, which are UTC. The clone is always a native, unlocked page: for a synced
+    // series it is the user's own completion record.
     const clone: Page = {
       ...head,
       completedAt: nowLocalISO(),
@@ -1508,9 +1452,7 @@ export class MockStorageAdapter implements StorageAdapter {
     };
     this.pages.set(cloneId, clone);
 
-    // Record the completion on the head, then recompute it onto the next open
-    // occurrence (or done) — for both kinds; the reconciler converges a synced head
-    // off the same sets on the next sync.
+    // The reconciler converges a synced head off the same sets on the next sync.
     const completedOccurrences = {
       ...(head.completedOccurrences ?? {}),
       [occurrenceDate]: cloneId,
@@ -1562,8 +1504,7 @@ export class MockStorageAdapter implements StorageAdapter {
     const changed: PageSummary[] = [];
     for (const rule of this.rules.values()) {
       if (this.softDeleted.has(rule.pageId)) continue;
-      // Active mirrors are healed too, never skipped as reconciler-owned — the
-      // reason is on `recompute_recurring_schedules_impl`.
+      // Active mirrors are healed too; the reason is on `recompute_recurring_schedules_impl`.
       if (this.recomputeHead(rule.pageId)) {
         const head = this.pages.get(rule.pageId);
         if (head) changed.push(toSummary(head));
@@ -1584,9 +1525,8 @@ export class MockStorageAdapter implements StorageAdapter {
 
     const timestamp = now();
 
-    // Synced origin → the occurrence stays in-series as an override row, moved in
-    // place when the provider already materialised it. Mirrors the two arms of
-    // reschedule_virtual_occurrence_impl (pages.rs), which owns the reasoning.
+    // A synced origin stays in-series as an override row, moved in place when the provider already
+    // materialised it (the two arms of `reschedule_virtual_occurrence_impl`).
     if (head.syncState) {
       // Day-keyed: a synced timed override stores originalDate as a full wall-clock.
       const existing = [...this.schedules.values()].find(
@@ -1595,8 +1535,8 @@ export class MockStorageAdapter implements StorageAdapter {
           s.originalDate &&
           dateKey(s.originalDate) === data.originalDate
       );
-      // Rebuilt rather than spread over: the move clears the source zone (the user
-      // asserted a device-local time) and an all-day target carries no end.
+      // Rebuilt, not spread: the move clears the source zone (the user asserted a device-local time)
+      // and an all-day target carries no end.
       const override: PageSchedule = {
         createdAt: existing?.createdAt ?? timestamp,
         id: existing?.id ?? uuid(),
@@ -1646,12 +1586,8 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve({ clone: toSummary(clone), ruleExdates });
   }
 
-  // ─── Focus sessions ─────────────────────────────────────────────────────────
-
   createFocusSession(data: NewFocusSession): Promise<FocusSession> {
-    // Both refusals mirror the Rust writer (`pikos_db::create_focus_session`).
-    // Kept here rather than let through, because a bad row is invisible: it
-    // lands in a sum on a settings card, not in anything a test would look at.
+    // Both refusals mirror the writer. A bad row is invisible: it lands in a sum on a settings card.
     if (data.durationS <= 0) {
       return Promise.reject(
         new StorageError(
@@ -1668,14 +1604,11 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(session);
   }
 
-  /** Test-only (NOT on `StorageAdapter`): the sessions written so far. The
-   *  interface is write-only — the app reads these back as a total through
-   *  `getUsageStats` — so a test asserting the timer wrote needs this. */
+  /** Test-only (NOT on `StorageAdapter`): the sessions written so far, since the interface is
+   *  write-only. */
   listFocusSessionsForTest(): FocusSession[] {
     return [...this.focusSessions];
   }
-
-  // ─── Reminders ──────────────────────────────────────────────────────────────
 
   /** The writer's rules: "no reminders" (-1) replaces the page's reminders, a real one replaces
    *  "no reminders", and a lead the page already has returns that reminder. */
@@ -1723,9 +1656,8 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]> {
-    // Mirrors the writer's ORDER BY firedAt DESC, LIMIT — and, like it, joins the
-    // page title live so a renamed page reads under its current name and a
-    // deleted one reads as null.
+    // As the writer: ORDER BY firedAt DESC with LIMIT, joining the page title live, so a renamed
+    // page reads under its current name and a deleted one as null.
     const rows = [...this.notificationHistory]
       .sort((a, b) => b.firedAt.localeCompare(a.firedAt))
       .slice(0, Math.max(0, limit))
@@ -1736,9 +1668,6 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(rows);
   }
 
-  /** Stand in for the Rust scheduler, the log's only writer, so tests and the
-   *  test-mode app can exercise the history surface. Not part of StorageAdapter:
-   *  nothing in the product writes this table from TypeScript. */
   /**
    * Test/seed-only (NOT on `StorageAdapter`): put folders and pages in place exactly as given,
    * ids, order values and timestamps included, which the create paths assign themselves. For
@@ -1749,30 +1678,24 @@ export class MockStorageAdapter implements StorageAdapter {
     for (const page of pages) this.pages.set(page.id, page);
   }
 
+  /** Stands in for the Rust scheduler, the log's only writer, so tests can exercise the history
+   *  surface. */
   seedNotificationHistory(entries: NotificationHistoryEntry[]): void {
     this.notificationHistory = [...entries];
   }
 
-  // ─── Private helpers ─────────────────────────────────────────────────────────
-
   private _refreshDenorm(pageId: string): void {
     const page = this.pages.get(pageId);
     if (!page) return;
-    // Mirror the Rust adapter (src-tauri/src/db/schedules.rs:refresh_schedule_denorm):
-    // rrule-backed pages own their denorm directly and are skipped here — the
-    // head's "current occurrence" is set by complete_recurring_page and by
-    // scheduleOnce's explicit denorm write. Refreshing from page_schedules
-    // would clobber the head back to a lingering past anchor row after a
-    // completion advance. (Prod skips these; the mock must too, or it silently
-    // papers over a stale-denorm bug the real app has.)
+    // As `refresh_schedule_denorm`: rrule-backed pages own their denorm directly, so they are
+    // skipped. The head's current occurrence is set by complete_recurring_page and scheduleOnce;
+    // refreshing from page_schedules would clobber it back to a lingering past anchor row.
     for (const rule of this.rules.values()) {
       if (rule.pageId === pageId) return;
     }
-    // prefer the earliest UPCOMING non-override schedule; fall back to the
-    // earliest past schedule when no future exists; NULL only when no schedules.
-    // Stripping the denorm for past-only events was a bug — it caused recent
-    // optimistic updates to be overwritten by an empty denorm on next write,
-    // which looked like a silent revert of the just-created chip.
+    // Prefer the earliest upcoming non-override schedule, then the earliest past one, else NULL.
+    // Stripping the denorm for past-only events would let a later write overwrite an optimistic
+    // update with an empty denorm, reading as a silent revert of the just-created chip.
     const today = new Date().toISOString().slice(0, 10);
     const candidates = [...this.schedules.values()].filter((s) => s.pageId === pageId && !s.ruleId);
     const next = candidates.sort((a, b) => {
@@ -1793,8 +1716,6 @@ export class MockStorageAdapter implements StorageAdapter {
     this.pages.set(pageId, updated);
   }
 
-  // ─── Calendar sync ────────────────────────────────────────────────────────────
-
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
     return Promise.resolve(
       this._connectAccount(
@@ -1809,8 +1730,8 @@ export class MockStorageAdapter implements StorageAdapter {
   reconnectCaldavAccount(accountId: string, password: string): Promise<AccountWithCalendars> {
     const account = this.syncAccounts.get(accountId);
     if (!account) return Promise.reject(new Error(`sync account not found: ${accountId}`));
-    // The real path proves the password by discovery before storing it; the mock has
-    // no server, so an empty one stands in for the rejection e2e needs.
+    // The real path proves the password by discovery; with no server, an empty one stands in for
+    // the rejection e2e needs.
     if (!password) return Promise.reject(new Error("Could not connect. Check the password."));
     const next = { ...account, reconnectNeeded: false };
     this.syncAccounts.set(accountId, next);
@@ -1837,10 +1758,9 @@ export class MockStorageAdapter implements StorageAdapter {
     authKind: string,
     calendars: StagedCalendar[]
   ): AccountWithCalendars {
-    // Identity is provider + displayName, dormant or not: `find_account_by_identity_impl`
-    // matches on those two alone and merely *prefers* a live row (`ORDER BY
-    // disconnected ASC`). Matching only dormant rows minted a second account for the
-    // same identity when the user connected one that was already active.
+    // Identity is provider and displayName, dormant or not (`find_account_by_identity_impl`, which
+    // prefers a live row). Matching only dormant rows would mint a second account for an identity
+    // that is already active.
     const existing = [...this.syncAccounts.values()]
       .filter((a) => a.provider === provider && a.displayName === displayName)
       .sort(
@@ -1879,9 +1799,8 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   async disconnectSyncAccount(accountId: string): Promise<void> {
-    // Dormant, not deleted (`go_dormant`). Severing the folder link here rather than
-    // leaving it to disable stranded the detached pages: a reconnect then minted a
-    // second folder beside them.
+    // Dormant, not deleted (`go_dormant`). Severing the folder link here, not at disable, would
+    // strand the detached pages, and a reconnect would mint a second folder beside them.
     for (const cal of this._calendarsFor(accountId)) {
       await this.toggleSyncCalendar(cal.id, false, cal.color);
     }
@@ -1916,9 +1835,8 @@ export class MockStorageAdapter implements StorageAdapter {
         continue;
       }
       if (this._isOwned(page)) {
-        // Reversible: teardown leaves the calendar row behind, switched off, so the
-        // user can switch it back on and the page rejoins. Mirrors the Rust derivation
-        // (`sc.enabled = 0 OR sa.disconnected = 1`).
+        // Reversible: teardown leaves the calendar row switched off, so the page rejoins on
+        // re-enable (`sc.enabled = 0 OR sa.disconnected = 1`).
         this.pages.set(page.id, {
           ...page,
           detachIsReversible: true,
@@ -2028,13 +1946,11 @@ export class MockStorageAdapter implements StorageAdapter {
       const severed = this._teardownCalendar(folderId);
       this.detachedByCalendar.set(syncCalendarId, severed);
       detachedPages = severed.length;
-      // Keep the link while the de-flagged folder survives, so a re-enable re-flags
-      // that one in place. Dropping it mints a second folder of the same name and
-      // strands the detached pages in the first.
+      // Keep the link while the de-flagged folder survives, so a re-enable re-flags it in place;
+      // dropping it mints a second folder of the same name and strands the detached pages.
       if (!this.folders.has(folderId)) folderId = null;
     }
-    // Re-enable re-flags a surviving folder, so it re-asserts the name and colour
-    // the calendar owns rather than keeping what it had while off.
+    // Re-enable re-asserts the name and colour the calendar owns, not what the folder had while off.
     if (enabled && folderId) {
       const folder = this.folders.get(folderId);
       if (folder) {
@@ -2071,9 +1987,8 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(this._pollAccount(accountId));
   }
 
-  // Identical to a resync, and deliberately so: there is no cursor here to drop
-  // and no provider to re-read from, and `fullResync` stays false on the real
-  // path too (the engine reserves it for a cursor the *provider* rejected).
+  // Same as a resync: there is no cursor to drop and no provider to re-read, and `fullResync`
+  // stays false on the real path too (the engine reserves it for a cursor the provider rejected).
   refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
     return Promise.resolve(this._pollAccount(accountId));
   }
@@ -2089,11 +2004,8 @@ export class MockStorageAdapter implements StorageAdapter {
     );
   }
 
-  // ─── Workspace data lifecycle ──────────────────────────────────────────────
-  // No filesystem here, so the write-shaped calls resolve without doing
-  // anything and the path-returning ones hand back a stable fake — enough for
-  // the settings panel to render its "Saved to Downloads" row and for a test to
-  // assert the "Show in Finder" affordance appears.
+  // No filesystem: write-shaped calls resolve doing nothing and path-returning ones hand back a
+  // stable fake, enough for the settings panel and the "Show in Finder" assertion.
 
   backupDatabase(): Promise<string> {
     return Promise.resolve("/mock/pikos-backup.sqlite");
@@ -2170,8 +2082,7 @@ export class MockStorageAdapter implements StorageAdapter {
     });
   }
 
-  /** Truncate, matching `reset_db` — same shape as `clear()`, which the dev
-   *  reseed path already called directly before this method existed. */
+  /** Truncate, as `reset_db` does; same shape as `clear()`. */
   resetWorkspaceData(): Promise<void> {
     this.clear();
     return Promise.resolve();
@@ -2192,9 +2103,7 @@ export class MockStorageAdapter implements StorageAdapter {
 
   private _pollAccount(accountId: string): CalendarSyncResult[] {
     const synced = this._calendarsFor(accountId).filter((c) => c.enabled);
-    // Stamp freshness like `persist_progress` does on every successful poll — the
-    // panel's dot and "synced N ago" read it, so without this a mock-mode calendar
-    // reads stale forever.
+    // Stamp freshness as `persist_progress` does on every poll; the panel's "synced N ago" reads it.
     for (const c of synced) {
       this.syncCalendars.set(c.id, { ...c, lastSyncedAt: now() });
     }

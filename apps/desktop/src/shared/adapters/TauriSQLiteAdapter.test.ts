@@ -1,12 +1,7 @@
-// The adapter's own logic, which sits above every command and below every caller.
-//
-// Only one thing here is worth pinning and it is the write/read classification.
-// A mutating command left out of `WRITE_COMMANDS` still works — it just lets the
-// DB watcher mistake the app's own echo for someone else's write and refetch the
-// workspace on top of the user's action. Nothing fails, nothing logs; the user sees
-// a flicker after a bulk complete or a drag. So the test here is "is every command
-// classified at all" — whether a classification is *true* depends on what the Rust
-// handler does, and is proved by driving it (`db/ipc_tests.rs`).
+// A mutating command left out of `WRITE_COMMANDS` still works but lets the DB watcher mistake the
+// app's own echo for someone else's write and refetch on top of the user's action: nothing fails,
+// the user sees a flicker. So the test is that every command is classified at all; whether a
+// classification is *true* is proved by driving the Rust handler (`db/ipc_tests.rs`).
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -21,9 +16,8 @@ const SOURCE = readFileSync(
   "utf8"
 );
 
-/** Every command name the adapter actually invokes. Read from the source because
- *  the point is to catch a command someone adds without classifying it — a list
- *  maintained by hand would go stale in exactly that case. */
+/** Read from the source so a command someone adds without classifying it is caught; a
+ *  hand-maintained list would go stale in exactly that case. */
 function invokedCommands(): string[] {
   const names = [...SOURCE.matchAll(/\binvoke<[^>]*>\(\s*"([a-z_]+)"/g)].map((m) => m[1]!);
   return [...new Set(names)].sort();
@@ -55,7 +49,6 @@ describe("TauriSQLiteAdapter command classification", () => {
 
 const CORRUPT = { kind: "Corrupt", message: "corrupt: database disk image is malformed" };
 
-/** A fresh copy of the module, since what it learns about damage lasts the session. */
 async function freshAdapter(fail: (command: string) => boolean) {
   vi.resetModules();
   const mod = await import("./TauriSQLiteAdapter");

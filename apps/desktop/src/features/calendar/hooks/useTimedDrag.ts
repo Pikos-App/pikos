@@ -17,7 +17,6 @@ interface DragRefState {
   block: CalendarBlock;
   grabOffsetY: number;
   folderColor: string | undefined;
-  /** Set when dragging a virtual rrule occurrence — keys the override. */
   originalDate?: string;
 }
 
@@ -33,7 +32,6 @@ export interface UseTimedDragOptions {
   metrics: CalendarMetrics;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   dayColumnsRef: React.RefObject<HTMLDivElement | null>;
-  /** Ghost imperative API (from useDragGhost). */
   setGhostContent: (next: GhostContent | null) => void;
   positionGhost: (dayIndex: number, top: number, height: number) => void;
   showGhost: () => void;
@@ -48,18 +46,14 @@ export interface UseTimedDragOptions {
 export interface UseTimedDragResult {
   timedDraggingPageId: string | null;
   timedDragAllDayTarget: TimedDragAllDayTarget | null;
-  /** Day index currently under the cursor while dragging a timed block.
-   * Null when the cursor is in the all-day strip or no drag is active.
-   * Used to highlight the target column — same affordance as external drop. */
+  /** Day index under the cursor while dragging; null in the all-day strip or when idle. */
   timedDragDayIndex: number | null;
   handleBlockDragStart: (info: BlockDragStartInfo) => void;
 }
 
 /**
- * Drags a timed PageBlock within the grid. Owns the drag state machine +
- * cursor tracking; the ghost rendering is handled by the shared useDragGhost
- * hook (passed in via individual functions to keep this hook free of
- * mutate-foreign-ref lint errors).
+ * Drags a timed PageBlock within the grid. Ghost rendering is the shared useDragGhost hook's,
+ * passed in as individual functions to keep this hook free of mutate-foreign-ref lint errors.
  */
 export function useTimedDrag({
   dayColumnsRef,
@@ -100,7 +94,6 @@ export function useTimedDrag({
     const scrollEl = scrollRef.current;
     const columnsEl = dayColumnsRef.current;
     if (!scrollEl || !columnsEl) return;
-    // Synced events own a locked schedule — never draggable.
     if (block.page.scheduleLocked) return;
 
     const scrollRect = scrollEl.getBoundingClientRect();
@@ -124,8 +117,6 @@ export function useTimedDrag({
     const page = pages.find((p) => p.id === pageId);
     const blockH = block.height;
     setTimedDraggingPageId(pageId);
-    // Queue the initial position so the ghost is positioned the instant it
-    // mounts (before any mousemove fires).
     queueInitialGhostPosition(dayIndex, initialTop, blockH);
     setGhostContent({
       folderColor,
@@ -138,9 +129,7 @@ export function useTimedDrag({
     let lastClientY = clientY;
 
     function onMove(ev: PointerEvent) {
-      // A second finger landing mid-drag must not steer the gesture the first
-      // one started; mouse and pen are always primary, so this never fires for
-      // them.
+      // A second finger landing mid-drag must not steer the first one's gesture.
       if (!ev.isPrimary) return;
       lastClientY = ev.clientY;
       const state = dragRef.current;
@@ -239,18 +228,14 @@ export function useTimedDrag({
       const newStart = mapYToDate(ghostPos.top, targetDay, geometry);
       const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
 
-      // Preserve duration whenever the event actually has one. The previous
-      // `!isCompact` check conflated "rendered as chip" with "no explicit
-      // end", which dropped the duration of short-but-timed events (e.g.
-      // 30m at compact density) on drag.
+      // Keep the duration whenever the event has one: short timed events (30m at compact density)
+      // would otherwise lose it on drag.
       const duration = clockMinutesBetween(state.block.startDate, state.block.endDate);
       const newEnd = duration > 0 ? fmt(addClockMinutes(newStart, duration)) : undefined;
 
       onReschedule(state.pageId, fmt(newStart), newEnd, state.originalDate);
     }
 
-    /** The platform took the gesture away (system swipe, palm rejection).
-     *  Unwind without committing — the drop never happened. */
     function onCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();

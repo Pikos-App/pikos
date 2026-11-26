@@ -7,11 +7,8 @@ import { useEffect, useState } from "react";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { getKeyValueStore } from "@/shared/kv";
 
-/**
- * Ordered simple → complex so a new user sees plain titles first and is
- * gradually exposed to date, time, tag, priority, and recurrence syntax.
- * Tone matches the tutorial seed: casual, personal, non-technical.
- */
+/** Ordered simple to complex so a new user sees plain titles first and meets date, time, tag, priority
+ *  and recurrence syntax gradually. Casual, non-technical tone. */
 const EXAMPLES = [
   "Buy milk",
   "Pick up dry cleaning tomorrow",
@@ -52,10 +49,8 @@ function writeIndex(value: number): void {
 }
 
 export function useQuickAddPlaceholder(isOpen: boolean): string {
-  // Track the prior `isOpen` value so we can advance the index *during render*
-  // when the dialog transitions closed→open (React-recommended pattern for
-  // adjusting state on a prop change). The store write stays in an
-  // effect — it's a real side-effect, unlike the in-render state update.
+  // Tracks the prior `isOpen` to advance the index during render on closed-to-open (the React pattern
+  // for adjusting state on a prop change); the store write stays in an effect.
   const [prevOpen, setPrevOpen] = useState(isOpen);
   const [shownIndex, setShownIndex] = useState<number>(readIndex);
 

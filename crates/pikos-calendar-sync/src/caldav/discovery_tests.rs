@@ -1,8 +1,6 @@
-//! Layer-1 discovery tests. Most run over recorded Radicale fixtures (captured
-//! 2026-06-19 from radicale 3.3.3 with htpasswd basic auth); `04_*` and `05_*` are
-//! hand-authored, for an iCloud-style cross-host calendar-home redirect and the
-//! Cyrus/Fastmail enumeration shape, neither of which a local radicale produces.
-//! No network.
+//! Most run over recorded Radicale fixtures; `04_*` and `05_*` are hand-authored for an
+//! iCloud-style cross-host calendar-home redirect and the Cyrus/Fastmail enumeration shape,
+//! which a local radicale doesn't produce.
 
 use super::super::error::CaldavError;
 use super::super::transport::{DavResponse, DavTransport};
@@ -21,23 +19,16 @@ const ENUM_CYRUS: &str =
 
 #[derive(Debug)]
 enum Mode {
-    /// `.well-known` 301s to `/` (real Radicale behavior).
     Ok,
-    /// Wrong credentials — every authed request 401s.
     Unauthorized,
-    /// `.well-known` 404s; discovery must fall back to the entered URL.
     NoWellKnown,
-    /// `calendar-home-set` points at a different host (iCloud partition style).
     CrossHostHome,
-    /// A server that advertises no component set at all on its calendars.
     NoComponentSet,
     /// Cyrus/Fastmail shape: prefixed `D:` namespace, opaque UUID collection
     /// names, and the props split across a 200 and a 404 propstat.
     CyrusShape,
 }
 
-/// An enumerate whose calendar declares no `supported-calendar-component-set`.
-/// Hand-authored: radicale always sends one, and this is the RFC's default arm.
 const ENUM_NO_COMPONENTS: &str = r#"<?xml version='1.0' encoding='utf-8'?>
 <multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <response><href>/testuser/plain/</href><propstat><prop>
@@ -126,7 +117,6 @@ async fn discover(mode: Mode) -> Result<Vec<pikos_db::sync_delta::RemoteCalendar
 async fn discovers_only_vevent_calendars() {
     let calendars = discover(Mode::Ok).await.unwrap();
 
-    // Work (VEVENT) is kept; the VTODO calendar and the home collection are filtered out.
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     let work = &calendars[0];
     assert_eq!(work.display_name, "Work");
@@ -138,11 +128,8 @@ async fn discovers_only_vevent_calendars() {
     );
 }
 
-/// RFC 4791 makes the component set optional and reads its absence as "supports
-/// everything", so a calendar that omits it is a normal calendar. Treating absent
-/// like an empty set would drop it — the user connects and sees none of their
-/// calendars, with nothing to explain why. The VTODO-only arm is `discovers_only_
-/// vevent_calendars`; this is the other side of the same condition.
+/// RFC 4791 reads an absent component set as "supports everything"; treating it as empty
+/// would drop the calendar, and the user would see none with nothing to explain why.
 #[tokio::test]
 async fn a_calendar_with_no_declared_components_is_kept() {
     let calendars = discover(Mode::NoComponentSet).await.unwrap();
@@ -151,10 +138,9 @@ async fn a_calendar_with_no_declared_components_is_kept() {
     assert_eq!(calendars[0].display_name, "Plain");
 }
 
-/// Hand-authored to Cyrus's documented shape, not recorded: a Fastmail account
-/// lists every calendar under an opaque UUID, so the URL-segment fallback is the
-/// visible symptom of a name that never arrived. Pins that the shape itself parses,
-/// which is what says the name is missing upstream rather than dropped here.
+/// Fastmail lists every calendar under an opaque UUID, so the URL-segment fallback is the
+/// visible symptom of a name that never arrived; this pins that the shape itself parses, so
+/// the name is missing upstream rather than dropped here.
 #[tokio::test]
 async fn a_uuid_named_collection_still_takes_its_displayname() {
     let calendars = discover(Mode::CyrusShape).await.unwrap();
@@ -163,9 +149,8 @@ async fn a_uuid_named_collection_still_takes_its_displayname() {
     assert_eq!(calendars[0].display_name, "Personal");
 }
 
-/// An empty `<displayname/>` and an absent one both parse to `None`, so the
-/// element having appeared is tracked separately. Without it the diagnostic
-/// cannot say which of the two a server did, and they need different fixes.
+/// An empty `<displayname/>` and an absent one both parse to `None`; without tracking the
+/// element separately the diagnostic can't say which a server did, and they need different fixes.
 #[test]
 fn an_empty_displayname_is_distinguishable_from_an_absent_one() {
     let with_empty = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -185,9 +170,7 @@ fn an_empty_displayname_is_distinguishable_from_an_absent_one() {
     assert!(!absent[0].display_name_seen, "nothing appeared");
 }
 
-/// A name wrapped in CDATA is a name. Dropping the event made it indistinguishable
-/// from an empty element, which reads as "the server sent nothing" when the server
-/// in fact sent the answer.
+/// Dropping the CDATA event makes the name indistinguishable from an empty element.
 #[test]
 fn a_cdata_wrapped_displayname_is_read() {
     let xml = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -201,9 +184,8 @@ fn a_cdata_wrapped_displayname_is_read() {
     assert_eq!(cals[0].display_name.as_deref(), Some("Personal & Work"));
 }
 
-/// Entity-escaped text is the other way a name can arrive in pieces. The text
-/// handler trims every fragment it sees, so a name split across fragments would
-/// silently lose the spaces around the entity.
+/// The text handler trims every fragment, so a name split around an entity would lose the
+/// spaces beside it.
 #[test]
 fn an_escaped_ampersand_keeps_the_spaces_around_it() {
     let xml = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -253,9 +235,6 @@ fn resolve_does_not_downgrade_https_to_http() {
     );
 }
 
-// ─── propfind_follow redirect machinery ───────────────────────────────────────
-
-/// A transport answering every PROPFIND with the same scripted status + location.
 struct FixedResponse {
     status: u16,
     location: Option<String>,
@@ -290,7 +269,6 @@ async fn redirect_without_a_location_is_a_protocol_error() {
 #[tokio::test]
 async fn a_redirect_loop_stops_after_the_cap() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
-    // Always bounces to a new path → never resolves to a 207.
     let t = FixedResponse {
         status: 301,
         location: Some("/next".into()),
@@ -301,8 +279,8 @@ async fn a_redirect_loop_stops_after_the_cap() {
     }
 }
 
-/// The credential leak: every PROPFIND carries the account's Basic auth, so a server that answers
-/// discovery with a redirect elsewhere is handed the username and password for wherever it points.
+/// Every PROPFIND carries Basic auth, so a redirect elsewhere would be handed the username and
+/// password for wherever it points.
 #[tokio::test]
 async fn a_redirect_off_the_account_s_domain_is_refused() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
@@ -318,7 +296,6 @@ async fn a_redirect_off_the_account_s_domain_is_refused() {
     }
 }
 
-/// And the case that has to keep working: iCloud answers with its own partition host.
 #[tokio::test]
 async fn a_redirect_to_a_partition_of_the_same_domain_is_followed() {
     let base = Url::parse("https://caldav.icloud.com/").unwrap();
@@ -335,10 +312,8 @@ async fn a_redirect_to_a_partition_of_the_same_domain_is_followed() {
     assert_eq!(followed.final_url.host_str(), Some("p42-caldav.icloud.com"));
 }
 
-/// Every hop is checked, not just the first.
-///
-/// One legitimate same-domain hop followed by one that leaves: a loop that vetted only the first
-/// `Location` would hand the account's Basic auth to the second.
+/// A same-domain hop followed by one that leaves: vetting only the first `Location` would hand
+/// the account's Basic auth to the second.
 #[tokio::test]
 async fn a_redirect_that_leaves_the_domain_on_a_later_hop_is_refused() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
@@ -357,7 +332,6 @@ async fn a_redirect_that_leaves_the_domain_on_a_later_hop_is_refused() {
     assert_eq!(*t.hits.lock().unwrap(), 2, "the first hop must be followed");
 }
 
-/// 301 to `first`, then 301 to `second`.
 struct TwoHops {
     first: String,
     second: String,
@@ -382,7 +356,6 @@ impl DavTransport for TwoHops {
     }
 }
 
-/// 301 to `location` on the first hit, 207 thereafter.
 struct RedirectThen207 {
     location: String,
     hits: std::sync::Mutex<u32>,
@@ -409,7 +382,6 @@ impl DavTransport for RedirectThen207 {
     }
 }
 
-/// 301 → an http:// target on the first hit, 207 thereafter.
 struct DowngradeThenOk {
     hits: std::sync::Mutex<u32>,
 }

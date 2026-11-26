@@ -1,44 +1,29 @@
-// Pure month-grid math: the padded weeks × 7 cell grid, and the event placement
-// (ordering, lanes, "+K more" capping) the month view renders.
-
 import { addDays, isSameDay, startOfDay, startOfWeek } from "date-fns";
 
 import type { PageSummary } from "../types";
 import { dateKey, formatDateOnly, isAllDayIso, parseLocalISO } from "../utils/dates";
 import { viewerEnd, viewerStart } from "../utils/syncedTime";
 
-/**
- * Which shape the calendar panel renders. Persisted separately from
- * `CalendarDayCount` so an existing stored day count keeps its meaning — the
- * time grid remembers "5 days" while the user is off in month view.
- */
+/** Persisted separately from `CalendarDayCount`, so the time grid remembers "5 days" while the
+ * user is in month view. */
 export type CalendarViewMode = "time" | "month";
 
-/** Default number of event chips a month cell shows before it collapses the rest. */
+/** Chips a month cell shows before it collapses the rest. */
 export const MONTH_CELL_MAX_EVENTS = 3;
 
-/** One day cell of the month grid. */
 export interface MonthCell {
   /** Local midnight of the cell's day. */
   date: Date;
-  /** 'YYYY-MM-DD' — stable React key and the comparison key for placement. */
+  /** 'YYYY-MM-DD'. */
   key: string;
-  /** False for the leading/trailing padding days borrowed from the neighbouring months. */
+  /** False for padding days borrowed from the neighbouring months. */
   inMonth: boolean;
   isToday: boolean;
 }
 
 /**
- * Builds the visible month as full weeks: the month's first day is padded back
- * to the start of its week and the last day forward to the end of its week, so
- * every row has exactly 7 cells (5 or 6 rows, 42 cells at most).
- *
- * `weekStartsOn` comes from the app's week-start preference (AppSettings), the
- * same source `buildCalendarDays` and `MiniCalendar` take — month view must not
- * invent its own convention.
- *
- * Day stepping goes through date-fns `addDays`, which is calendar-day (not
- * 24h) arithmetic, so a DST-transition week still yields exactly 7 cells.
+ * The visible month as full weeks, padded to the week edges, so every row has 7 cells (5 or 6
+ * rows). Steps with `addDays`, which is calendar-day arithmetic, so a DST week still has 7 cells.
  */
 export function buildMonthGrid(
   reference: Date,
@@ -53,8 +38,7 @@ export function buildMonthGrid(
 
   const weeks: MonthCell[][] = [];
   let cursor = gridStart;
-  // Keep emitting whole weeks until one covers the month's last day. The
-  // condition is checked per WEEK (not per day) so the grid never ends mid-row.
+  // Checked per week, not per day, so the grid never ends mid-row.
   do {
     const week: MonthCell[] = [];
     for (let i = 0; i < 7; i++) {
@@ -73,39 +57,31 @@ export function buildMonthGrid(
   return weeks;
 }
 
-/**
- * Flattens the grid to the Date[] the recurrence expansion needs. The padded
- * grid spans up to 42 days, so expansion must cover the whole thing — a
- * month's worth of range would leave the padding rows empty of occurrences.
- */
+/** The days recurrence expansion needs. The padded grid spans up to 42 days, so expanding only
+ * the month would leave the padding rows empty of occurrences. */
 export function monthGridDays(weeks: MonthCell[][]): Date[] {
   return weeks.flatMap((week) => week.map((cell) => cell.date));
 }
 
-/** One event chip inside a month cell. */
 export interface MonthCellEvent {
   page: PageSummary;
-  /** True for a date-only (all-day) schedule. Timed events carry a start time. */
+  /** A date-only schedule. */
   isAllDay: boolean;
-  /** Number of calendar days the event covers (1 for a single-day event). */
+  /** Calendar days the event covers. */
   spanDays: number;
-  /** True when the event started before this cell's day. */
   continuesBefore: boolean;
-  /** True when the event continues past this cell's day. */
   continuesAfter: boolean;
-  /** Local Date of the event's start (local midnight for an all-day schedule). */
+  /** Local midnight for an all-day schedule. */
   startDate: Date;
-  /** Stable React key, unique within the cell (page id + this cell's day). */
+  /** Unique within the cell. */
   key: string;
 }
 
-/** A month cell's capped chip list plus what got collapsed. */
 export interface MonthCellPlacement {
-  /** Chips to render, already ordered. At most `maxVisible` entries. */
+  /** Ordered, at most `maxVisible`. */
   visible: MonthCellEvent[];
-  /** How many events the cap hid — 0 when everything fits. */
   overflowCount: number;
-  /** The hidden events, in the same order, for a "+K more" listing. */
+  /** The hidden events, for a "+K more" listing. */
   overflow: MonthCellEvent[];
 }
 
@@ -118,11 +94,9 @@ function eventDayRange(
   const rawEnd = scheduledEnd;
   if (rawEnd == null) return { end: startKey, start: startKey };
   const endKey = dateKey(rawEnd);
-  // A timed event ending exactly at midnight touches the next day without
-  // occupying it (the week grid's `crossingMidnightsCount` draws the same
-  // line), so it stays on its start day.
+  // A timed event ending exactly at midnight touches the next day without occupying it, as in
+  // the week grid's `crossingMidnightsCount`.
   if (!isAllDayIso(rawEnd) && rawEnd.endsWith("T00:00:00") && endKey > startKey) {
-    // endKey > startKey, so stepping back one day cannot land before the start.
     return { end: formatDateOnly(addDays(parseLocalISO(rawEnd), -1)), start: startKey };
   }
   return { end: endKey < startKey ? startKey : endKey, start: startKey };
@@ -140,16 +114,9 @@ function inclusiveDaySpan(startKey: string, endKey: string): number {
 }
 
 /**
- * Orders and caps the events on one day of the month grid.
- *
- * Ordering mirrors the week grid's all-day strip so the two views read the
- * same way: spanning/all-day events first (longest span first — they're the
- * "banner" events), then single-day timed events by start time. Ties break on
- * `createdAt` then page id so the order is deterministic across renders (page
- * ids are UUIDs, hence not a meaningful sort on their own).
- *
- * Everything past `maxVisible` is returned in `overflow` for the "+K more"
- * affordance rather than dropped.
+ * Orders and caps the events on one day, in the week grid's all-day strip order: banners
+ * (all-day or multi-day, longest first), then single-day timed events by start. Events past
+ * `maxVisible` go to `overflow` for "+K more".
  */
 export function placeMonthCellEvents(
   pages: PageSummary[],
@@ -160,10 +127,8 @@ export function placeMonthCellEvents(
   const events: MonthCellEvent[] = [];
 
   for (const page of pages) {
-    // Which cell a synced event belongs in is the viewer's question: its stored
-    // wall-clock is the source calendar's, and a Tokyo morning falls on the day
-    // before for a viewer in California. The week grid resolves the same way in
-    // `calendarLayout`.
+    // The viewer's day decides the cell: a synced event's stored wall clock is the source
+    // calendar's, and a Tokyo morning falls on the day before in California.
     const scheduledStart = viewerStart(page);
     if (scheduledStart == null) continue;
     const range = eventDayRange(scheduledStart, viewerEnd(page));
@@ -172,9 +137,8 @@ export function placeMonthCellEvents(
       continuesAfter: dayStr < range.end,
       continuesBefore: dayStr > range.start,
       isAllDay: isAllDayIso(scheduledStart),
-      // Recurring virtual occurrences and moved synced overrides share the head
-      // page's id, so the start stamp is what makes the key unique in a cell. It
-      // stays the stored one: the key is an identity, not a position.
+      // Recurring occurrences and moved synced overrides share the head's id, so the start stamp
+      // makes the key unique. It stays the stored one: the key is an identity, not a position.
       key: `${page.id}:${page.scheduledStart}:${dayStr}`,
       page,
       spanDays: inclusiveDaySpan(range.start, range.end),
@@ -192,7 +156,7 @@ export function placeMonthCellEvents(
   };
 }
 
-/** Banner group first: all-day schedules and any event covering more than one day. */
+/** Banners (all-day or multi-day) first, ties on createdAt then id for a stable order across renders. */
 function compareMonthEvents(a: MonthCellEvent, b: MonthCellEvent): number {
   const isBanner = (e: MonthCellEvent) => e.isAllDay || e.spanDays > 1;
   const bannerDelta = Number(isBanner(b)) - Number(isBanner(a));
@@ -207,17 +171,15 @@ function compareMonthEvents(a: MonthCellEvent, b: MonthCellEvent): number {
   );
 }
 
-/** An event's run of days inside one week row, drawn as one bar from its first cell. */
+/** An event's run of days inside one week row, drawn as one bar. */
 export interface MonthWeekBar {
-  /** The run's first cell's event, with `continuesAfter` taken from its last cell. */
+  /** The first cell's event, with `continuesAfter` taken from the last cell. */
   event: MonthCellEvent;
-  /** Row inside the week, shared by every cell the bar covers. */
+  /** Shared by every cell the bar covers. */
   lane: number;
-  /** Cells the bar covers, counting its first. */
   spanCols: number;
 }
 
-/** One cell of a week row as `placeMonthWeek` lays it out. */
 export interface MonthWeekCell {
   /** Lane by lane, down to the lowest visible lane anything covers in this cell: the bar
    * that starts here, or null for a lane left empty or crossed by an earlier cell's bar. */
@@ -227,15 +189,10 @@ export interface MonthWeekCell {
 }
 
 /**
- * Lays out one week row of the month grid so a multi-day event is one bar.
- *
- * Lanes are shared across the row, the way the week grid's all-day strip shares
- * rows, so the cap applies per lane rather than per cell: a bar is either shown in
- * every cell it covers or hidden and counted in each one's "+K more". A per-cell cap
- * would show a bar in one cell and hide it in the next.
- *
- * Events take the lowest lane free across their days, in `compareMonthEvents`
- * order, so banners settle first and single-day events fill the gaps they leave.
+ * Lays out one week row so a multi-day event is one bar. Lanes are shared across the row, so the
+ * cap applies per lane: a bar is shown in every cell it covers or hidden and counted in each
+ * one's "+K more", where a per-cell cap would show it in one cell and hide it in the next.
+ * Events take the lowest lane free across their days, in `compareMonthEvents` order.
  */
 export function placeMonthWeek(
   pages: PageSummary[],

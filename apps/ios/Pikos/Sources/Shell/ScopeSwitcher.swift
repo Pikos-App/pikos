@@ -3,11 +3,8 @@ import PikosSupport
 import SwiftUI
 
 /// Every place the list can be, dropped from its title: the desktop's sidebar, folded into the
-/// switcher the desktop already shows when its window is too narrow for one.
-///
-/// It also carries what the corner buttons used to hide — the trash and Settings — so the top of
-/// the screen is a name and two tools, and nothing else. Where the window has room for three
-/// panels it is the sidebar itself, unfolded.
+/// switcher the desktop shows when its window is too narrow. It also carries the trash. Where
+/// the window has room for three panels it is the sidebar itself, unfolded.
 struct ScopeSwitcher: View {
     enum Style {
         case dropdown

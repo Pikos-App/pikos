@@ -3,22 +3,18 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::error::{AppError, AppResult};
 use crate::{now_iso, now_local_iso};
 
-/// Deserializes a field that may be missing OR explicitly null.
-/// - Missing field → `None` (via `#[serde(default)]` on the struct)
-/// - Explicit `null` → `Some(Value::Null)`
-/// - Any other value → `Some(value)`
+/// Tells a missing field (`None`, via `#[serde(default)]`) from an explicit `null`
+/// (`Some(Value::Null)`).
 ///
-/// ts-rs can't read `deserialize_with` and says so on every build; each field using
-/// this carries an explicit `#[ts(type = "…", optional)]` because of it, since the
-/// `serde_json::Value` it would otherwise export says nothing about the wire.
+/// ts-rs can't read `deserialize_with`, so each field using this carries an explicit
+/// `#[ts(type = "…", optional)]`; the `serde_json::Value` it would export says nothing
+/// about the wire.
 fn deserialize_nullable<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
 where
     D: Deserializer<'de>,
 {
     serde_json::Value::deserialize(deserializer).map(Some)
 }
-
-// ─── DB row (snake_case matches column names) ─────────────────────────────────
 
 #[derive(sqlx::FromRow)]
 struct PageRow {
@@ -55,8 +51,6 @@ struct PageRow {
     row_seq: i64,
     series_id: Option<String>,
 }
-
-// ─── Output type (camelCase for TypeScript) ───────────────────────────────────
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -100,9 +94,9 @@ pub struct Page {
     pub created_at: String,
     pub updated_at: String,
     #[ts(type = "number")]
-    /// Which Tiptap document schema produced `content`. See migration 023:
-    /// a client finding a version above its own must not save over the document,
-    /// or it silently drops node types it cannot represent.
+    /// Which Tiptap document schema produced `content`. A client finding a version
+    /// above its own must not save over the document, or it drops node types it
+    /// cannot represent.
     pub content_schema_version: i64,
     /// True while a calendar owns this page's schedule. Its title, dates and
     /// recurrence are read-only, and the calendar block can't be dragged or resized.
@@ -112,12 +106,10 @@ pub struct Page {
     /// was deleted locally. `null` for a page created in Pikos.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
-    /// Whether a detached page could rejoin its calendar, which is what the copy
-    /// splits on: the user wants to know if this is undoable, not how it happened.
-    /// True when the calendar is merely switched off or its account disconnected —
-    /// both of which the user can reverse. False when the event is gone from the
-    /// provider, which nothing here can undo. Meaningless unless `sync_state` is
-    /// `detached`; a live page reads false because nothing is switched off.
+    /// Whether a detached page could rejoin its calendar. True when the calendar is
+    /// switched off or its account disconnected, both of which the user can reverse.
+    /// False when the event is gone from the provider. Meaningless unless
+    /// `sync_state` is `detached`.
     pub detach_is_reversible: bool,
     /// IANA zone the schedule was authored in. Only read for a page a calendar owns,
     /// which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
@@ -139,9 +131,8 @@ pub struct Page {
     /// had been edited here. Offered to the user rather than overwriting their work.
     pub pending_description: Option<String>,
     /// The day this page first synced. Occurrences of a repeating event from before
-    /// it are not rendered — the calendar was never asked about that period, so what
-    /// it would show there is unreliable. (Why this day and not the backfill
-    /// window is argued at `synced_head_floor`, in the recurrence derivation.)
+    /// it are not rendered, because the calendar was never asked about that period.
+    /// (Why this day and not the backfill window: `synced_head_floor`.)
     pub synced_since: Option<String>,
     /// Whether this page repeats, without having to load its rule.
     pub is_recurring: bool,
@@ -202,27 +193,22 @@ impl From<PageRow> for Page {
     }
 }
 
-/// Parse the `mirror_attendees` JSON array the reconciler stores; both `None`
-/// (no attendees) and malformed JSON yield `None`.
+/// Malformed JSON yields `None`, as no attendees does.
 fn parse_attendees(raw: Option<String>) -> Option<Vec<String>> {
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
-/// Parse the `completed_occurrences` JSON object built by `json_group_object` over
-/// `completed_set`; `NULLIF(..., '{}')` already maps an empty set to `None`.
+/// `SYNC_DERIVED_SELECT` already maps an empty set to `None`.
 fn parse_completed_occurrences(
     raw: Option<String>,
 ) -> Option<std::collections::HashMap<String, String>> {
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
-/// Parse the `skipped_occurrences` JSON array built by `json_group_array` over
-/// `skip_set`; `NULLIF(..., '[]')` already maps an empty set to `None`.
+/// `SYNC_DERIVED_SELECT` already maps an empty set to `None`.
 fn parse_skipped_occurrences(raw: Option<String>) -> Option<Vec<String>> {
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
-
-// ─── Summary row (no content/content_text — for list views) ──────────────
 
 #[derive(sqlx::FromRow)]
 pub(crate) struct PageSummaryRow {
@@ -283,7 +269,7 @@ pub struct PageSummary {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    /// Derived (not a stored column) — see `Page::schedule_locked`.
+    /// See `Page::schedule_locked`.
     pub schedule_locked: bool,
     /// See `Page::sync_state`.
     #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
@@ -363,9 +349,9 @@ pub(crate) const SUMMARY_COLUMNS: &str =
      scheduled_start, scheduled_end, completed_at, links, \
      parent_id, last_opened_at, created_at, updated_at, row_seq";
 
-/// Appended to every page-hydrating SELECT to populate the derived sync columns
-/// (see the `Page` field docs). Correlated on the unqualified `pages.id`, so it
-/// works whether or not the query aliases the table.
+/// Appended to every page-hydrating SELECT to populate the derived sync columns.
+/// Correlated on the unqualified `pages.id`, so it works whether or not the query
+/// aliases the table.
 pub(crate) const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
@@ -393,8 +379,6 @@ pub(crate) const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , (SELECT page_id FROM completed_set WHERE completed_set.clone_id = pages.id LIMIT 1) \
      AS series_id";
 
-// ─── Input types ──────────────────────────────────────────────────────────────
-
 #[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
@@ -417,7 +401,7 @@ pub struct NewPage {
     pub updated_at: Option<String>,
 }
 
-/// `serde_json::Value` fields can be explicitly set to null (vs. omitted = unchanged).
+/// A `serde_json::Value` field set to `null` clears the column; an omitted one is unchanged.
 #[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export, optional_fields = nullable)]
@@ -430,10 +414,9 @@ pub struct PageUpdate {
     #[ts(type = "string | null", optional)]
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
-    /// The body an editor's `content` was typed over. Given, the content lands only over that
-    /// body; over any other it is merged against it first, so an edit made elsewhere since the
-    /// editor loaded is never overwritten. A body rather than the sync clock, because a write from
-    /// the CLI with sync off moves no clock.
+    /// The body an editor's `content` was typed over. Content lands only over that body;
+    /// over any other it is merged first, so an edit made elsewhere is never overwritten.
+    /// A body, not the sync clock, because a CLI write with sync off moves no clock.
     pub base_content: Option<String>,
     #[ts(type = "'not_started' | 'done'", optional)]
     pub status: Option<String>,
@@ -463,7 +446,7 @@ pub struct PageUpdate {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export, optional_fields = nullable)]
 pub struct PageFilter {
-    /// None = no folder filter; Value::Null = inbox (folder_id IS NULL); Value::String = specific folder
+    /// `None` is no folder filter, `Null` is the Inbox, a string is that folder.
     #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>,
     #[ts(type = "'not_started' | 'done'", optional)]
@@ -474,37 +457,24 @@ pub struct PageFilter {
     pub query: Option<String>,
     pub scheduled_after: Option<String>,
     pub scheduled_before: Option<String>,
-    /// When Some(true), restrict to rows where scheduled_start IS NOT NULL —
-    /// used by the calendar to pull completed scheduled pages without also
-    /// loading unscheduled completed pages.
+    /// When `Some(true)`, only pages with a `scheduled_start`.
     pub has_schedule: Option<bool>,
-    /// When Some(true), restrict to pages that are not finished — the SQL form
-    /// of `isOpen`.
+    /// When `Some(true)`, only pages that are not finished: the SQL form of `isOpen`.
     ///
-    /// Deliberately a negation rather than `status = 'not_started'`, which is
-    /// what it happens to be equivalent to today. `pages.status` currently only
-    /// ever holds `not_started` or `done` (the third value in the schema
-    /// comment, `skipped`, belongs to `page_schedules`), but a list of open
-    /// work should widen to a new status rather than silently drop every page
-    /// carrying it, which an equality filter would do without any error.
+    /// A negation rather than `status = 'not_started'`, so a status added later
+    /// joins the open list instead of silently dropping every page carrying it.
     pub open_only: Option<bool>,
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
-
-/// Synchronise the normalised tag tables for a single page.
-///
-/// Runs against a transaction executor so callers can bundle this with the
-/// matching `pages` row write — pages.tags JSON and page_tags must stay in
-/// sync (FTS indexes the JSON; queries hit the join table).
+/// Syncs the normalised tag tables for one page inside the caller's transaction.
+/// `pages.tags` JSON and `page_tags` must change together: FTS indexes the JSON,
+/// queries hit the join table.
 async fn upsert_page_tags_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
     tags: &[String],
 ) -> AppResult<()> {
-    // Tags are stored lowercase (see migration 009): trim + lowercase, dedupe in
-    // input order. The deduped list also rewrites the pages.tags denorm so it
-    // can't drift from the page_tags join.
+    // Tags are stored lowercase, deduped in input order.
     let mut seen = std::collections::HashSet::new();
     let mut normalized: Vec<String> = Vec::new();
 
@@ -546,8 +516,7 @@ async fn upsert_page_tags_tx(
         .await?;
     }
 
-    // Keep the denorm lowercase + deduped so the UI (which renders pages.tags,
-    // not the join) never shows case/whitespace duplicates of one tag.
+    // The UI renders pages.tags, not the join, so it must not hold case duplicates.
     sqlx::query("UPDATE pages SET tags = ? WHERE id = ?")
         .bind(&tags_json)
         .bind(page_id)
@@ -578,8 +547,6 @@ async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> Ap
     .fetch_one(pool)
     .await?)
 }
-
-// ─── Commands ─────────────────────────────────────────────────────────────────
 
 /// Every status a page can hold. Migration 026's triggers refuse anything else, so widening the
 /// set takes a migration as well as this list.
@@ -618,9 +585,8 @@ fn links_of(content: &str) -> String {
 pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResult<Page> {
     ensure_known_status(&data.status)?;
 
-    // External-calendar folders are system-managed; only the reconciler (raw SQL)
-    // seeds into them. Reject a create targeting one, or the page lands trapped —
-    // the placement lock in update_page_impl then blocks it from ever leaving.
+    // Only the reconciler seeds external-calendar folders; a page created there
+    // would be trapped by the placement lock in update_page_impl.
     if let Some(folder_id) = data.folder_id.as_deref() {
         let target_external: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
@@ -643,9 +609,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     let tags_json = serde_json::to_string(&data.tags).unwrap_or_else(|_| "[]".to_string());
     let links_json = links_of(&data.content);
 
-    // Transaction wraps the pages row + page_tags rows together. The FTS
-    // index is driven from pages.tags text — if a crash splits these two
-    // writes apart, search results don't match the join table.
+    // One transaction: a crash between the two writes would leave FTS and the join table apart.
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
 
@@ -674,8 +638,7 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
         .bind(&data.last_opened_at)
         .bind(created_at)
         .bind(updated_at)
-        // Stamped explicitly rather than left to the column default, so the
-        // version travels with the writer that produced the content.
+        // Not the column default: the version travels with the writer that produced the content.
         .bind(crate::CONTENT_SCHEMA_VERSION)
         .execute(&mut *tx)
         .await?;
@@ -787,10 +750,9 @@ async fn write_page_update(
     id: &str,
     updates: &PageUpdate,
 ) -> AppResult<bool> {
-    // Editing any authored field claims ownership (the reconciler never calls this
-    // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
-    // reading and arranging don't author — and ownership decides whether an
-    // upstream delete removes the page or detaches it permanently.
+    // Authoring claims ownership, which decides whether an upstream delete removes the
+    // page or detaches it. `last_opened_at` and `sort_order` are excluded: reading and
+    // arranging don't author.
     let marks_ownership = updates.title.is_some()
         || updates.content.is_some()
         || updates.status.is_some()
@@ -803,10 +765,8 @@ async fn write_page_update(
         || updates.completed_at.is_some()
         || updates.parent_id.is_some();
 
-    // Placement lock, keyed on the live sync link rather than the folder: nothing
-    // moves into a calendar folder, and an actively-synced page can't leave; once
-    // detached it's the user's and files anywhere. The reconciler seeds via raw SQL,
-    // bypassing this command.
+    // Placement lock, keyed on the live sync link: nothing moves into a calendar folder,
+    // and an actively-synced page can't leave; once detached it files anywhere.
     if let Some(ref folder_val) = updates.folder_id {
         let target_external: bool = match folder_val {
             serde_json::Value::String(target) => sqlx::query_scalar(
@@ -829,8 +789,7 @@ async fn write_page_update(
         }
     }
 
-    // Locked mirror: title + schedule (start/end) are calendar-owned on a synced
-    // page. Body/meta/status/tags stay editable (and still set user_modified).
+    // Title and schedule are calendar-owned on a synced page; the rest stays editable.
     if updates.title.is_some()
         || updates.scheduled_start.is_some()
         || updates.scheduled_end.is_some()
@@ -902,16 +861,12 @@ async fn is_stored_body(pool: &sqlx::SqlitePool, id: &str, incoming: &str) -> Ap
 }
 
 /// The write half of [`write_page_update`], retried as a unit because it can lose
-/// the WAL write race to any concurrent writer (a sync poll, a calendar teardown).
+/// the WAL write race to a concurrent writer (a sync poll, a calendar teardown).
 ///
-/// It is **not** exempt from that race for being write-first: SQLite starts the
-/// read snapshot and takes the write lock inside the one UPDATE, so a loser gets
-/// BUSY/BUSY_SNAPSHOT back in microseconds with the busy handler never invoked —
-/// `busy_timeout` cannot cover it, however generous. Measured on the teardown
-/// race: 150µs–1.8ms to fail against a 5s timeout, sometimes as a 517.
-///
-/// The statement is rebuilt from `updates` on each attempt because a
-/// `QueryBuilder` is spent once built.
+/// Being write-first doesn't exempt it: SQLite starts the read snapshot and takes the
+/// write lock inside the one UPDATE, so a loser gets BUSY or BUSY_SNAPSHOT in
+/// microseconds without the busy handler running, and `busy_timeout` can't cover it.
+/// The statement is rebuilt each attempt because a `QueryBuilder` is spent once built.
 async fn apply_page_update(
     pool: &sqlx::SqlitePool,
     id: &str,
@@ -928,9 +883,7 @@ async fn apply_page_update(
     if let Some(v) = &updates.content {
         fields.push("content = ");
         fields.push_bind_unseparated(v.clone());
-        // Re-stamp on every content write: whatever produced this document did
-        // so with this build's editor schema, so the stored version must follow
-        // the content rather than stay at whatever wrote the row originally.
+        // The stored version must follow the content, not the build that first wrote the row.
         fields.push("content_schema_version = ");
         fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
         fields.push("links = ");
@@ -956,7 +909,6 @@ async fn apply_page_update(
         fields.push_bind_unseparated(json);
     }
 
-    // Nullable string fields (Value::Null sets to NULL, Value::String sets to value)
     macro_rules! push_nullable_str {
         ($field:expr, $col:literal) => {
             if let Some(val) = &$field {
@@ -981,8 +933,7 @@ async fn apply_page_update(
     fields.push_bind_unseparated(now_iso());
     drop(fields);
 
-    // Never mutate a trashed page — a stale view or queued edit must not
-    // resurrect or silently rewrite a row the user has deleted.
+    // A stale view or queued edit must not rewrite a row the user has deleted.
     builder.push(" WHERE id = ");
     builder.push_bind(id);
     builder.push(" AND deleted_at IS NULL");
@@ -996,8 +947,6 @@ async fn apply_page_update(
         builder.push_bind(base.clone());
     }
 
-    // Transaction wraps the pages row + (optional) page_tags rewrite so the
-    // pages.tags JSON denorm and the page_tags join table cannot diverge.
     let mut tx = pool.begin().await?;
     let is_written = builder.build().execute(&mut *tx).await?.rows_affected() > 0;
     if !is_written {
@@ -1005,7 +954,6 @@ async fn apply_page_update(
     }
 
     if marks_ownership {
-        // No page_sync row for native pages → no-op.
         sqlx::query(
             "UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0",
         )
@@ -1023,9 +971,8 @@ async fn apply_page_update(
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    // A synced page can't be hard-deleted — it still exists upstream and the next
-    // poll would resurrect it. Soft-delete + tombstone instead: recoverable from
-    // trash, sync suppressed. (Sync's own hard-deletes use raw SQL, not this path.)
+    // A synced page still exists upstream, so a hard delete would be resurrected by the
+    // next poll. It is soft-deleted and tombstoned instead.
     let synced: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ?)")
             .bind(id)
@@ -1038,10 +985,8 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
     hard_delete_page_impl(pool, id).await
 }
 
-/// Destroy a page outright, whatever its origin. The only unconditional `DELETE
-/// FROM pages` in the writer; [`delete_page_impl`] routes native pages here and
-/// diverts synced ones. Callers reaching it directly own the sync question — see
-/// [`crate::sync::hard_delete_would_resurrect`].
+/// Destroys a page outright, whatever its origin. Callers reaching it directly own the
+/// sync question: see [`crate::sync::hard_delete_would_resurrect`].
 pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         sqlx::query("DELETE FROM pages WHERE id = ?")
@@ -1057,9 +1002,7 @@ pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
     crate::tx::retry_on_busy(|| async {
         let now = now_iso();
         let mut tx = pool.begin().await?;
-        // Guard on deleted_at IS NULL (mirrors soft_delete_folder_impl) so a second
-        // delete can't overwrite the original trash timestamp and reset the
-        // auto-purge clock.
+        // The guard keeps a second delete from resetting the auto-purge clock.
         sqlx::query(
             "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
         )
@@ -1068,9 +1011,7 @@ pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
         .bind(id)
         .execute(&mut *tx)
         .await?;
-        // Tombstones the active sync link so the next poll doesn't resurrect the page.
-        // A detached link is skipped so it stays detached through trash → restore,
-        // rather than being wrongly reactivated. No-op for native pages.
+        // A detached link is skipped so it stays detached through trash and restore.
         sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ? AND sync_state = 'active'")
             .bind(id)
             .execute(&mut *tx)
@@ -1090,8 +1031,6 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        // Resume syncing a restored page (only flips the tombstone this delete set;
-        // a detached page stays detached). No-op for native pages.
         let resumed = sqlx::query(
             "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
         )
@@ -1100,8 +1039,7 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
         .await?
         .rows_affected()
             > 0;
-        // The cursor moved on past any change the calendar sent while the page was trashed,
-        // so its calendar re-reads in full on the next pass rather than leaving it stale.
+        // The cursor moved past any change sent while the page was trashed, so the calendar re-reads in full.
         if resumed {
             sqlx::query(
                 "UPDATE sync_calendar SET sync_token = NULL, ctag = NULL, updated_at = ? \
@@ -1113,15 +1051,9 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
             .execute(&mut *tx)
             .await?;
         }
-        // Deleting a folder soft-deletes its pages, so restoring one of them alone
-        // would otherwise return it to a folder that is still in the trash: not in
-        // the Inbox (`folder_id` is set), not in any listed folder (that folder is
-        // gone). The page comes back invisible. Inbox is also what the trash view
-        // already shows for these rows — it resolves the folder name through a
-        // subquery that skips deleted folders — so this makes the restore match the
-        // destination the user was shown. Active mirrors are left alone: the
-        // reconciler owns their placement, and filing one out of its calendar folder
-        // is exactly what the placement guard forbids.
+        // A page restored alone from a trashed folder would come back invisible, in
+        // neither the Inbox nor a listed folder; it goes to the Inbox, as the trash view
+        // shows. Active mirrors stay: the reconciler owns their placement.
         let synced = is_active_synced(&mut tx, id).await?;
         if !synced {
             sqlx::query(
@@ -1133,9 +1065,8 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
             .execute(&mut *tx)
             .await?;
         }
-        // Sets survive soft-delete, so a restored recurring head must re-derive
-        // (no-op if non-recurring). Skip active-synced heads — their cache is
-        // reconciler-owned, and recomputing here would clobber a pinned provider head.
+        // Sets survive soft-delete, so a restored recurring head must re-derive. Active-synced
+        // heads are skipped: recomputing would clobber a pinned provider head.
         if !synced {
             crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
         }
@@ -1145,20 +1076,11 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
     .await
 }
 
-// ─── Trash ────────────────────────────────────────────────────────────────────
-
-/// How long a trashed page is kept before the auto-sweep destroys it.
-///
-/// 30 days matches the notification log's retention and the span every
-/// mainstream trash uses, which is the point: the number is a promise shown to
-/// the user ("kept for 30 days"), so it wants to be the one they already expect
-/// rather than one this app invented. Long enough that a delete regretted a week
-/// later is still recoverable; short enough that the file does not carry deleted
-/// work indefinitely.
+/// How long a trashed page is kept before the auto-sweep destroys it. The number is
+/// shown to the user, so it matches the span they already expect from a trash.
 pub const TRASH_RETENTION_DAYS: i64 = 30;
 
-/// One row of the trash — enough to decide whether to bring a page back, without
-/// loading the page itself.
+/// One row of the trash: enough to decide whether to bring a page back.
 #[derive(Debug, Serialize, ts_rs::TS, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
@@ -1166,25 +1088,20 @@ pub struct TrashedPage {
     pub id: String,
     pub title: String,
     /// The folder the page would return to. `null` when it was in the Inbox, and
-    /// also when its folder was trashed along with it — there is no surviving
-    /// name to show, and restoring the page alone would not bring the folder back.
+    /// when its folder was trashed with it.
     pub folder_name: Option<String>,
-    /// When it was trashed (UTC ISO, as [`soft_delete_page_impl`] writes it).
-    /// Drives both the "deleted N days ago" label and the auto-purge clock.
+    /// When it was trashed, in UTC ISO. Drives the auto-purge clock.
     pub deleted_at: String,
-    /// True while a `page_sync` row still exists — deliberately the same predicate
-    /// [`delete_page_impl`] diverts on. A row flagged here is one the trash cannot
-    /// destroy: it carries the tombstone suppressing the upstream event, so
-    /// deleting it outright would hand the next sync pass a page to resurrect.
-    /// Restoring one gives it back to its calendar.
+    /// True while a `page_sync` row exists, the predicate [`delete_page_impl`] diverts
+    /// on. The trash can't destroy such a row: it carries the tombstone suppressing the
+    /// upstream event. Restoring one gives it back to its calendar.
     pub is_synced: bool,
 }
 
-/// The trash, newest deletion first: every soft-deleted page still on disk.
+/// The trash, newest deletion first.
 ///
-/// Reads the folder name through a correlated subquery rather than a JOIN so a
-/// page whose folder was trashed with it still lists (with no folder name) —
-/// exactly the case a JOIN would drop, and the one where the row matters most.
+/// The folder name comes from a subquery, not a JOIN, so a page whose folder was
+/// trashed with it still lists.
 pub async fn list_trashed_pages_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<TrashedPage>> {
     let rows = sqlx::query_as::<_, TrashedPage>(
         "SELECT p.id, p.title, p.deleted_at,
@@ -1200,19 +1117,13 @@ pub async fn list_trashed_pages_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<T
     Ok(rows)
 }
 
-/// Destroy trashed pages deleted more than `days` ago. Returns how many rows
-/// actually went.
+/// Destroys trashed pages deleted more than `days` ago, returning how many went.
+/// `days = 0` empties the trash.
 ///
-/// Each eligible row goes through [`delete_page_impl`] — the app's one delete,
-/// which already knows the sync question — rather than a `DELETE` of its own. A
-/// mirror is therefore left exactly as that path leaves it: soft-deleted and
-/// tombstoned, still in the trash. Destroying it would take its `page_sync` row
-/// with it (FK cascade), and with it the tombstone suppressing the upstream
-/// event, so the next poll would re-create the page the user deleted (see
-/// [`crate::sync::hard_delete_would_resurrect`]). Keeping the row is what keeps
-/// the deletion.
-///
-/// `days = 0` is "empty the trash now" and is the same sweep, not a second path.
+/// Each row goes through [`delete_page_impl`], so a mirror stays soft-deleted and
+/// tombstoned in the trash: destroying it would cascade away its `page_sync` row and
+/// the tombstone with it, and the next poll would re-create the page (see
+/// [`crate::sync::hard_delete_would_resurrect`]).
 pub async fn purge_trashed_pages_older_than(pool: &sqlx::SqlitePool, days: i64) -> AppResult<i64> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(days.max(0)))
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -1229,10 +1140,7 @@ pub async fn purge_trashed_pages_older_than(pool: &sqlx::SqlitePool, days: i64) 
         delete_page_impl(pool, id).await?;
     }
 
-    // What the diverted rows left behind, counted the same way they were chosen.
-    // `deleted_at` is untouched by the divert (its UPDATE is guarded on
-    // `deleted_at IS NULL`), so re-running the selection counts precisely the
-    // mirrors this sweep declined to destroy.
+    // The divert leaves `deleted_at` untouched, so re-running the selection counts the mirrors declined.
     let kept: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NOT NULL AND deleted_at <= ?",
     )
@@ -1243,16 +1151,10 @@ pub async fn purge_trashed_pages_older_than(pool: &sqlx::SqlitePool, days: i64) 
     Ok(eligible - kept)
 }
 
-/// List pages with an optional filter (folder, status, priority, scheduled
-/// range, etc.).
+/// Lists pages matching an optional filter.
 ///
-/// `filter.query` is implemented as an unindexed `title LIKE '%q%' OR
-/// content_text LIKE '%q%'` — O(n) full table scan. Audit (2026-05): the
-/// only caller in tree is `MockStorageAdapter` tests in `packages/core`,
-/// where the dataset is a handful of rows and the cost is irrelevant. No
-/// production code path passes `query` to list_pages — production search
-/// goes through `search_pages` (FTS5). If a production caller ever needs
-/// query here, route it through FTS5 instead of widening the LIKE scan.
+/// `filter.query` is an unindexed `LIKE` scan, for the mock adapter's tests only.
+/// Production search goes through `search_pages` (FTS5); route any new caller there.
 pub async fn list_pages_impl(
     pool: &sqlx::SqlitePool,
     filter: Option<PageFilter>,
@@ -1278,10 +1180,8 @@ pub enum PageOrder {
     Created,
 }
 
-/// Filters only the CLI and MCP server ask for.
-///
-/// Kept off [`PageFilter`], which is generated into the app's TypeScript types, so the app's
-/// list query and its mock adapter don't grow filters nothing in the app sets.
+/// Filters only the CLI and MCP server ask for. Kept off [`PageFilter`], which is
+/// generated into the app's TypeScript types, so the app doesn't grow filters it never sets.
 #[derive(Debug, Default, Clone)]
 pub struct ListExtras {
     /// UTC bounds, inclusive and exclusive, in `created_at`'s own format: a caller turns the
@@ -1417,15 +1317,9 @@ pub async fn list_pages_window(
 
 /// Pages whose schedule overlaps `[start, end]` (both `YYYY-MM-DD`, inclusive).
 ///
-/// Distinct from filtering on `scheduled_after`/`scheduled_before`, which bound
-/// `scheduled_start` alone and so miss the case a calendar meets constantly: a
-/// multi-day event that began before the visible range and is still running
-/// through it. A three-day conference starting Sunday simply would not appear
-/// on Tuesday.
-///
-/// Reads the denormalised columns on `pages` rather than joining
-/// `page_schedules`, matching what the desktop calendar draws from — one block
-/// per page, at the page's nearest schedule.
+/// `scheduled_after`/`scheduled_before` bound `scheduled_start` alone and miss a
+/// multi-day event that began before the range and is still running through it.
+/// Reads the `pages` denorm, so each page is one block at its nearest schedule.
 pub async fn list_pages_overlapping_impl(
     pool: &sqlx::SqlitePool,
     start: &str,
@@ -1446,36 +1340,28 @@ pub async fn list_pages_overlapping_impl(
         .await?;
     Ok(rows.into_iter().map(PageSummary::from).collect())
 }
-/// Open pages due or scheduled on or before today — what the app's Today surface
-/// shows.
+/// Open pages due or scheduled on or before today, for the Today surface.
 ///
-/// Reads the `pages.scheduled_start` denorm rather than joining `page_schedules`:
-/// a recurring page's non-rule anchor row lingers at its original date and never
-/// advances (see `refresh_schedule_denorm_at`), so the join lists a series whose
-/// next occurrence is weeks away. The day boundary is computed in Rust because
-/// SQLite's `date('now')` is UTC while `scheduled_start` is local wall-clock —
-/// comparing the two moves the boundary by up to a day off-UTC.
+/// Reads the `pages.scheduled_start` denorm, not `page_schedules`: a recurring page's
+/// anchor row never advances (see `refresh_schedule_denorm_at`), so a join would list a
+/// series whose next occurrence is weeks away. The day is computed in Rust because
+/// SQLite's `date('now')` is UTC and `scheduled_start` is local wall-clock.
 pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<PageSummary>> {
     list_pages_today_at(pool, &crate::today_local()).await
 }
 
-/// Inner form taking an explicit local day (`YYYY-MM-DD`), so the boundary is
-/// deterministically testable without depending on the machine clock or timezone.
+/// Takes the local day explicitly so tests don't depend on the clock or timezone.
 async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<Vec<PageSummary>> {
-    // The stored date is the source zone's for a synced row, and reading it in the
-    // viewer's zone can move it either side of midnight. SQL cannot do that
-    // conversion, so the window reaches a day past today and `viewer_day_of`
-    // decides; no real zone offset moves a date by more than one day.
+    // A synced row's stored date is in the source zone, and the viewer's zone can move it a
+    // day either way. SQL can't convert, so the window reaches a day past today and
+    // `viewer_day_of` decides.
     let window_end = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
         .ok()
         .and_then(|d| d.checked_add_days(chrono::Days::new(1)))
         .map_or_else(|| today.to_string(), |d| d.format("%Y-%m-%d").to_string());
 
-    // A moved occurrence is a rule-backed `page_schedules` row, and moving it puts
-    // its original date in the exclusion set, so the head derives *past* today and
-    // a head-only read misses the one day the series is due. `today_scheduled_count`
-    // reads these rows too, which is why the daily summary counted a page this list
-    // then left out.
+    // Moving an occurrence excludes its original date, so the head derives past today and a
+    // head-only read misses the day the series is due.
     let moved = moved_occurrences_through(pool, &window_end).await?;
 
     // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
@@ -1590,19 +1476,12 @@ pub async fn reorder_pages_impl(
     .await
 }
 
-/// Bulk-set `status` (+ `completed_at`) for many pages in a single transaction.
+/// Sets `status` and `completed_at` for many pages in one transaction, skipping trashed
+/// rows. One transaction rather than a write per id: concurrent writes racing the WAL
+/// pool hit SQLITE_BUSY and silently drop some completions.
 ///
-/// Backs multi-select "complete/uncomplete all" (Cmd+A → Space). Doing every
-/// flip in ONE transaction — rather than one `update_page_impl` call per id —
-/// is both atomic and avoids N concurrent writes racing the WAL pool. Those
-/// concurrent writes deadlock with SQLITE_BUSY and silently drop some of the
-/// completions, which is the "Space doesn't reliably complete all" defect
-/// (QA §4). Skips soft-deleted rows (`deleted_at IS NULL`), mirroring
-/// `update_page_impl`.
-///
-/// Recurring heads must NOT be passed here — completing a recurring page clones
-/// the head and advances it (see `complete_recurring_page_impl`); a plain status
-/// flip would corrupt the series.
+/// Recurring heads must not be passed: completing one clones and advances it (see
+/// `complete_recurring_page_impl`), and a plain flip would corrupt the series.
 pub async fn set_pages_status_impl(
     pool: &sqlx::SqlitePool,
     ids: &[String],
@@ -1614,8 +1493,7 @@ pub async fn set_pages_status_impl(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    // Retried for the same reason as apply_page_update: being write-first is not
-    // an exemption from the WAL write race.
+    // Retried for the reason given on `apply_page_update`.
     crate::tx::retry_on_busy(|| async {
         let now = now_iso();
         let mut tx = pool.begin().await?;
@@ -1636,8 +1514,6 @@ pub async fn set_pages_status_impl(
     })
     .await?;
 
-    // Return the updated summaries so the client can reconcile (post-commit so
-    // any FTS triggers have fired).
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE deleted_at IS NULL AND id IN ("
@@ -1654,8 +1530,6 @@ pub async fn set_pages_status_impl(
         .await?;
     Ok(rows.into_iter().map(PageSummary::from).collect())
 }
-
-// ─── Completed pages (lazy-loaded, paginated) ────────────────────────────────
 
 #[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -1743,27 +1617,24 @@ pub async fn list_completed_pages_impl(
     })
 }
 
-// ─── Recurring page completion ───────────────────────────────────────────────
-
 #[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct CompleteRecurringInput {
     pub page_id: String,
-    /// Which occurrence is being completed, for a page a calendar owns — the caller
-    /// has to say, because such a page's own date stays pinned to where the series
-    /// began. Omit for a page created in Pikos: its next-due date is used.
+    /// Which occurrence is being completed, for a page a calendar owns: its own date
+    /// stays pinned to where the series began. Omit for a page created in Pikos, which
+    /// uses its next-due date.
     #[serde(default)]
     pub occurrence_date: Option<String>,
     #[serde(default)]
     pub scheduled_start: Option<String>,
     #[serde(default)]
     pub scheduled_end: Option<String>,
-    /// The occurrence you meant to complete, as you last saw it. Supply it and the
-    /// completion applies to that occurrence or to nothing: if it is already done,
-    /// its record comes back unchanged, and if the series has moved on for any other
-    /// reason the call is refused. Omit it to complete whichever occurrence is open
-    /// now.
+    /// The occurrence the caller meant to complete. Supplied, the completion applies to
+    /// that occurrence or to nothing: already done returns its record unchanged, and a
+    /// series that moved on for any other reason is refused. Omitted, whichever
+    /// occurrence is open is completed.
     #[serde(default)]
     pub expected_occurrence_date: Option<String>,
 }
@@ -1774,45 +1645,34 @@ pub struct CompleteRecurringInput {
 pub struct CompleteRecurringResult {
     /// The newly created completed clone page.
     pub clone: PageSummary,
-    /// The head after recompute — advanced to the next open occurrence, or `done`
-    /// when the series is exhausted.
+    /// The head after recompute: advanced to the next open occurrence, or `done` when
+    /// the series is exhausted.
     pub head: PageSummary,
 }
 
-/// Atomically completes one occurrence of a recurring page (native or synced) onto
-/// the occurrence-sets model:
-/// 1. Clones the head as a done page at the occurrence being completed (snapshot):
-///    for a native series the head's own oldest-open occurrence; for a synced series
-///    the client-supplied virtual (validated against the rule), since the reconciler
-///    pins the head at the base.
-/// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set` — no EXDATE
-///    merge (the exclusion is set-only). Dismissals are `skip_occurrence`'s.
-/// 3. Recomputes `pages.scheduled_start` from truth (`recompute_recurring_schedule`),
-///    which advances the head to the next open occurrence or marks it `done`. A
-///    synced head advances the same way; the reconciler recomputes off the same sets
-///    on the next sync, so the two converge (an out-of-envelope rule the engine can't
-///    advance stays put, suppressed on the frontend by `headCompleted`).
+/// Completes one occurrence of a recurring page, native or synced, in one transaction:
+/// 1. Clones the head as a done page at that occurrence. A native series uses its own
+///    oldest-open occurrence; a synced one uses the client-supplied virtual, validated
+///    against the rule, since the reconciler pins the head at the base.
+/// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set`.
+/// 3. Recomputes the head, advancing it to the next open occurrence or marking it `done`.
+///    The reconciler recomputes off the same sets, so a synced head converges (a rule the
+///    engine can't advance stays put, suppressed on the frontend by `headCompleted`).
 ///
-/// Entire flow runs in one transaction: a mid-flight crash can't leave a clone
-/// without its set entry (lost history) or a set entry without a recompute (stale
-/// head), and concurrent completions can't allocate the same sort_order. The
-/// head's denorm is owned by the recompute, not `refresh_schedule_denorm`, which
-/// deliberately skips rrule-backed pages.
+/// One transaction, so a crash can't leave a clone without its set entry (lost history)
+/// or a set entry without a recompute (stale head). The head's denorm is owned by the
+/// recompute, not `refresh_schedule_denorm`, which skips rrule-backed pages.
 pub async fn complete_recurring_page_impl(
     pool: &sqlx::SqlitePool,
     data: CompleteRecurringInput,
 ) -> AppResult<CompleteRecurringResult> {
-    // Read-then-write: the transaction reads the head before writing, so if
-    // another connection commits in between (e.g. the background notification
-    // scheduler) its snapshot goes stale and the write fails with
-    // SQLITE_BUSY_SNAPSHOT (517) — which busy_timeout cannot wait out. Retry the
-    // whole attempt; each re-reads fresh state. (See crate::tx.)
+    // Read-then-write: a commit by another connection in between stales the snapshot and
+    // fails with SQLITE_BUSY_SNAPSHOT, which busy_timeout can't wait out. See crate::tx.
     crate::tx::retry_on_busy(|| complete_recurring_page_once(pool, &data)).await
 }
 
-/// What differs between the two clone flavors: a completion clone ('done' at
-/// the completed occurrence) vs a reschedule clone ('not_started' at the new
-/// time).
+/// What differs between a completion clone ('done' at the occurrence) and a reschedule
+/// clone ('not_started' at the new time).
 struct CloneSpec<'a> {
     clone_id: &'a str,
     status: &'a str,
@@ -1822,13 +1682,10 @@ struct CloneSpec<'a> {
     timezone: Option<&'a str>,
 }
 
-/// Snapshot-clones `head` as a new page inside the caller's transaction:
-/// allocates the next sort_order in the head's folder, copies content/metadata,
-/// and syncs the normalized tag tables. Shared by recurring completion and
-/// virtual-occurrence reschedule.
+/// Clones `head` as a new page inside the caller's transaction.
 ///
 /// A scheduled clone gets a schedule row, not just the cached time on the page: the cache is
-/// rebuilt from rows, by any later schedule edit here and by every sync on other devices, and a
+/// rebuilt from rows, by any later schedule edit and by every sync on other devices, and a
 /// time held only in the cache is lost then.
 async fn insert_head_clone_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -1836,8 +1693,7 @@ async fn insert_head_clone_tx(
     spec: CloneSpec<'_>,
     now: &str,
 ) -> AppResult<()> {
-    // sort_order read lives inside the tx so two concurrent clones can't
-    // allocate the same value.
+    // Read inside the tx so two concurrent clones can't allocate the same sort_order.
     let clone_sort_order: i64 = match head.folder_id.as_deref() {
         Some(folder_id) => {
             sqlx::query_scalar(
@@ -1888,8 +1744,6 @@ async fn insert_head_clone_tx(
     .execute(&mut **tx)
     .await?;
 
-    // Sync tags for the clone — same transaction as the pages insert above
-    // so the JSON denorm and the page_tags join can't fall out of sync.
     upsert_page_tags_tx(tx, spec.clone_id, &head.tags).await?;
 
     if let Some(start) = spec.scheduled_start {
@@ -1916,18 +1770,14 @@ async fn complete_recurring_page_once(
     data: &CompleteRecurringInput,
 ) -> AppResult<CompleteRecurringResult> {
     let now = now_iso();
-    // `completed_at` follows the local-wall-clock convention (like scheduled_start),
-    // NOT the UTC `now_iso()` used for created_at/updated_at. The Completed view
-    // date-compares `completed_at.slice(0,10)` against the local day, so a UTC
-    // stamp would hide a just-completed clone whenever UTC's date ≠ the local date.
+    // `completed_at` is local wall-clock, not UTC: the Completed view compares its date
+    // against the local day, so a UTC stamp would hide a fresh clone when the dates differ.
     let completed = now_local_iso();
     let clone_id = uuid::Uuid::new_v4().to_string();
 
     let mut tx = pool.begin().await?;
 
-    // Fetch the head inside the tx, rejecting soft-deleted pages — completing a
-    // trashed series must not resurrect it as a visible "done" clone. The
-    // sort_order read also lives in the tx so concurrent completions can't collide.
+    // A trashed series must not resurrect as a visible done clone.
     // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
@@ -1938,8 +1788,7 @@ async fn complete_recurring_page_once(
     .map(Page::from)
     .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
 
-    // Occurrence completion is set-only, so a misroute to a non-recurring page would
-    // mint a clone no series can ever suppress. Reject it (both kinds).
+    // A clone of a non-recurring page would be one no series can ever suppress.
     let is_recurring: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)")
             .bind(&data.page_id)
@@ -1951,13 +1800,10 @@ async fn complete_recurring_page_once(
         ));
     }
 
-    // Resolve the occurrence: a native head sits on its own oldest-open date (used
-    // directly as the clone's schedule and set key). A synced head is pinned at the
-    // base, so the client supplies the rendered virtual, validated below against
-    // the rule (see synced_occurrence_is_valid). A detached series is unlocked but
-    // may still supply one — its moved override renders as a completable block
-    // whose original_date is in the head's exclusion union, so the head path could
-    // never complete it.
+    // A native head sits on its own oldest-open date. A synced head is pinned at the
+    // base, so the client supplies the virtual (see synced_occurrence_is_valid). A detached
+    // series may supply one too: its moved override's original_date is in the head's
+    // exclusion union, so the head path could never complete it.
     let (occurrence_date, occurrence_start, occurrence_end) =
         if head.schedule_locked || data.occurrence_date.is_some() {
             let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
@@ -1990,13 +1836,10 @@ async fn complete_recurring_page_once(
             )
         };
 
-    // A native head carries no occurrence key, so the date above is read off
-    // `pages.scheduled_start` inside this transaction. Two writers that both saw
-    // occurrence D therefore complete D and D+1 for one gesture — the desktop's
-    // in-flight guard is per-webview and cannot see the CLI, the second writer.
-    // Already-complete means the race is simply lost, so hand back the winner's
-    // clone; any other move is a conflict, because what resolved here is not the
-    // occurrence the caller asked for.
+    // A native head carries no occurrence key, so two writers that both saw occurrence D
+    // would complete D and D+1 for one gesture; the desktop's in-flight guard can't see
+    // the CLI. An already-complete D means the race was lost, so return the winner's
+    // clone; any other move is a conflict.
     if let Some(expected) = data.expected_occurrence_date.as_deref() {
         if expected != occurrence_date {
             return match existing_completed_clone(&mut tx, &data.page_id, expected).await? {
@@ -2011,9 +1854,8 @@ async fn complete_recurring_page_once(
         }
     }
 
-    // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
-    // a second clone for the same occurrence. A live clone → return it unchanged;
-    // a trashed one falls through so the OR REPLACE below re-points the set row.
+    // A double-click or busy retry must not mint a second clone. A trashed clone falls
+    // through so the OR REPLACE below re-points the set row.
     if let Some(clone) = existing_completed_clone(&mut tx, &data.page_id, &occurrence_date).await? {
         let head = page_summary_tx(&mut tx, &data.page_id).await?;
         return Ok(CompleteRecurringResult { clone, head });
@@ -2044,13 +1886,10 @@ async fn complete_recurring_page_once(
     .execute(&mut *tx)
     .await?;
 
-    // Advance the head off the completed + skipped dates (or mark done if the
-    // series is exhausted) from truth, in the same tx.
     crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
 
     tx.commit().await?;
 
-    // Fetch updated results (post-commit so any FTS triggers have fired).
     let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
@@ -2088,9 +1927,8 @@ async fn page_summary_tx(
     Ok(PageSummary::from(row))
 }
 
-/// The live done clone recorded for `(page_id, occurrence_date)`, if any. `None`
-/// when unrecorded or the clone was trashed out of band — the caller then
-/// re-points the set row to a fresh clone.
+/// The live done clone recorded for `(page_id, occurrence_date)`. `None` when unrecorded
+/// or trashed out of band.
 async fn existing_completed_clone(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -2116,8 +1954,7 @@ async fn existing_completed_clone(
     Ok(row.map(PageSummary::from))
 }
 
-/// Whether an active `page_sync` row owns this page — the guard that forks a write
-/// on native vs reconciler-owned (synced) treatment.
+/// Whether an active `page_sync` row owns this page.
 async fn is_active_synced(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -2130,11 +1967,10 @@ async fn is_active_synced(
     .await?)
 }
 
-/// Whether `occurrence_date` (YYYY-MM-DD) is a real occurrence of the page's rule —
-/// guards a synced completion, whose client-supplied virtual could otherwise key a
-/// `completed_set` entry that matches nothing and stays open forever. Enumerates the
-/// raw rule (no exclusions), so a moved override's `original_date` still counts; an
-/// unparseable rule skips the check.
+/// Whether `occurrence_date` (YYYY-MM-DD) is a real occurrence of the page's rule, so a
+/// client-supplied virtual can't key a `completed_set` entry that matches nothing.
+/// Enumerates the raw rule without exclusions, so a moved override's `original_date`
+/// still counts; an unparseable rule passes.
 pub(crate) async fn synced_occurrence_is_valid(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -2164,9 +2000,8 @@ pub(crate) async fn synced_occurrence_is_valid(
     }
 }
 
-/// Drops the `completed_set` row and hard-deletes the done clone via the back-link.
-/// Returns `false` when the date wasn't completed (no-op). Shared by native +
-/// synced uncomplete; the native caller additionally recomputes the head.
+/// Drops the `completed_set` row and hard-deletes the done clone. Returns `false` when
+/// the date wasn't completed.
 async fn drop_completed_occurrence_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -2202,11 +2037,9 @@ pub struct UncompleteRecurringInput {
     pub occurrence_date: String,
 }
 
-/// Reverses a recurring completion (native or synced): drops the completed-set
-/// entry and the done clone (via its back-link), then recomputes the head — which
-/// un-marks `done`, or rewinds a synced head, once the series yields the occurrence
-/// again. No-op if the date wasn't completed. Pre-swap native completions have no
-/// back-link and are not uncompletable.
+/// Reverses a recurring completion, native or synced: drops the completed-set entry and
+/// the done clone, then recomputes the head. No-op if the date wasn't completed.
+/// Completions without a back-link are not uncompletable.
 pub async fn uncomplete_recurring_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: UncompleteRecurringInput,
@@ -2230,11 +2063,9 @@ pub struct SkipOccurrenceInput {
     pub occurrence_date: String,
 }
 
-/// Dismisses one occurrence (native or synced) to the skip-set, then recomputes.
-/// The skip-set is user state the reconciler never writes, so a synced skip
-/// survives sync (expansion unions completed ∪ skip). Distinct from — and mutually
-/// exclusive with — a *moved* occurrence (a `page_schedules` override). Undo is
-/// [`undo_skip_occurrence_impl`].
+/// Dismisses one occurrence to the skip-set, then recomputes. The reconciler never
+/// writes the skip-set, so a synced skip survives sync. Mutually exclusive with a
+/// moved occurrence (a `page_schedules` override). Undo is [`undo_skip_occurrence_impl`].
 pub async fn skip_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: SkipOccurrenceInput,
@@ -2253,8 +2084,7 @@ pub async fn skip_occurrence_impl(
     .await
 }
 
-/// Reverses a skip: drop the skip-set entry and recompute. No-op if the date
-/// wasn't skipped.
+/// Reverses a skip. No-op if the date wasn't skipped.
 pub async fn undo_skip_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: SkipOccurrenceInput,
@@ -2273,15 +2103,12 @@ pub async fn undo_skip_occurrence_impl(
     .await
 }
 
-/// Heals the display cache for every recurring series on foreground load,
-/// returning only the summaries whose head materially changed (`scheduled_start`
-/// or `status`). Guards against a cache left stale by an out-of-process writer
-/// (CLI/mobile) or a prior bug — the in-session path keeps it fresh on every
-/// write, so the steady-state result is empty.
+/// Heals the display cache for every recurring series, returning the summaries whose
+/// head changed (`scheduled_start` or `status`). Covers a cache left stale by an
+/// out-of-process writer; in steady state the result is empty.
 ///
-/// Active-synced series are healed too, not skipped as reconciler-owned: the
-/// reconciler no-ops on an unchanged etag, so nothing else revisits a head left
-/// stale. Their head floors at the connect day
+/// Active-synced series are healed too: the reconciler no-ops on an unchanged etag, so
+/// nothing else revisits a stale head. Their head floors at the connect day
 /// (`recurrence_derive::synced_head_floor`), so it never moves with the clock.
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
@@ -2336,8 +2163,7 @@ pub async fn recompute_recurring_schedules_impl(
 #[ts(export, optional_fields = nullable)]
 pub struct RescheduleVirtualInput {
     pub rule_id: String,
-    /// The rule-generated date being detached (YYYY-MM-DD) — merged into the
-    /// rule's exdates so the virtual occurrence stops rendering.
+    /// The rule-generated date being detached (YYYY-MM-DD), merged into the rule's exdates.
     pub original_date: String,
     pub scheduled_start: String,
     #[serde(default)]
@@ -2349,54 +2175,41 @@ pub struct RescheduleVirtualInput {
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct RescheduleVirtualResult {
-    /// The new standalone page this occurrence became. `null` when the occurrence
-    /// was already pinned to its own time and simply moved.
+    /// The new standalone page this occurrence became. `null` when it was already
+    /// pinned to its own time and simply moved.
     pub clone: Option<PageSummary>,
     /// The repeat's excluded dates after the move, for the caller to store.
     pub rule_exdates: Vec<String>,
 }
 
-/// Atomically re-times one occurrence of a series (drag or popover date pick).
+/// Re-times one occurrence of a series in one transaction, so a failure can't leave both
+/// a clone and the unexcluded virtual on the calendar.
 ///
-/// Two arms, chosen by sync origin. A **synced** series keeps the occurrence
-/// in-series as a `page_schedules` override row — moved in place when the
-/// provider already materialized it, minted otherwise — because `original_date`
-/// is what lets a later re-link overwrite the row with the provider's value.
-/// Cloning instead would leave the row to be re-mirrored *and* strand the clone
-/// beside it: one occurrence, two blocks, permanently. Only an unlocked
-/// (detached) series gets here; an active mirror is rejected before the
-/// transaction.
+/// A synced series keeps the occurrence in-series as a `page_schedules` override row,
+/// moved in place when the provider already materialized it, minted otherwise.
+/// `original_date` lets a later re-link overwrite the row with the provider's value;
+/// cloning instead would leave one occurrence as two blocks. An override needs no
+/// exdate, since the head derivation excludes every materialized `original_date`. Only
+/// a detached series gets here; an active mirror is rejected before the transaction.
 ///
-/// A **native** series has no upstream to reclaim the date, so the occurrence
-/// leaves the series and becomes an independent page:
-/// 1. Clones the head as an independent 'not_started' page
-/// 2. Schedules the clone at the new time (page_schedules row + denorm)
-/// 3. Merges the original date into the rule's exdates so the virtual disappears
-///
-/// One transaction — previously these were three separate client-issued writes,
-/// so a failure after the clone insert left BOTH the clone and the still-
-/// unexcluded virtual on the calendar (duplicate occurrence, duplicate
-/// reminders). The head and rule are otherwise untouched; an override row needs
-/// no exdate, since the head derivation already excludes every materialized
-/// `original_date`.
+/// A native series has no upstream to reclaim the date, so the occurrence becomes an
+/// independent clone scheduled at the new time, and its original date joins the rule's
+/// exdates.
 pub async fn reschedule_virtual_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: RescheduleVirtualInput,
 ) -> AppResult<RescheduleVirtualResult> {
-    // Rescheduling an occurrence rewrites the rule's schedule/exdates — locked on
-    // a synced series. Reject before the retry loop.
+    // Rejected before the retry loop: a synced series' schedule and exdates are locked.
     crate::schedules::ensure_rule_row_unlocked(pool, &data.rule_id).await?;
-    // Read-then-write under WAL — retry on BUSY_SNAPSHOT like completion.
+    // Read-then-write, retried on BUSY_SNAPSHOT like completion.
     crate::tx::retry_on_busy(|| reschedule_virtual_occurrence_once(pool, &data)).await
 }
 
-/// The occurrence's own start, in the basis the reconciler stores `original_date`
-/// in: source-zone wall-clock for a timed series, the bare date for an all-day one
-/// — i.e. what the provider's `RECURRENCE-ID` would carry. A user-authored
-/// override has to agree, because the reconciler replaces an override by exact
-/// `original_date` match; a day-only value against a timed series would leave a
-/// provider move writing a *second* row for the same occurrence. Only the render
-/// and derivation layers day-key.
+/// The occurrence's start in the basis the reconciler stores `original_date` in:
+/// source-zone wall-clock for a timed series, the bare date for an all-day one, as the
+/// provider's `RECURRENCE-ID` carries it. A user-authored override must agree, because
+/// the reconciler replaces an override by exact `original_date`; a day-only value on a
+/// timed series would let a provider move write a second row for the occurrence.
 fn original_date_in_rule_basis(occurrence_date: &str, rule_start: &str) -> String {
     let day = occurrence_date.get(..10).unwrap_or(occurrence_date);
     match rule_start.split_once('T') {
@@ -2424,8 +2237,7 @@ async fn reschedule_virtual_occurrence_once(
                 AppError::NotFound(format!("Recurrence rule not found: {}", data.rule_id))
             })?;
 
-    // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
-    // must not resurrect its content as a visible page.
+    // A trashed series must not resurrect as a visible page.
     // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
@@ -2437,8 +2249,7 @@ async fn reschedule_virtual_occurrence_once(
     .ok_or_else(|| AppError::NotFound(format!("Page not found: {page_id}")))?;
 
     if head.sync_state.is_some() {
-        // Day-keyed lookup, since a synced timed override stores `original_date` as
-        // a full wall-clock while the caller sends the day.
+        // Day-keyed: a synced timed override stores `original_date` as full wall-clock.
         let override_id: Option<String> = sqlx::query_scalar(
             "SELECT id FROM page_schedules
              WHERE rule_id = ?1 AND substr(original_date, 1, 10) = substr(?2, 1, 10)",
@@ -2448,10 +2259,9 @@ async fn reschedule_virtual_occurrence_once(
         .fetch_optional(&mut *tx)
         .await?;
 
-        // Clearing the zone is the point, not incidental: the user just asserted a
-        // device-local time, so the row must stop claiming the source zone or its
-        // reminder would resolve against the wrong offset. A moved row keeps the
-        // `original_date` the provider wrote, which is what its re-link matches on.
+        // The zone is cleared because the user just asserted a device-local time; keeping the
+        // source zone would resolve its reminder against the wrong offset. A moved row keeps
+        // the provider's `original_date`, which its re-link matches on.
         if let Some(override_id) = override_id {
             sqlx::query(
                 "UPDATE page_schedules
@@ -2481,8 +2291,7 @@ async fn reschedule_virtual_occurrence_once(
             .await?;
         }
 
-        // No exdate to merge — the head derivation already excludes every
-        // materialized `original_date`. Read the rule's current set for the caller.
+        // Merges nothing; reads the rule's current exdates for the caller.
         let rule_exdates =
             crate::schedules::merge_rule_exdates_tx(&mut tx, &data.rule_id, &[]).await?;
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
@@ -2515,14 +2324,12 @@ async fn reschedule_virtual_occurrence_once(
     )
     .await?;
 
-    // The exclusion set grew (the detached date), so re-derive the head. A no-op
-    // when the moved occurrence is a future virtual (head unaffected), but the
-    // trigger surface must be exhaustive — the CI shadow invariant is the backstop.
+    // The exclusion set grew, so re-derive the head, even when a future virtual leaves it
+    // unaffected: the shadow invariant test is the backstop for a missed trigger.
     crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
 
     tx.commit().await?;
 
-    // Fetch post-commit so any FTS triggers have fired.
     let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
@@ -2537,7 +2344,7 @@ async fn reschedule_virtual_occurrence_once(
     })
 }
 
-/// Fetch a single page by id (mirrors the app's get_page — no deleted_at filter).
+/// One page by id, trashed or not.
 pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Page>> {
     let mut conn = pool.acquire().await?;
     get_page_in(&mut conn, id).await

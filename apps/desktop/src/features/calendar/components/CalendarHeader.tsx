@@ -13,13 +13,10 @@ interface CalendarHeaderProps {
   onPrevWeek: () => void;
   onToday: () => void;
   referenceDate: Date;
-  /** Which calendar shape is rendered — drives the label, the nav wording and
-   * the "current period" test behind the Today button. */
   viewMode: CalendarViewMode;
   onViewModeChange: (v: CalendarViewMode) => void;
 }
 
-/** Inner navigation content for the calendar — rendered as children of RightPanelHeader. */
 export function CalendarHeader({
   dayCount,
   onNextWeek,
@@ -41,8 +38,6 @@ export function CalendarHeader({
     : isWithinInterval(today, { end: last, start: first });
   const unit = isMonth ? "month" : "week";
 
-  // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
-  // 2026"); month view names the month it is padded around.
   const rangeLabel = isMonth
     ? format(referenceDate, "MMMM yyyy")
     : isSameMonth(first, last)
@@ -113,8 +108,7 @@ export function CalendarHeader({
           </span>
         </TooltipContent>
       </Tooltip>
-      {/* View switcher — sits beside the range nav. The day count itself stays a
-          preference (Settings → Calendar days shown); this only picks the shape. */}
+      {/* The day count stays a preference (Settings → Calendar days shown); this only picks the shape. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

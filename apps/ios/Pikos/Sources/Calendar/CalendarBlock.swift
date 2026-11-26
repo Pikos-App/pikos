@@ -2,10 +2,8 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// A timed page on a grid, drawn the way the desktop draws one: the folder colour blended into
-/// the ground, a full-strength stripe on the leading edge, and a checkbox stroked in that colour.
-///
-/// Type is a step below the list's, because a phone column is a third of a desktop one.
+/// A timed page on a grid, drawn the way the desktop draws one. Type is a step below the
+/// list's, because a phone column is a third of a desktop one.
 struct CalendarBlockView: View {
     let title: String
     let time: String?

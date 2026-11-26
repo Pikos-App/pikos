@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// The release half of the speed gate: the formal benchmark published on /speed has to pass
-// PKOS-0133, and has to have measured the code being released.
+// The release half of the speed gate: the formal benchmark published on /speed has to meet the
+// budget below, and has to have measured the code being released.
 //
 //   node scripts/check-speed-gate.mjs     prints one line for the release record, or fails
 //

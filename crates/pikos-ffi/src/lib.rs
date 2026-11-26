@@ -1,26 +1,9 @@
 //! The Swift-facing surface of Pikos's shared Rust logic.
 //!
-//! UniFFI generates a Swift package from what this module exports, which is how
-//! the iOS app consumes `pikos-core` without reimplementing any of it. The
-//! desktop app does not go through here — it links `pikos-core` and `pikos-db`
-//! directly through Tauri — so this crate is additive, and nothing about the
-//! existing app changes when it does.
-//!
-//! ## Why the boundary is string-typed
-//!
-//! Dates cross as `String`, not as a date type. That looks lossy and is
-//! deliberate: Pikos stores *local wall-clock* strings with no zone (see
-//! `pikos_core::dates`), because "09:00 every day" must stay 09:00 across a DST
-//! transition. `Foundation.Date` is an instant. Converting at the boundary
-//! would force a zone to be chosen on every call, and the wrong choice silently
-//! shifts events by an hour twice a year. Keeping the wire format identical to
-//! the storage format means Swift converts once, at the point of display, where
-//! the user's calendar is actually the right context.
-//!
-//! ## Scope
-//!
-//! Pure logic as free functions, and the database through [`Workspace`] and
-//! [`ReadOnlyWorkspace`] in the `workspace` module.
+//! Dates cross as `String`, not a date type: Pikos stores local wall-clock strings with no
+//! zone (see `pikos_core::dates`), so "09:00 every day" stays 09:00 across a DST change.
+//! Converting at the boundary would force a zone choice on every call and silently shift
+//! events by an hour twice a year. Swift converts once, at display.
 
 use pikos_core::calendar::all_day::{
     assign_stable_all_day_rows, build_all_day_bars, crossing_midnights_count,
@@ -43,8 +26,6 @@ pub use workspace::{
 };
 
 uniffi::setup_scaffolding!();
-
-// ─── Records ─────────────────────────────────────────────────────────────────
 
 /// The subset of a page the layout algorithms read.
 ///
@@ -223,8 +204,6 @@ pub enum SmartView {
     Inbox,
 }
 
-// ─── Text ────────────────────────────────────────────────────────────────────
-
 /// Plain text of a Tiptap document, for the full-text index.
 ///
 /// iOS calls this on the editor webview's `docChanged` message so search keeps
@@ -235,8 +214,6 @@ pub enum SmartView {
 pub fn extract_text(doc_json: String) -> String {
     core_extract_text(&doc_json)
 }
-
-// ─── Deep links ──────────────────────────────────────────────────────────────
 
 /// Parse a `pikos://` URL. Returns `None` for anything unrecognised; callers
 /// should treat that as a no-op, since deep links arrive from outside the app.
@@ -256,8 +233,6 @@ pub fn parse_deep_link(url: String) -> Option<DeepLink> {
         CoreDeepLink::Search { prefill } => DeepLink::Search { prefill },
     })
 }
-
-// ─── Recurrence ──────────────────────────────────────────────────────────────
 
 /// Next occurrence strictly after `after_date`, skipping `exdates`.
 ///
@@ -322,8 +297,6 @@ pub fn expand_recurrence(
     .map(Into::into)
     .collect()
 }
-
-// ─── Quick add ───────────────────────────────────────────────────────────────
 
 /// What a quick-add line said about priority.
 ///
@@ -471,8 +444,6 @@ impl From<core_quick_add::ParseResult> for QuickAddResult {
     }
 }
 
-// ─── Calendar layout ─────────────────────────────────────────────────────────
-
 /// Cascade columns for every timed event touching `day` (a `YYYY-MM-DD`).
 /// `shortest_block_minutes` is the renderer's minimum block height in minutes
 /// of its grid, as `pikos_core::calendar::timed::assign_timed_columns` reads it.
@@ -524,8 +495,6 @@ pub fn count_crossing_midnights(start: String, end: String) -> u32 {
     crossing_midnights_count(&s, &e)
 }
 
-// ─── Schedule editing ────────────────────────────────────────────────────────
-
 /// Decide what happens to an event's end when its start moves to `iso`.
 #[uniffi::export]
 pub fn compute_schedule_transition(
@@ -561,23 +530,15 @@ pub fn content_schema_version() -> i64 {
     CONTENT_SCHEMA_VERSION
 }
 
-/// Kept in step with `pikos_db::CONTENT_SCHEMA_VERSION` by a test below —
-/// this crate does not depend on pikos-db, so the value is mirrored rather
-/// than re-exported.
+/// Mirrors `pikos_db::CONTENT_SCHEMA_VERSION`; a test holds the two equal.
 const CONTENT_SCHEMA_VERSION: i64 = 2;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// `CONTENT_SCHEMA_VERSION` now exists in three places: pikos-db (the
-    /// authority), packages/core (for TypeScript callers) and here (so iOS can
-    /// check it without linking the database layer). pikos-db already guards
-    /// itself against the TypeScript copy; this guards the third.
-    ///
-    /// Reading the constant out of pikos-db's source rather than depending on
-    /// the crate is deliberate — pulling in sqlx and tokio to read one integer
-    /// would put a database engine inside a pure-logic binding.
+    /// Reads the constant from pikos-db's source because depending on the crate would pull a
+    /// database engine into a pure-logic binding.
     #[test]
     fn content_schema_version_matches_pikos_db() {
         let db_lib =
@@ -604,9 +565,6 @@ mod tests {
         );
     }
 
-    /// The exported surface is pure and total: no input should panic across the
-    /// FFI boundary, because a panic in Rust becomes a crash in the host app
-    /// with no Swift-side recovery.
     #[test]
     fn exported_functions_tolerate_malformed_input() {
         let junk = ["", "  ", "not-a-date", "2026-13-45", "\u{0}", "{{{"];
@@ -635,9 +593,6 @@ mod tests {
         }
     }
 
-    /// A malformed page must be skipped, not crash the layout pass. Real data
-    /// can contain a half-written row after a crash, and the phone should still
-    /// render its calendar.
     #[test]
     fn layout_skips_unparseable_pages() {
         let pages = vec![

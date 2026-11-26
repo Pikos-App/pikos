@@ -1,17 +1,11 @@
-//! Minimal window state save/restore. Replaces tauri-plugin-window-state
-//! because that plugin had a save/restore asymmetry causing the window to
-//! drift smaller on every launch cycle (exact cause unclear — likely an
-//! inner/outer size mismatch or a scale-factor round-trip bug).
+//! Window size and position, saved and restored.
 //!
-//! Geometry is persisted in **logical** pixels (size + position), not physical.
-//! Storing physical pixels meant a window saved on a 2x display restored at the
-//! same physical size on a 1x display — i.e. twice as large in logical terms —
-//! so after moving between monitors of different scale the window came back
-//! oversized, macOS treated it as zoomed, and the native title-bar drag was
-//! disabled. Logical pixels round-trip across scale factors. On restore we also
-//! clamp size + position to the target monitor's visible work area so a stale or
-//! corrupted file (or a now-disconnected monitor) can never leave the window
-//! off-screen or larger than the screen.
+//! Geometry is persisted in **logical** pixels, not physical. A window saved on a 2x
+//! display and restored at the same physical size on a 1x display comes back twice as
+//! large, which macOS treats as zoomed and disables the native title-bar drag. Logical
+//! pixels round-trip across scale factors. On restore, size and position are clamped to
+//! the target monitor's visible work area, so a stale or corrupted file (or a
+//! disconnected monitor) can never leave the window off-screen or larger than the screen.
 
 use std::fs;
 use std::path::PathBuf;
@@ -23,17 +17,12 @@ const FILE_NAME: &str = "window-state.json";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SavedState {
-    /// Inner (content area) width in logical pixels.
     width: f64,
-    /// Inner (content area) height in logical pixels.
     height: f64,
-    /// Outer window x position in logical pixels.
     x: f64,
-    /// Outer window y position in logical pixels.
     y: f64,
 }
 
-/// A logical-pixel rectangle (top-left origin), used for the work-area clamp.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct LogicalRect {
     x: f64,
@@ -46,10 +35,7 @@ fn state_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|p| p.join(FILE_NAME))
 }
 
-/// Clamp the saved geometry to fit within `area`: shrink the size to the
-/// work area, then pull the position back so the whole window stays visible.
-/// Pure math, unit-tested below — the Tauri-facing code just feeds it monitor
-/// data.
+/// Shrinks the size to the work area, then pulls the position back so the whole window stays visible.
 fn clamp_to_work_area(saved: &SavedState, area: LogicalRect) -> SavedState {
     let width = saved.width.min(area.width);
     let height = saved.height.min(area.height);
@@ -64,8 +50,7 @@ fn clamp_to_work_area(saved: &SavedState, area: LogicalRect) -> SavedState {
     }
 }
 
-/// Called in setup after the main window exists. No-op if the state file
-/// is missing or corrupted — the window keeps the config default.
+/// No-op if the state file is missing or corrupted: the window keeps the config default.
 pub fn restore<R: Runtime>(app: &AppHandle<R>) {
     let Some(path) = state_path(app) else { return };
     let Ok(data) = fs::read_to_string(&path) else {
@@ -78,17 +63,13 @@ pub fn restore<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
 
-    // Sanity: reject obviously-bogus sizes so a corrupted file can't produce
-    // an unusable window. Tauri's minWidth/minHeight also guard this.
+    // Reject bogus sizes so a corrupted file can't produce an unusable window.
     if state.width < 200.0 || state.height < 200.0 {
         return;
     }
 
-    // Find the monitor the saved position lands on (macOS reports monitor
-    // coordinates as global points, which match our logical units). Fall back
-    // to the current monitor, then the primary, so a disconnected display still
-    // gives us something to clamp against. If no monitor is resolvable we apply
-    // the saved geometry unclamped rather than refusing to restore.
+    // macOS reports monitor coordinates as global points, which match our logical units.
+    // Falls back to the current then primary monitor; with none resolvable, geometry is applied unclamped.
     let center_x = state.x + state.width / 2.0;
     let center_y = state.y + state.height / 2.0;
     let monitor = window
@@ -117,8 +98,7 @@ pub fn restore<R: Runtime>(app: &AppHandle<R>) {
     let _ = window.set_position(LogicalPosition::new(target.x, target.y));
 }
 
-/// Called on every WindowEvent::Resized/Moved (CloseRequested doesn't fire
-/// reliably on macOS Cmd+Q — see lib.rs). Silently no-ops on any error.
+/// Silently no-ops on any error.
 pub fn save<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         return;
@@ -179,7 +159,7 @@ mod tests {
 
     #[test]
     fn shrinks_a_window_larger_than_the_work_area() {
-        // The monitor-scale bug: physical size restored as logical is too big.
+        // Physical size restored as logical is too big.
         let r = clamp_to_work_area(&geom(2880.0, 1800.0, 0.0, 25.0), AREA);
         assert_eq!((r.width, r.height), (1440.0, 875.0));
         // Position pinned to the work-area origin since the window fills it.

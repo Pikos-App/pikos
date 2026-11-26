@@ -1,118 +1,81 @@
-// E2E coverage for the settings → preferences → live-UI round-trip.
-//
-// The textbook "settings round-trip" is export → wipe → import → identity,
-// but real export/wipe goes through Tauri APIs that aren't reachable from
-// the browser-only test harness. What IS reachable — and equally important
-// to lock down — is the path from a settings toggle to its observable UI
-// consequence: changing a preference must take effect immediately, persist
-// across reload, and re-open with the new value selected.
-//
-// import.spec.ts already covers the markdown-vault import path, so this
-// spec focuses on the preferences round-trip.
+// Export, wipe and import need Tauri APIs the browser harness can't reach, so this covers the
+// preferences round-trip: a toggle takes effect at once, persists across reload and reopens selected.
 
 import { test as appTest, expect, mod, quickAdd } from "./fixtures";
 
-// ─── Calendar day count: setting → live UI → reload survives ───────────────
-//
-// Calendar day count translates directly into the number of all-day columns
-// rendered. Picking "3" should drop the column count to 3 — and after reload
-// the calendar should still render 3 columns, not bounce back to the default.
+appTest("calendar days setting reflects in the calendar and survives reload", async ({ app }) => {
+  await app.getByRole("button", { name: "Calendar view" }).click();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  const allDayCols = app.locator('[aria-label^="All-day events,"]');
+  await expect(allDayCols).toHaveCount(7);
 
-appTest(
-  "calendar days setting reflects in the calendar and survives reload",
-  async ({ app }) => {
-    // Open the calendar so we can count columns. Default is 7 (one per day).
-    await app.getByRole("button", { name: "Calendar view" }).click();
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-    const allDayCols = app.locator('[aria-label^="All-day events,"]');
-    await expect(allDayCols).toHaveCount(7);
+  // Scope queries to the Settings region: the sidebar behind the overlay has matching button labels.
+  await app.getByRole("button", { name: "Open settings" }).click();
+  const settings = app.getByRole("region", { name: "Settings" });
+  await expect(settings.getByRole("heading", { name: "Preferences" })).toBeVisible();
 
-    // Open settings — General is the default tab. The page renders inside
-    // a Settings region so we can scope subsequent queries away from the
-    // sidebar (which still has matching button labels behind the overlay).
-    await app.getByRole("button", { name: "Open settings" }).click();
-    const settings = app.getByRole("region", { name: "Settings" });
-    await expect(settings.getByRole("heading", { name: "Preferences" })).toBeVisible();
+  await settings
+    .getByLabel("Calendar days shown")
+    .getByRole("button", { exact: true, name: "3" })
+    .click();
 
-    await settings
-      .getByLabel("Calendar days shown")
-      .getByRole("button", { exact: true, name: "3" })
-      .click();
+  await app.keyboard.press("Escape");
+  await expect(app.getByRole("heading", { name: "Preferences" })).not.toBeVisible();
+  await expect(allDayCols).toHaveCount(3);
 
-    // Close settings and verify the calendar live-updated to 3 columns.
-    await app.keyboard.press("Escape");
-    await expect(app.getByRole("heading", { name: "Preferences" })).not.toBeVisible();
-    await expect(allDayCols).toHaveCount(3);
+  await app.reload();
+  await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  await expect(allDayCols).toHaveCount(3);
 
-    // Reload — the preference is in localStorage, so the calendar should
-    // remount with 3 columns (no flash to 7 and back).
-    await app.reload();
-    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-    await expect(allDayCols).toHaveCount(3);
+  // The buttons don't expose aria-pressed, so the visible UI stands in for the selected value.
+});
 
-    // Re-open settings: the "3" toggle is the active one. We can't read
-    // aria-pressed (the buttons don't expose it), but the underlying value
-    // has driven the visible UI — that's the contract.
-  }
-);
+// The shortcut and the Settings row write the same preference, so the round-trip is only
+// proved by driving one and reading the other back.
 
-// ─── Editor text size: shortcut → live type → reload survives → reset ──────
-//
-// The two paths (⌘+/⌘− and the Settings row) write the same preference, so the
-// round-trip is only proved by driving one and reading the other back.
+appTest("editor text size steps from the keyboard and survives reload", async ({ app }) => {
+  await quickAdd(app, "font size test");
+  await app.locator("[data-page-list-item]").getByText("font size test").click();
+  const editor = app.getByRole("textbox", { name: "Page content" });
+  await editor.click();
 
-appTest(
-  "editor text size steps from the keyboard and survives reload",
-  async ({ app }) => {
-    await quickAdd(app, "font size test");
-    await app.locator("[data-page-list-item]").getByText("font size test").click();
-    const editor = app.getByRole("textbox", { name: "Page content" });
-    await editor.click();
+  const fontSize = () => editor.evaluate((el) => getComputedStyle(el).fontSize);
+  expect(await fontSize()).toBe("14px");
 
-    const fontSize = () => editor.evaluate((el) => getComputedStyle(el).fontSize);
-    expect(await fontSize()).toBe("14px");
+  await app.keyboard.press(mod("Mod+="));
+  await expect.poll(fontSize).toBe("16px");
+  await app.keyboard.press(mod("Mod+="));
+  await expect.poll(fontSize).toBe("18px");
+  await app.keyboard.press(mod("Mod+-"));
+  await expect.poll(fontSize).toBe("16px");
 
-    await app.keyboard.press(mod("Mod+="));
-    await expect.poll(fontSize).toBe("16px");
-    await app.keyboard.press(mod("Mod+="));
-    await expect.poll(fontSize).toBe("18px");
-    await app.keyboard.press(mod("Mod+-"));
-    await expect.poll(fontSize).toBe("16px");
+  // The keys act on the panel on screen, so with the calendar up they must not
+  // resize the editor hiding behind it.
+  await app.getByRole("button", { name: "Calendar view" }).click();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  await app.keyboard.press(mod("Mod+="));
+  await app.getByRole("button", { name: "Editor view" }).click();
+  await expect.poll(fontSize).toBe("16px");
 
-    // The keys act on the panel on screen, so with the calendar up they must not
-    // resize the editor hiding behind it.
-    await app.getByRole("button", { name: "Calendar view" }).click();
-    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
-    await app.keyboard.press(mod("Mod+="));
-    await app.getByRole("button", { name: "Editor view" }).click();
-    await expect.poll(fontSize).toBe("16px");
+  // The Settings row is the other half of the round-trip: it must be showing
+  // what the shortcut wrote, not its own stale copy.
+  await app.getByRole("button", { name: "Open settings" }).click();
+  const settings = app.getByRole("region", { name: "Settings" });
+  await settings.getByRole("button", { name: /^Editor text size:/ }).click();
+  // Radix portals the popover outside the settings region.
+  await app.getByRole("button", { exact: true, name: "20" }).click();
+  await app.keyboard.press("Escape");
+  await expect.poll(fontSize).toBe("20px");
 
-    // The Settings row is the other half of the round-trip: it must be showing
-    // what the shortcut wrote, not its own stale copy.
-    await app.getByRole("button", { name: "Open settings" }).click();
-    const settings = app.getByRole("region", { name: "Settings" });
-    await settings.getByRole("button", { name: /^Editor text size:/ }).click();
-    // Radix portals the popover outside the settings region.
-    await app.getByRole("button", { exact: true, name: "20" }).click();
-    await app.keyboard.press("Escape");
-    await expect.poll(fontSize).toBe("20px");
+  // The mock adapter holds pages in memory, so a reload starts on an empty
+  // workspace — the preference is what has to come back, not the page.
+  await app.reload();
+  await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+  await quickAdd(app, "font size after reload");
+  await app.locator("[data-page-list-item]").getByText("font size after reload").click();
+  await expect.poll(fontSize).toBe("20px");
 
-    // The mock adapter holds pages in memory, so a reload starts on an empty
-    // workspace — the preference is what has to come back, not the page.
-    await app.reload();
-    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
-    await quickAdd(app, "font size after reload");
-    await app.locator("[data-page-list-item]").getByText("font size after reload").click();
-    await expect.poll(fontSize).toBe("20px");
-
-    await app.keyboard.press(mod("Mod+0"));
-    await expect.poll(fontSize).toBe("14px");
-  }
-);
-
-// Note on scope: a real "settings round-trip" (export → wipe → re-import →
-// identity) requires Tauri APIs (invoke/relaunch) that don't exist in
-// browser-only test mode, so the data-layer round-trip is unreachable here.
-// The above preferences round-trip is the strongest signal we can lock down
-// without inventing infrastructure that wouldn't run in the Tauri build.
+  await app.keyboard.press(mod("Mod+0"));
+  await expect.poll(fontSize).toBe("14px");
+});

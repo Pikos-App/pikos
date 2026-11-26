@@ -28,9 +28,7 @@ function CaptureWorkspace() {
   return null;
 }
 
-/** The sidebar selects views rather than rendering them — the Trash entry asks
- *  UIContext for its view, and the middle panel renders it. This reads back
- *  what the entry asked for. */
+/** Reads back the view the Trash entry asked UIContext for; the sidebar selects views, the middle panel renders them. */
 function ShowActiveView() {
   const { activeViewId } = useUI();
   return <span data-testid="active-view">{activeViewId}</span>;
@@ -121,8 +119,7 @@ describe("FolderList — trash", () => {
     await setup([]);
 
     const trash = await screen.findByRole("button", { name: "Trash" });
-    // Bottom of the sidebar, after the smart views and the folder list — the
-    // entry is a way into deleted pages, not another place they live.
+    // Bottom of the sidebar: the entry is a way into deleted pages, not another place they live.
     const entries = screen.getAllByRole("button", { name: /^(Today|Inbox|Trash)$/ });
     expect(entries.map((e) => e.textContent)).toEqual(["Today", "Inbox", "Trash"]);
 

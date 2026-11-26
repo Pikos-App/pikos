@@ -2,14 +2,12 @@
 import ThemeToggle from "./ThemeToggle.astro";
 
 interface Props {
-  /** Current page path — used to highlight active link */
   current?: string;
 }
 const { current = "/" } = Astro.props;
 
-// A newcomer's questions, in order: what does it do, who is building it. Compare
-// and Release Notes sit in the footer instead: one answers someone already
-// weighing Pikos against another app, the other only an existing user.
+// A newcomer's questions, in order. Compare and Release Notes live in the footer: they serve
+// someone already weighing Pikos or an existing user.
 const links = [
   { href: "/guides", label: "Guides" },
   { href: "/blog", label: "Blog" },
@@ -30,7 +28,6 @@ const links = [
   </a>
 
   <div class="flex items-center gap-4 md:gap-6">
-    <!-- Desktop links -->
     <div class="hidden items-center gap-6 md:flex">
       {links.map((l) => (
         <a
@@ -49,7 +46,6 @@ const links = [
 
     <ThemeToggle />
 
-    <!-- Desktop CTA -->
     <a
       href="/download"
       class="hidden rounded-lg bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 md:inline-block dark:bg-brand-400 dark:hover:bg-brand-500"
@@ -57,7 +53,6 @@ const links = [
       Download
     </a>
 
-    <!-- Mobile menu toggle -->
     <button
       id="nav-toggle"
       type="button"
@@ -71,7 +66,6 @@ const links = [
     </button>
   </div>
 
-  <!-- Mobile menu panel -->
   <div
     id="nav-menu"
     class="absolute inset-x-0 top-full z-50 hidden flex-col gap-1 border-b border-neutral-200 bg-neutral-50 px-8 py-4 shadow-lg md:hidden dark:border-neutral-800 dark:bg-neutral-900"

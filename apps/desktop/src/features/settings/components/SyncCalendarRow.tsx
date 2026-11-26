@@ -25,22 +25,15 @@ export function SyncCalendarRow({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmOffOpen, setConfirmOffOpen] = useState(false);
-  // Re-render each minute so "synced N ago" and the stale dot stay current
-  // without a user interaction, since both derive from the wall clock.
   const now = useNow();
   const dot = calendarSyncDot(calendar, lastResult, now);
   const swatch = currentPaletteColor(calendar.color) ?? "var(--text-tertiary)";
   const kept = calendar.detachedPages;
 
-  // Both directions move the user's work, and a switch advertises neither.
-  //
-  // ON overwrites what they changed while the calendar was off, and nothing else
-  // warns them — the page-level banner says the opposite ("a regular page you can
-  // edit"). It only asks when pages are actually waiting to be reclaimed.
-  //
-  // OFF is a sync teardown, not a visibility toggle: it hard-deletes every mirror
-  // the user never actioned. It always asks, because it always removes something,
-  // and that silence is what made the switch read as show/hide.
+  // Both directions move the user's work, and a switch advertises neither. ON overwrites what they
+  // changed while the calendar was off, and the page-level banner says the opposite ("a regular page
+  // you can edit"), so it asks when pages are waiting to be reclaimed. OFF is a sync teardown, not a
+  // visibility toggle: it hard-deletes every mirror the user never actioned, so it always asks.
   function toggle(next: boolean) {
     if (!next) {
       setConfirmOffOpen(true);

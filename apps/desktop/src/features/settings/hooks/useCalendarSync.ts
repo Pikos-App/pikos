@@ -31,7 +31,6 @@ function actionError(e: unknown, fallback: string): string {
 
 export interface CalendarSyncState {
   accounts: AccountWithCalendars[];
-  /** When the latest background sync pass ended, set with the `accounts` read after it. */
   lastPassAt: Date | null;
   results: ResultMap;
   loading: boolean;
@@ -41,7 +40,6 @@ export interface CalendarSyncState {
   connectGoogle: () => Promise<void>;
   reconnect: (accountId: string, password: string) => Promise<void>;
   reconnectGoogle: (accountId: string) => Promise<void>;
-  /** False in a build without the Google OAuth client — the picker disables it. */
   googleAvailable: boolean;
   disconnect: (accountId: string) => Promise<void>;
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
@@ -92,10 +90,8 @@ export function useCalendarSync(): CalendarSyncState {
     setLastPassAt(at);
   }
 
-  // The dot and "synced N ago" read `lastSyncedAt`, which the *backfill* stamps —
-  // and enabling a calendar only pokes that backfill, so it lands after this hook's
-  // own post-toggle read. Without this the row keeps showing a pre-sync snapshot
-  // (stale dot, no timestamp) until some other panel action happens to re-read.
+  // The dot and "synced N ago" read `lastSyncedAt`, which the backfill stamps after this hook's own
+  // post-toggle read, so without this the row keeps a pre-sync snapshot.
   const refreshRef = useRef(refreshAfterPass);
   useEffect(() => {
     refreshRef.current = refreshAfterPass;
@@ -133,10 +129,8 @@ export function useCalendarSync(): CalendarSyncState {
     await refresh();
   }
 
-  // Both reconnect paths resync straight away: the account has been out of the
-  // background pass since the flag was set (`load_accounts` filters on it), so
-  // without this its calendars sit stale until the next interval tick.
-  // Rejections propagate to the dialog, which owns the inline error.
+  // Both reconnect paths resync at once: the account has been out of the background pass since the flag
+  // was set (`load_accounts` filters on it). Rejections propagate to the dialog, which owns the error.
   async function reconnect(accountId: string, password: string) {
     if (!storage) return;
     setError(null);
@@ -183,8 +177,6 @@ export function useCalendarSync(): CalendarSyncState {
     }
     setResults((prev) => prune(prev, [calendarRowId]));
     await refresh();
-    // Enabling creates the external folder; disabling removes/de-flags it —
-    // reload PagesContext so the sidebar reflects the change immediately.
     await reload();
   }
 
@@ -234,8 +226,6 @@ export function useCalendarSync(): CalendarSyncState {
         return next;
       });
       await refresh();
-      // A poll can upsert/remove pages — reload PagesContext so the calendar
-      // reflects the result without waiting for the next background pass.
       await reload();
     } catch (e) {
       setError(actionError(e, "Couldn't sync right now. Check your connection and try again."));

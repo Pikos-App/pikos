@@ -7,8 +7,8 @@ export type CompleteRecurringResult = {
    */
   clone: PageSummary;
   /**
-   * The head after recompute — advanced to the next open occurrence, or `done`
-   * when the series is exhausted.
+   * The head after recompute: advanced to the next open occurrence, or `done` when
+   * the series is exhausted.
    */
   head: PageSummary;
 };

@@ -34,7 +34,6 @@ pub enum GoogleError {
     )]
     NoPrimaryCalendar,
 
-    /// Transport-level failure (DNS, TLS, connection, timeout, read).
     #[error("Google network error: {0}")]
     Network(String),
 

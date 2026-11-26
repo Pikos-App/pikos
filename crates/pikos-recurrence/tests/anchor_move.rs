@@ -5,7 +5,6 @@ use pikos_recurrence::resolve_anchor_move;
 
 #[test]
 fn a_single_weekday_weekly_rule_realigns_to_the_moved_weekday() {
-    // 2026-01-05 is a Monday, 2026-01-07 a Wednesday.
     let moved = resolve_anchor_move("FREQ=WEEKLY;BYDAY=MO", "2026-01-07T09:00:00", None);
     assert_eq!(
         moved.rrule.as_deref(),

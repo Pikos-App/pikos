@@ -2,12 +2,8 @@ import XCTest
 
 @testable import PikosEditorBridge
 
-/// The wire protocol is generated from packages/editor-mobile/src/protocol.ts,
-/// so these do not re-test the field names — a mismatch there is impossible by
-/// construction. What they cover is the encoding and decoding around it, where
-/// hand-written code still sits.
+/// Covers the hand-written encoding and decoding; the generated field names are not re-tested.
 final class EditorBridgeProtocolTests: XCTestCase {
-
     func testOutgoingMessagesEncodeAsVersionedEnvelopes() throws {
         let json = try EditorBridge.Outgoing
             .load(.init(doc: #"{"type":"doc"}"#, pageId: "page-1"))
@@ -21,18 +17,14 @@ final class EditorBridgeProtocolTests: XCTestCase {
         XCTAssertEqual(payload?["pageId"] as? String, "page-1")
     }
 
-    /// Documents are arbitrary user text and routinely contain quotes,
-    /// backslashes and newlines. The encoded message is interpolated into a
-    /// JavaScript call, so anything that escapes its string literal would be
-    /// evaluated as code.
+    /// The encoded message is interpolated into a JavaScript call, so anything
+    /// escaping its string literal would be evaluated as code.
     func testDocumentContentCannotEscapeItsEncoding() throws {
         let hostile = #"{"text":"\" ; window.evil() ; \"","newline":"a\nb"}"#
         let json = try EditorBridge.Outgoing
             .load(.init(doc: hostile, pageId: "p"))
             .encoded()
 
-        // Round-trips back to exactly what went in, which is the property that
-        // matters: no interpretation happened along the way.
         let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         let payload = parsed?["payload"] as? [String: Any]
         XCTAssertEqual(payload?["doc"] as? String, hostile)
@@ -48,8 +40,7 @@ final class EditorBridgeProtocolTests: XCTestCase {
     func testSetEditableEncodesABareBoolean() throws {
         let locked = try EditorBridge.Outgoing.setEditable(.init(editable: false)).encoded()
         XCTAssertTrue(locked.contains("\"type\":\"setEditable\""))
-        // A JSON boolean, not a string or a number: the webview flips
-        // `contenteditable` on exactly this value, and "false" is truthy.
+        // A JSON boolean: the webview flips `contenteditable` on it, and "false" is truthy.
         XCTAssertTrue(locked.contains("\"editable\":false"))
     }
 
@@ -62,14 +53,11 @@ final class EditorBridgeProtocolTests: XCTestCase {
             .toggleBlock(.init(headingLevel: 2, nodeType: "heading"))
             .encoded()
         XCTAssertTrue(block.contains("\"nodeType\":\"heading\""))
-        // An Int, not a Double: the field is declared `integer` in the protocol,
-        // so this must not encode as 2.0.
+        // Declared `integer`, so it must not encode as 2.0.
         XCTAssertTrue(block.contains("\"headingLevel\":2"))
     }
 
-    /// The mark names the controller can send must all be ones the webview
-    /// accepts — it refuses anything outside its allowlist, and a name that is
-    /// silently dropped looks to the user like a dead button.
+    /// The webview silently drops names outside its allowlist, which looks like a dead button.
     func testEveryControllerMarkIsOneTheEditorAccepts() {
         let accepted: Set<String> = ["bold", "italic", "underline", "strike", "code"]
         for mark in EditorController.Mark.allCases {
@@ -98,9 +86,7 @@ final class EditorBridgeProtocolTests: XCTestCase {
         XCTAssertEqual(payload.plainText, "hi")
     }
 
-    /// An app update can replace the native shell while a webview is still
-    /// live. Acting on a message from a version this build does not understand
-    /// is worse than dropping it.
+    /// An app update can replace the native shell while a webview is still live.
     func testMismatchedProtocolVersionIsRejected() {
         let data = Data(#"{"v":99,"type":"ready","payload":{"protocolVersion":99}}"#.utf8)
         XCTAssertThrowsError(try JSONDecoder().decode(EditorBridge.Incoming.self, from: data)) {
@@ -118,7 +104,6 @@ final class EditorBridgeProtocolTests: XCTestCase {
     }
 }
 
-/// A stand-in editor, so the controller can be driven without a webview.
 @MainActor
 private final class RecordingSink: EditorMessageSink {
     var isReady = false
@@ -128,10 +113,7 @@ private final class RecordingSink: EditorMessageSink {
         delivered.append(message)
     }
 
-    /// The message types that arrived, in order. Comparing type names rather
-    /// than the payloads keeps these assertions about routing, which is what
-    /// the controller decides; the payloads are the protocol's business and are
-    /// covered above.
+    /// Type names only: the assertions are about routing, and payloads are covered above.
     var types: [String] {
         delivered.compactMap { message -> String? in
             guard let json = try? message.encoded(),
@@ -143,23 +125,18 @@ private final class RecordingSink: EditorMessageSink {
     }
 }
 
-/// `EditorController` decides one thing — whether a command goes anywhere — and
-/// it is the kind of rule that is invisible when wrong: a toolbar button that
-/// does nothing looks like a bug in the editor, not in the routing.
+/// A toolbar button that does nothing looks like an editor bug, not a routing one.
 @MainActor
 final class EditorControllerTests: XCTestCase {
-
     func testCommandsAreDroppedWithNoEditorAttached() {
         let controller = EditorController()
         XCTAssertFalse(controller.isReady)
-        // The bar is that this does not trap; there is nowhere for it to go.
+        // Passes if it does not trap.
         controller.toggleMark(.bold)
         controller.focus()
     }
 
-    /// The editor is mounted but has not finished loading. Sending now would
-    /// reach a `window.pikosEditor` that does not exist yet, and the command
-    /// would be lost with no indication.
+    /// Sending before ready would reach a `window.pikosEditor` that does not exist yet.
     func testCommandsAreDroppedUntilTheEditorReports() {
         let sink = RecordingSink()
         let controller = EditorController()
@@ -189,8 +166,6 @@ final class EditorControllerTests: XCTestCase {
             sink.types, ["toggleMark", "toggleBlock", "focus", "blur", "insertImage"])
     }
 
-    /// `dismantleUIView` detaches when the screen goes away. A controller that
-    /// kept sending would be talking to a webview that has been torn down.
     func testDetachingStopsDelivery() {
         let sink = RecordingSink()
         sink.isReady = true
@@ -203,9 +178,6 @@ final class EditorControllerTests: XCTestCase {
         XCTAssertFalse(controller.isReady)
     }
 
-    /// The controller holds the sink weakly — the webview owns the coordinator,
-    /// not the other way round — so a torn-down editor must not be kept alive
-    /// by a controller the screen still holds.
     func testTheSinkIsNotRetained() {
         let controller = EditorController()
         do {
@@ -218,9 +190,8 @@ final class EditorControllerTests: XCTestCase {
     }
 }
 
-/// The scheme handler is the webview's only route to the filesystem, and the
-/// paths it receives come out of documents — which are user content. These
-/// cover the boundary rather than the happy path.
+/// The handler is the webview's only route to the filesystem, and its paths come
+/// from user content, so these cover the boundary.
 final class EditorAssetSchemeHandlerTests: XCTestCase {
     private var root: URL!
     private var bundle: URL!
@@ -256,16 +227,12 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
         XCTAssertEqual(resolve("pikos-asset://app/index.html"), bundle)
     }
 
-    /// The app host serves exactly one document by name. If it resolved paths
-    /// instead, a request there would reach the filesystem.
     func testAppHostServesNothingElse() {
         XCTAssertNil(resolve("pikos-asset://app/other.html"))
         XCTAssertNil(resolve("pikos-asset://app/../../etc/passwd"))
     }
 
-    /// Asset paths come from documents, and a document is user content. A path
-    /// aimed out of the workspace must be refused rather than sanitised, since
-    /// sanitising invites an escape the filter did not anticipate.
+    /// Refused rather than sanitised, since sanitising invites an escape the filter did not anticipate.
     func testRefusesPathTraversal() {
         for hostile in [
             "pikos-asset://asset/../secret",
@@ -289,20 +256,14 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
             resolve("pikos-asset://asset/my%20photo.png")?.lastPathComponent, "my photo.png")
     }
 
-    /// `URL.path` decodes once already. Decoding again turned a percent sign in
-    /// a filename into an escape sequence, so an image the user had named
-    /// `50%.png` resolved to a file that does not exist and silently failed to
-    /// load.
+    /// `URL.path` decodes once already; decoding again broke an image named `50%.png`.
     func testPercentSignsInFilenamesSurvive() throws {
         try Data("x".utf8).write(to: root.appendingPathComponent("50%.png"))
         XCTAssertEqual(
             resolve("pikos-asset://asset/50%25.png")?.lastPathComponent, "50%.png")
     }
 
-    /// The other half of the same bug. A doubly-encoded traversal decoded once
-    /// into `..` — harmless only because the root check caught it afterwards.
-    /// It is now read as what it literally is: a directory whose name happens
-    /// to be `%2e%2e`, still inside the root.
+    /// Read literally, as a directory named `%2e%2e` inside the root, not decoded into `..`.
     func testDoublyEncodedTraversalIsTakenLiterally() throws {
         let resolved = resolve("pikos-asset://asset/%252e%252e/secret")
         XCTAssertEqual(resolved?.pathComponents.suffix(2).joined(separator: "/"), "%2e%2e/secret")
@@ -311,14 +272,10 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
             "still inside the asset root")
     }
 
-    /// WebKit raises `NSInternalInconsistencyException` — a crash, not an
-    /// ignored call — if a response is delivered to a task it has already
-    /// stopped. It happens whenever a load is cancelled while a read is in
-    /// flight, which on a long page is just scrolling quickly.
+    /// Delivering to a stopped task makes WebKit raise `NSInternalInconsistencyException`.
     func testAStoppedTaskIsNotDeliveredTo() {
-        // The object is held for the whole test on purpose: `ObjectIdentifier`
-        // is an address, and a freed one can be handed straight back to the
-        // next allocation — which would make this pass or fail by luck.
+        // Held for the whole test: `ObjectIdentifier` is an address, and a freed
+        // one can be reused by the next allocation, making this pass by luck.
         let task = NSObject()
         withExtendedLifetime(task) {
             let token = ObjectIdentifier(task)
@@ -338,8 +295,6 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
         }
     }
 
-    /// A task never started — or one belonging to a different handler — is not
-    /// something to deliver to either.
     func testAnUnknownTaskIsRefused() {
         let task = NSObject()
         withExtendedLifetime(task) {
@@ -347,8 +302,6 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
         }
     }
 
-    /// Anything not recognised is served as binary, so an unexpected file
-    /// cannot be coaxed into executing as script inside the editor's origin.
     func testUnknownExtensionsAreServedAsBinary() {
         XCTAssertEqual(EditorAssetSchemeHandler.mimeType(for: "js"), "application/octet-stream")
         XCTAssertEqual(EditorAssetSchemeHandler.mimeType(for: "html"), "text/html")

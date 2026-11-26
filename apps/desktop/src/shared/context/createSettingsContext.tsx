@@ -1,21 +1,18 @@
-// Settings contexts all have the same skeleton: a nullable context, a provider
-// that publishes one value object, and a hook that refuses to run outside the
-// provider. Only the value differs, so that is the only thing each settings
-// module writes — it hands its value hook here and gets the skeleton back.
+// Settings contexts share one skeleton (nullable context, a provider publishing one value object,
+// a hook that refuses to run outside it); each settings module hands its value hook here.
 
 import { createContext, type ReactNode, useContext } from "react";
 
 export interface SettingsContext<T> {
-  /** Exposed for the rare caller that needs to override the value for a
-   *  subtree (see WeekGrid's standalone calendar). */
+  /** For the rare caller that overrides the value for a subtree (see WeekGrid's standalone calendar). */
   Context: React.Context<T | null>;
   Provider: (props: { children: ReactNode }) => ReactNode;
   useSettings: () => T;
 }
 
 /**
- * @param name Bare context name ("InterfaceSettings") — spells the provider element
- *   and hook in the out-of-provider error, so it must match the exported names.
+ * @param name Bare context name ("InterfaceSettings"); it spells the provider element and hook in
+ *   the out-of-provider error, so it must match the exported names.
  * @param useValue Hook building the context value. Runs inside the provider.
  */
 export function createSettingsContext<T>(name: string, useValue: () => T): SettingsContext<T> {

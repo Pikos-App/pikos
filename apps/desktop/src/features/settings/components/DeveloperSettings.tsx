@@ -97,7 +97,6 @@ export function DeveloperSettings() {
         Zone.
       </p>
 
-      {/* Seed scenarios */}
       <div className="divide-y divide-border rounded-lg border border-border bg-card">
         {SEED_SCENARIOS.map((s) => (
           <div className="flex items-start justify-between gap-4 p-4" key={s.id}>
@@ -118,7 +117,6 @@ export function DeveloperSettings() {
         ))}
       </div>
 
-      {/* Log output */}
       {running && <p className="mt-4 animate-pulse text-xs text-muted-foreground">Running…</p>}
       {log && !running && (
         <pre
@@ -130,7 +128,6 @@ export function DeveloperSettings() {
         </pre>
       )}
 
-      {/* Diagnostics */}
       <div className="mt-8 rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between gap-4 p-4">
           <div>

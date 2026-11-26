@@ -1,19 +1,13 @@
-//! What the exports produce, pinned where the exports now live.
-//!
-//! Moved from `apps/desktop/src-tauri/src/db/dev/tests.rs` together with the
-//! code they cover. The column order, the escaping and the frontmatter are a
-//! contract with the importer — `roundtrip.test.ts` reads this output back —
-//! and a contract tested in a crate that no longer owns it is one that quietly
-//! stops being run.
+//! What the exports produce. The column order, escaping and frontmatter are a contract with the
+//! importer, which `roundtrip.test.ts` reads back.
 
 use crate::export::*;
 use crate::{insert_test_folder, insert_test_page, insert_test_page_sync, test_pool, TestPage};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 
-/// A page written straight to SQL, so a test can set `content` and
-/// `content_text` independently — which is exactly what the exports read and
-/// what the ordinary writer derives from each other.
+/// A page written straight to SQL, so a test can set `content` and `content_text` independently;
+/// the ordinary writer derives one from the other.
 #[allow(clippy::too_many_arguments)]
 async fn insert_rich_page(
     pool: &SqlitePool,
@@ -110,8 +104,6 @@ async fn insert_schedule(pool: &SqlitePool, id: &str, page_id: &str, start: &str
         .unwrap();
 }
 
-// ── fetch_export_pages ─────────────────────────────────────────────────────────
-
 async fn insert_synced_page(pool: &SqlitePool, id: &str, title: &str, sync_state: &str) {
     insert_test_page(pool, TestPage::new(id, title))
         .await
@@ -156,8 +148,6 @@ async fn export_drops_only_the_mirrors_the_user_never_actioned() {
     assert_eq!(export_titles(&pool, true).await.len(), 5);
 }
 
-// ── build_export_csv_impl ──────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn export_csv_header_and_row_basics() {
     let pool = test_pool().await;
@@ -184,7 +174,7 @@ async fn export_csv_header_and_row_basics() {
     assert_eq!(lines.len(), 2);
     let row = lines[1];
     assert!(row.starts_with("My Task,body text,Work,not_started,0,"));
-    // tags joined with ", " forces quoting (contains a comma).
+    // Tags joined with ", " contain a comma, forcing quoting.
     assert!(row.contains("\"x, y\""));
 }
 
@@ -192,15 +182,12 @@ async fn export_csv_header_and_row_basics() {
 #[tokio::test]
 async fn export_csv_escapes_special_characters() {
     let pool = test_pool().await;
-    // Title with comma + quote, content with newline.
     insert_rich_page(&pool, "p1", "a, \"b\"", "{}", "line1\nline2", 0, "[]").await;
 
     let csv = build_export_csv(&pool, false).await.unwrap();
     let row = csv.lines().nth(1).unwrap();
 
-    // Comma+quote field → wrapped in quotes with "" escaping.
     assert!(row.contains("\"a, \"\"b\"\"\""));
-    // Newline field → wrapped in quotes (so the row spans a literal newline).
     assert!(csv.contains("\"line1\nline2\""));
 }
 
@@ -241,15 +228,11 @@ async fn export_csv_includes_completed_at() {
     assert!(row.contains(",done,"));
 }
 
-// ── CSV Repeat / Reminder columns ─────────────────────────────────────────────
-// The importer has understood both since it shipped (`repeat`/`rrule` and
-// `reminder` are in its header heuristics), but the export emitted neither, so
-// a recurring page or a page with reminders came back through import as a plain
-// one-off. These pin the two cells to the exact formats `csv.ts` parses:
-// a bare RRULE (it strips at most a leading `RRULE:` and hands the rest to
-// `parseRrule`) and ISO-8601 durations (`parseDurationToMinutes`).
+// The importer reads `repeat` and `reminder` cells, so without them a recurring page or one with
+// reminders would import as a plain one-off. These pin the exact formats `csv.ts` parses: a bare
+// RRULE (it strips at most a leading `RRULE:`) and ISO-8601 durations (`parseDurationToMinutes`).
 
-/// Cell `i` of the single data row, by header name.
+/// A cell of the single data row, by header name.
 fn csv_cell(csv: &str, column: &str) -> String {
     let mut lines = csv.lines();
     let idx = lines
@@ -271,13 +254,11 @@ fn csv_cell(csv: &str, column: &str) -> String {
 async fn export_csv_emits_a_recurring_rule_the_importer_can_read_back() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Standup", "{}", "", 0, "[]").await;
-    // Semicolons inside an RRULE are why the cell has to survive CSV escaping.
     insert_rule_with_rrule(&pool, "r1", "p1", "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2").await;
 
     let csv = build_export_csv(&pool, false).await.unwrap();
 
-    // Verbatim and bare: no `RRULE:` prefix, no DTSTART — the anchor is the
-    // page's own Start Date column, which is how the importer pairs them.
+    // Verbatim and bare: the anchor is the page's own Start Date column, as the importer pairs them.
     assert!(
         csv.contains("\"FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2\""),
         "{csv}"
@@ -294,9 +275,8 @@ async fn export_csv_emits_reminders_as_iso_durations_soonest_first() {
 
     let csv = build_export_csv(&pool, false).await.unwrap();
 
-    // `PT0S` for at-start, negative minute durations for "before" — the three
-    // shapes `parseDurationToMinutes`'s own doc comment names. Semicolon-joined
-    // so the cell needs no quoting.
+    // `PT0S` for at-start and negative minute durations for before, the shapes
+    // `parseDurationToMinutes` names, semicolon-joined so the cell needs no quoting.
     assert_eq!(csv_cell(&csv, "Reminder"), "PT0S;-PT15M;-PT60M");
 }
 
@@ -321,8 +301,7 @@ async fn export_csv_leaves_repeat_and_reminder_empty_for_a_plain_page() {
     let csv = build_export_csv(&pool, false).await.unwrap();
     assert_eq!(csv_cell(&csv, "Repeat"), "");
     assert_eq!(csv_cell(&csv, "Reminder"), "");
-    // The two empty cells sit between End Date and Created At, so a plain page's
-    // row still lines up with the header.
+    // The two empty cells keep a plain page's row lined up with the header.
     assert_eq!(csv.lines().nth(1).unwrap().split(',').count(), 13);
 }
 
@@ -352,8 +331,6 @@ async fn export_csv_writes_the_file_the_importer_round_trips() {
 
     assert_eq!(csv, CSV_EXPORT);
 }
-
-// ── build_frontmatter ──────────────────────────────────────────────────────────
 
 #[test]
 fn frontmatter_omits_defaults() {
@@ -412,8 +389,6 @@ fn frontmatter_escapes_quotes_in_title_and_tags() {
     assert!(fm.contains("  - \"x\\\"y\"\n"));
 }
 
-// ── markdown_body ──────────────────────────────────────────────────────────────
-
 #[test]
 fn markdown_body_empty_inputs_yield_empty_string() {
     assert_eq!(markdown_body("", &HashMap::new()), "");
@@ -434,8 +409,6 @@ fn markdown_body_converts_prosemirror_to_markdown() {
 
 #[test]
 fn exported_markdown_file_is_frontmatter_then_body() {
-    // The shape export_markdown writes per page: frontmatter block immediately
-    // followed by the converted body.
     let content = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"note"}]}]}"#;
     let fm = build_frontmatter("My Page", "done", 2, "[]", None, None, "c", "u");
     let full = format!("{fm}{}", markdown_body(content, &HashMap::new()));
@@ -444,8 +417,6 @@ fn exported_markdown_file_is_frontmatter_then_body() {
     assert!(full.contains("status: done\n"));
     assert!(full.contains("---\n\nnote")); // separator then body, no gap
 }
-
-// ── sanitize_filename ──────────────────────────────────────────────────────────
 
 #[test]
 fn sanitize_filename_replaces_problem_chars_and_trims() {
@@ -456,8 +427,6 @@ fn sanitize_filename_replaces_problem_chars_and_trims() {
     assert_eq!(sanitize_filename("  spaced  "), "spaced");
     assert_eq!(sanitize_filename("normal name"), "normal name");
 }
-
-// ── collect_asset_paths ────────────────────────────────────────────────────────
 
 #[test]
 fn collect_asset_paths_finds_nested_images_only() {
@@ -481,12 +450,8 @@ fn collect_asset_paths_finds_nested_images_only() {
     assert_eq!(paths, vec!["/a/one.png", "/a/two.png"]); // empty path skipped
 }
 
-// ── nullable columns ──────────────────────────────────────────────────────────
-//
-// SQLite is dynamically typed, and sqlx decodes a NULL into `Ok("")` rather than
-// an error — so `try_get::<String, _>(col).ok()` yields `Some("")` for every
-// absent value and its `None` arm never runs. Both exports read nullable columns
-// that way until this was found, and both had a visible symptom.
+// sqlx decodes a SQLite NULL into `Ok("")`, so `try_get::<String, _>(col).ok()` yields `Some("")`
+// for every absent value and its `None` arm never runs.
 
 #[tokio::test]
 async fn an_unfiled_page_is_exported_at_the_root_not_under_uncategorized() {
@@ -524,15 +489,11 @@ async fn an_unscheduled_page_has_no_date_lines_in_its_frontmatter() {
     assert!(!plan[0].contents.contains("scheduled_end"));
 }
 
-/// Why the `Uncategorized` fallback cannot be reached, recorded so nobody
-/// deletes it as dead code without knowing what is holding it up.
+/// Why the `Uncategorized` fallback can't be reached, so nobody deletes it as dead code unaware.
 ///
-/// It fires for a page whose `folder_id` names a folder that is not there, and
-/// the schema does not allow that: the foreign key refuses a dangling id, and
-/// deleting a folder sets the column to NULL rather than leaving it pointing at
-/// nothing. So the arm is a guard against a future schema change, not a case
-/// the export sees — which is exactly why the *real* unfiled page used to land
-/// in it and nobody noticed.
+/// It fires for a page whose `folder_id` names a missing folder, which the schema forbids: the
+/// foreign key refuses a dangling id and deleting a folder sets the column NULL. The arm guards a
+/// future schema change.
 #[tokio::test]
 async fn the_schema_is_what_makes_a_missing_folder_impossible() {
     let pool = test_pool().await;

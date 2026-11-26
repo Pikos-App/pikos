@@ -1,7 +1,5 @@
-//! Asset storage commands: save files to the workspace assets directory.
-//! Assets live in {appDataDir}/assets/{uuid}.{ext} — never as BLOBs in SQLite.
-//! Pages store the path relative to the app data dir (`assets/<uuid>.<ext>`), and
-//! [`resolve_asset_path`] turns a stored path back into a file on this machine.
+//! Assets live in `{appDataDir}/assets/{uuid}.{ext}`, never as BLOBs in SQLite. Pages store
+//! `assets/<uuid>.<ext>`, and [`resolve_asset_path`] turns that back into a file here.
 
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -22,10 +20,10 @@ pub(crate) use pikos_db::assets::{is_pikos_asset_name, ASSET_DIR};
 /// The file a page's stored image path names, inside this machine's `assets_dir`.
 ///
 /// Pages store `assets/<file>`, so a workspace copied to another Mac, another user or
-/// another build still finds its images. Images saved by earlier versions stored the
-/// full path on the machine that saved them; one that ends in an assets folder and a
-/// name Pikos generated is read as that file here, which heals those pages without
-/// rewriting them. Any other path is not one Pikos saved and comes back unchanged.
+/// another build still finds its images. A stored full path from the machine that saved
+/// it, ending in an assets folder and a name Pikos generated, is read as that file here
+/// without rewriting the page. Any other path is not one Pikos saved and comes back
+/// unchanged.
 ///
 /// `resolveAssetPath` in `@pikos/core` runs the same rule against the same table,
 /// `asset-paths.json`.
@@ -87,8 +85,6 @@ pub async fn init_assets_dir(app: tauri::AppHandle) -> AppResult<String> {
     Ok(assets_dir.to_string_lossy().to_string())
 }
 
-/// Copy a file into the workspace assets directory with a UUID-based filename.
-/// Returns the stored path, `assets/<uuid>.<ext>`.
 #[tauri::command]
 pub async fn save_asset(app: tauri::AppHandle, source_path: String) -> AppResult<String> {
     let app_data = app
@@ -98,11 +94,8 @@ pub async fn save_asset(app: tauri::AppHandle, source_path: String) -> AppResult
     save_asset_into_dir(&app_data.join(ASSET_DIR), &source_path).await
 }
 
-/// The filesystem core of [`save_asset`], split out from the `AppHandle` /
-/// `app_data_dir()` plumbing so the validate→copy→relative-name behaviour is
-/// testable against a temp directory without a Tauri runtime. Validates the
-/// source exists and is an allowed image type, then copies it to
-/// `<assets_dir>/<uuid>.<ext>` and returns its stored path.
+/// [`save_asset`] without the `AppHandle` plumbing, so it runs against a temp directory.
+/// Validates the source exists and is an allowed image type; returns the stored path.
 async fn save_asset_into_dir(assets_dir: &Path, source_path: &str) -> AppResult<String> {
     let source = Path::new(source_path);
 
@@ -126,8 +119,6 @@ async fn save_asset_into_dir(assets_dir: &Path, source_path: &str) -> AppResult<
     Ok(format!("{ASSET_DIR}/{filename}"))
 }
 
-/// Copy raw bytes into the workspace assets directory (for paste from clipboard).
-/// Returns the stored path, `assets/<uuid>.<ext>`.
 #[tauri::command]
 pub async fn save_asset_bytes(
     app: tauri::AppHandle,
@@ -141,8 +132,6 @@ pub async fn save_asset_bytes(
     save_bytes_into_dir(&app_data.join(ASSET_DIR), data, &ext).await
 }
 
-/// The filesystem core of [`save_asset_bytes`], split out for the same reason as
-/// [`save_asset_into_dir`].
 async fn save_bytes_into_dir(assets_dir: &Path, data: Vec<u8>, ext: &str) -> AppResult<String> {
     let ext = validate_image_ext(ext)?;
     std::fs::create_dir_all(assets_dir)?;
@@ -188,13 +177,13 @@ pub(crate) fn collect_after_launch(
     });
 }
 
-/// Removes the images in `assets_dir` that no page, trashed page or backup of the workspace
-/// refers to, and returns how many went. Only files named as [`save_asset`] names them are
-/// touched, and none written within [`UNREFERENCED_GRACE`].
+/// Removes the images no page, trashed page or backup of the workspace refers to, and
+/// returns how many went. Only files named as [`save_asset`] names them are touched, and
+/// none written within [`UNREFERENCED_GRACE`].
 ///
-/// The one place an image is deleted. Once iCloud sync exists it may run only after synced
-/// content has converged, since a page held on another device can still refer to an image no page
-/// here does, and it never deletes the cloud copy.
+/// The one place an image is deleted. With iCloud sync it may run only after synced content
+/// has converged, since a page on another device can still refer to an image no page here
+/// does, and it never deletes the cloud copy.
 pub(crate) async fn collect_unreferenced(
     pool: &SqlitePool,
     workspace_path: &str,

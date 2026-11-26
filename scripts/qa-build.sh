@@ -4,14 +4,11 @@
 # installed app's data, and both open from Spotlight by name. The overlay
 # `apps/desktop/src-tauri/tauri.conf.staging.json` owns everything that differs.
 #
-# Signing (NOT notarization) is what unlocks macOS notification delivery, so we
-# always build with the real Developer ID identity — a plain `tauri build` is
-# ad-hoc signed and can't deliver notifications (UNErrorDomain error 1). This is
-# rung 2 of the build-fidelity ladder; see .claude/skills/ship-release/SKILL.md.
-#
-# Notarization is intentionally skipped: it only gates the download / Gatekeeper
-# / updater path, which a locally-run build never exercises. For a major release
-# smoke-test the actual notarized .dmg from the GitHub release instead.
+# Signing, not notarization, is what unlocks macOS notification delivery, so this always builds
+# with the real Developer ID identity: a plain `tauri build` is ad-hoc signed and can't deliver
+# notifications (UNErrorDomain error 1). Notarization only gates the download, Gatekeeper and
+# updater paths, which a local build never exercises; smoke-test the notarized .dmg from the
+# GitHub release for a major release.
 #
 #   scripts/qa-build.sh --icloud   also turn on iCloud sync, which needs the staging Developer ID
 #                                  provisioning profile at $PIKOS_STAGING_PROFILE
@@ -23,8 +20,7 @@ cd "$ROOT"
 
 log() { printf '[qa-build] %s\n' "$*"; }
 
-# Resolve the Developer ID Application identity from the keychain so the name
-# isn't hardcoded. Override by exporting APPLE_SIGNING_IDENTITY.
+# Resolve the Developer ID identity from the keychain; APPLE_SIGNING_IDENTITY overrides.
 IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 if [ -z "$IDENTITY" ]; then
   IDENTITY=$(security find-identity -v -p codesigning \
@@ -67,8 +63,8 @@ if [ "${1:-}" = "--icloud" ]; then
   icloud=(--features icloud-sync --config "{\"bundle\":{\"macOS\":{\"entitlements\":\"PikosStaging.entitlements\",\"files\":{\"embedded.provisionprofile\":\"$PROFILE\"}}}}")
 fi
 
-# Remove previously built bundles so macOS Spotlight can't launch a stale copy
-# (duplicate registrations of one identifier also confuse notification auth).
+# Remove previous bundles so Spotlight can't launch a stale copy, and duplicate registrations of
+# one identifier don't confuse notification auth.
 log "removing stale target bundles"
 find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
   -exec rm -rf {} + 2>/dev/null || true
@@ -79,10 +75,8 @@ VITE_STAGING=true VITE_ICLOUD_SYNC="$icloud_ui" APPLE_SIGNING_IDENTITY="$IDENTIT
 
 BUNDLE="$ROOT/apps/desktop/src-tauri/target/release/bundle"
 
-# The identity is resolved above and handed to tauri, and tauri falls back to an
-# ad-hoc signature rather than failing when it cannot use it. That build looks
-# finished and delivers no notifications, which is the trap this whole script
-# exists to avoid — so confirm the signature rather than assume it.
+# Tauri falls back to an ad-hoc signature rather than failing when it cannot use the identity,
+# and that build delivers no notifications, so confirm the signature rather than assume it.
 bash "$ROOT/scripts/macos-signing-check.sh" "$BUNDLE" --signature-only
 
 # One copy, in ~/Applications, so Spotlight finds this build and not one left in target/.

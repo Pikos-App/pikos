@@ -10,22 +10,17 @@ import { createLogger } from "@/shared/logger";
 const log = createLogger("useCalendarPageCreate");
 
 export interface UseCalendarPageCreateResult {
-  /** Click or drag in the time grid. */
   createTimedPage: (start: Date, end?: Date) => Promise<void>;
-  /** Click or drag in the all-day strip; `end` only for a multi-day span. */
   createAllDayPage: (start: Date, end?: Date) => Promise<void>;
 }
 
 /**
- * The write behind both grid create gestures, given a callback to auto-open
- * whatever it creates.
+ * The write behind both grid create gestures, given a callback to auto-open what it creates.
  *
- * Resolves the folder through `folderIdForNewPage` rather than the active view
- * id, so a selected synced calendar falls through to a folder that can hold
- * pages instead of reaching a create the backend refuses. A refusal from any
- * other cause is reported, because a bare await here reached the user as
- * nothing at all and the log as an unhandled promise rejection, and a page
- * created before the failure is taken back out rather than left behind.
+ * Resolves the folder through `folderIdForNewPage` rather than the active view id, so a
+ * selected synced calendar falls to a folder that can hold pages. Any other refusal is
+ * reported (a bare await surfaced nowhere), and a page created before the failure is taken
+ * back out.
  */
 export function useCalendarPageCreate(
   onCreated: (pageId: string) => void
@@ -49,9 +44,8 @@ export function useCalendarPageCreate(
       // title and no date. The usual cleanup for an empty page runs when its popover closes, and
       // the popover only opens on success, so this is the only place that can take it back.
       if (created) await deletePage(created);
-      // Only the create leg needs a message from here. Past it, the failure came
-      // from scheduleOnce, which names the action itself, and posting again would
-      // raise two toasts for one gesture.
+      // Only the create leg needs a message here: scheduleOnce names its own failure, and posting
+      // again would raise two toasts.
       if (!created) showNotice(storageErrorUserMessage(toStorageError(e), "creating the page"));
     }
   }

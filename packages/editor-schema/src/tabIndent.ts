@@ -4,9 +4,9 @@ import { Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
-const TAB = "    "; // 4 spaces for inline insertion in normal text
-const CODE_TAB = "  "; // 2 spaces for code blocks (preserves alignment)
-const INDENT_SIZE = 2; // rem units per indent level
+const TAB = "    ";
+const CODE_TAB = "  "; // two spaces keep code alignment
+const INDENT_SIZE = 2; // rem
 const MAX_INDENT = 8;
 const MIN_INDENT = 0;
 const tabIndentPluginKey = new PluginKey("tabIndent");
@@ -35,16 +35,12 @@ const PARAGRAPH_INDENT_ATTRIBUTE = {
 
 export function isCursorAtLineStart(state: EditorState): boolean {
   const { $from, empty } = state.selection;
-  // Only applies to collapsed cursors — if there's a selection, indent the block
-  if (!empty) return true;
+  if (!empty) return true; // a selection indents the block
   return $from.parentOffset === 0;
 }
 
 export function getIndentLevel(node: ProseMirrorNode): number {
-  // ProseMirror types attrs as Record<string, any>, so the read is `any` and
-  // the lint rightly objects. Widening to unknown first makes the runtime
-  // narrowing below the thing that establishes the type, which is what it was
-  // already doing implicitly.
+  // ProseMirror types attrs as `Record<string, any>`; narrow from unknown for lint.
   const raw: unknown = node.attrs?.["indent"];
   return typeof raw === "number" ? raw : 0;
 }
@@ -60,9 +56,8 @@ export function setIndentForSelection(
 
   state.doc.nodesBetween(from, to, (node, pos) => {
     if (node.type.name !== "paragraph" && node.type.name !== "heading") return true;
-    // Only act on top-level block nodes (depth 1 in a standard doc schema)
     const $pos = state.doc.resolve(pos);
-    if ($pos.depth > 1) return false; // skip nested nodes inside lists etc.
+    if ($pos.depth > 1) return false;
 
     const current = getIndentLevel(node);
     const next = Math.max(MIN_INDENT, Math.min(MAX_INDENT, current + delta));
@@ -70,13 +65,13 @@ export function setIndentForSelection(
       tr.setNodeMarkup(pos, undefined, { ...node.attrs, ["indent"]: next });
       changed = true;
     }
-    return false; // don't descend into block children
+    return false;
   });
 
   if (changed) {
     dispatch(tr);
   }
-  return true; // always swallow Tab in normal text
+  return true;
 }
 
 export interface TabIndentOptions {
@@ -115,7 +110,6 @@ export const TabIndent = Extension.create<TabIndentOptions>({
               return false;
             }
 
-            // ── Backspace at position 0 with indent → outdent instead of join ──
             if (event.key === "Backspace") {
               const { dispatch, state } = view;
               const { $from, empty } = state.selection;

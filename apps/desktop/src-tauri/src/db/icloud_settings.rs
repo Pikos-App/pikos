@@ -14,7 +14,6 @@ use crate::error::AppResult;
 pub struct ICloudSyncState {
     pub on: bool,
     pub text: String,
-    /// What the line offers: `none`, `useThisAccount` or `uploadAgain`.
     pub action: String,
 }
 

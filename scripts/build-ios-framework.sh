@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build PikosFFI.xcframework from crates/pikos-ffi.
+# Build PikosFFI.xcframework from crates/pikos-ffi. Mac only: it needs Xcode's linker, SDKs
+# and `xcodebuild -create-xcframework`. The Swift bindings do not, see gen-swift-bindings.sh.
 #
-# MAC ONLY. Cross-compiling to Apple targets needs the Apple linker and SDKs
-# that ship with Xcode, and `xcodebuild -create-xcframework` has no Linux
-# equivalent. The *bindings* do not need any of this — see
-# scripts/gen-swift-bindings.sh, which runs anywhere — so only this step is
-# gated on the platform.
-#
-# Output is a build artifact and is gitignored. Run this once after cloning,
-# and again whenever the Rust FFI surface changes.
+# Output is gitignored. Run after cloning and whenever the Rust FFI surface changes.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$ROOT/apps/ios/PikosCore"
@@ -35,17 +29,9 @@ command -v xcodebuild >/dev/null 2>&1 || {
   exit 1
 }
 
-# Device, both simulator architectures, and macOS.
-#
-# The simulator slices are fused into one fat static library, as are the two
-# macOS ones, because an XCFramework permits only one slice per platform+variant
-# pair.
-#
-# macOS is here for one reason: `swift test --package-path apps/ios/PikosCore`
-# builds for the host, and without a macOS slice it cannot link — so the
-# boundary tests would be runnable only in a simulator, which is minutes rather
-# than seconds. PikosCore/Package.swift already declares `.macOS(.v14)`; this is
-# what makes that declaration true.
+# One slice per platform+variant is all an XCFramework permits, so the simulator and macOS
+# architectures are fused into one library each. The macOS slice exists so `swift test` for
+# PikosCore, which builds for the host, can link without a simulator.
 ALL_TARGETS=(
   aarch64-apple-ios          # device
   aarch64-apple-ios-sim      # simulator, Apple silicon
@@ -54,10 +40,8 @@ ALL_TARGETS=(
   x86_64-apple-darwin        # host tests, Intel
 )
 
-# PIKOS_IOS_TARGETS builds a subset, space-separated, for a machine that knows what it needs.
-# Each slice is a full release build of the Rust core, so CI's Apple-silicon runners build
-# only theirs: the simulator and host slices for the tests, or the device slice to archive.
-# Unset, every slice is built, so the framework works on any Mac and any simulator.
+# PIKOS_IOS_TARGETS (space-separated) builds a subset. Each slice is a full release build of the
+# Rust core, so CI builds only the slices it needs. Unset builds every slice.
 if [ -n "${PIKOS_IOS_TARGETS:-}" ]; then
   read -r -a TARGETS <<<"$PIKOS_IOS_TARGETS"
   for t in "${TARGETS[@]}"; do
@@ -74,17 +58,10 @@ built() {
   case " ${TARGETS[*]} " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
-# The SDK each target links against, named rather than inherited.
-#
-# Rust asks `xcrun` for an SDK only when SDKROOT is unset, and a machine that
-# exports it — the usual reason is a Homebrew or Command Line Tools setup note —
-# hands every target the macOS SDK instead. The failure is a linker error deep in
-# Security.framework that says nothing about SDKROOT, so pin it here per target
-# rather than trust the environment.
-#
-# The deployment targets are the same ones Pikos declares (project.yml's iOS 17,
-# PikosCore/Package.swift's macOS 14). Rust otherwise defaults to iOS 10, which
-# no current SDK supports and which buries the build in version warnings.
+# Rust asks `xcrun` for an SDK only when SDKROOT is unset, so a machine that exports it hands
+# every target the macOS SDK and fails with a linker error that never mentions SDKROOT. Pin it
+# per target. The deployment targets match project.yml and PikosCore/Package.swift; Rust
+# otherwise defaults to iOS 10, which no current SDK supports.
 sdk_for() {
   case "$1" in
     aarch64-apple-ios) echo iphoneos ;;
@@ -103,10 +80,7 @@ done
 
 echo "▶ building release staticlibs"
 for t in "${TARGETS[@]}"; do
-  # --lib, so the crate's `uniffi-bindgen` binary is not cross-compiled to iOS
-  # along with it. That binary runs on the host to generate Swift and is never
-  # linked into the app; building it for a phone is wasted time at best, and a
-  # link failure in something irrelevant at worst.
+  # --lib keeps the host-only `uniffi-bindgen` binary from being cross-compiled to iOS.
   (cd "$ROOT" && SDKROOT="$(xcrun --sdk "$(sdk_for "$t")" --show-sdk-path)" \
     cargo build -p pikos-ffi --release --target "$t" --lib)
 done
@@ -117,8 +91,6 @@ bash "$ROOT/scripts/gen-swift-bindings.sh"
 echo "▶ fusing the multi-architecture slices"
 rm -rf "$BUILD"
 
-# One library per platform, fusing whichever of its architectures were built. A platform with
-# none built is left out of the framework.
 LIBRARIES=()
 fuse() {
   local variant=$1

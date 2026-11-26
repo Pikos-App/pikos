@@ -8,9 +8,8 @@ export interface InputTimingSummary {
  * Keystroke latency, from the input event to the start of the frame that draws its result.
  *
  * The clock starts at `beforeinput` and stops in the next animation frame after the document
- * updates, so it covers the editor's own work for the keystroke and any layout it forces. A
- * second keystroke before that frame belongs to the same measurement: it is drawn by the same
- * frame, and the reader sees the two land together.
+ * updates. A second keystroke before that frame joins the same measurement, since the same
+ * frame draws both.
  */
 export function createInputTimings(
   now: () => number = () => performance.now(),
@@ -20,7 +19,7 @@ export function createInputTimings(
   let samples: number[] = [];
 
   return {
-    /** The keystrokes since the last call, or null when there were none. */
+    /** Null when there were no keystrokes since the last call. */
     drain(): InputTimingSummary | null {
       if (samples.length === 0) return null;
       const sorted = [...samples].sort((a, b) => a - b);

@@ -111,8 +111,7 @@ export function PageListHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {/* External-calendar folders are read-only mirrors — you can't add a
-            native page to one (placement lock), so no New Page affordance. */}
+        {/* External-calendar folders are read-only mirrors (placement lock), so no New Page affordance. */}
         {!folders.find((f) => f.id === activeViewId)?.isExternalCalendar && (
           <TooltipIconButton
             icon={<Plus size={15} />}

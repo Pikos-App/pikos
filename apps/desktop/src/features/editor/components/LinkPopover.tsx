@@ -20,7 +20,6 @@ function getLinkMarkStart(editor: Editor): number | null {
   const linkMarkType = state.schema.marks["link"];
   if (!linkMarkType) return null;
 
-  // The cursor may be at the end of the link (from-1 has the mark, from does not).
   const anchorPos = state.doc
     .resolve(from)
     .marks()
@@ -30,7 +29,6 @@ function getLinkMarkStart(editor: Editor): number | null {
 
   if (anchorPos < 0) return null;
 
-  // Walk left until the mark ends to find the mark's start position.
   let markStart = anchorPos;
   while (markStart > 0) {
     const marks = state.doc.resolve(markStart - 1).marks();
@@ -47,7 +45,6 @@ function getAnchorRect(editor: Editor, isLink: boolean): DOMRect | null {
     const markStart = getLinkMarkStart(editor);
     if (markStart !== null) {
       const coords = editor.view.coordsAtPos(markStart);
-      // coordsAtPos returns the glyph position; use bottom-left of that line
       return new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top);
     }
   }
@@ -158,7 +155,6 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
     onAddingLinkChange(false);
   }
 
-  // Close on click outside (but not on the toolbar — it has its own open/close flow)
   useEffect(() => {
     if (!isVisible) return;
 
@@ -251,8 +247,6 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
     };
   }, [isVisible, editor]);
 
-  // selectionFrom + posVersion are included as deps so the position
-  // recalculates when the cursor moves or scrolls.
   const pos = computePopoverPos(isVisible, editor, isLink, selectionFrom, posVersion);
 
   // Suppress unused-read lint — posVersion is only used to trigger recalculation

@@ -1,9 +1,7 @@
-// A detached synced timed block stays a real, editable page: it shows the
-// broken-sync glyph but is NOT struck through / dimmed-as-done. Only a `done`
-// status applies the done treatment. Neither calendar block renders a CSS
-// line-through (done is conveyed via opacity-50); "not done" is the absence of
-// that treatment, asserted via the button's class as a last resort since done
-// state isn't otherwise exposed accessibly inside the block.
+// A detached synced timed block stays a real, editable page: it shows the broken-sync glyph
+// but is not dimmed-as-done. Only a `done` status applies the done treatment (opacity-50, no
+// line-through), so "not done" is asserted as the absence of that class, the only handle since
+// done state isn't otherwise exposed accessibly inside the block.
 
 import type { CalendarBlock, PageSummary } from "@pikos/core";
 import { cleanup, screen } from "@testing-library/react";

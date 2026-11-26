@@ -1,15 +1,13 @@
 //! The PROPFIND transport seam. Discovery logic talks to this trait so it can be
-//! exercised against recorded fixtures (Layer 1) with no network; production uses
+//! exercised against recorded fixtures with no network; production uses
 //! [`ReqwestDav`]. Redirects are surfaced, not auto-followed — discovery re-applies
 //! the original scheme/host itself (see [`crate::http::client_no_redirect`]).
 
 use super::error::CaldavError;
 use crate::http;
 
-/// One PROPFIND response, reduced to what discovery needs.
 pub(crate) struct DavResponse {
     pub status: u16,
-    /// `Location` header, present on a 3xx.
     pub location: Option<String>,
     pub body: String,
 }
@@ -28,7 +26,6 @@ pub(crate) trait DavTransport {
     async fn report(&self, url: &str, depth: &str, body: &str) -> Result<DavResponse, CaldavError>;
 }
 
-/// Production transport: preemptive Basic auth over a no-redirect client.
 pub(crate) struct ReqwestDav {
     client: reqwest::Client,
     username: String,

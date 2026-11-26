@@ -1,10 +1,8 @@
-// NLP parsing previews on-type (debounced 200ms) — chips update as you type
-// but input text is never modified. On submit, the parser extracts the clean
-// title and all metadata from the full input.
+// NLP parsing previews on type (debounced 200ms) and never modifies the input; on submit the parser
+// extracts the title and metadata from the full input.
 //
-// Split into a thin shell + body so the body unmounts on close. Reopening
-// remounts the body, which resets all its state via useState initializers —
-// no reset effect, no eslint-disable, no flicker.
+// A thin shell plus a body that unmounts on close, so reopening resets all state via useState
+// initializers with no reset effect.
 
 import type { PagePriority, ParsedInput, ParseResult } from "@pikos/core";
 import {
@@ -45,10 +43,8 @@ import { QuickAddInput } from "./QuickAddInput";
 const log = createLogger("QuickAddDialog");
 
 /**
- * Plain body text → the Tiptap document a page stores, one paragraph per line —
- * the same shape `pikos_db::build_tiptap_doc` writes, so a page the dialog gave
- * a body to is indistinguishable from one the CLI or the reconciler wrote, and
- * projects back through `extractText` to exactly the text that went in.
+ * Plain body text to the Tiptap document a page stores, one paragraph per line: the same shape
+ * `pikos_db::build_tiptap_doc` writes, so the page is indistinguishable from one the CLI wrote.
  */
 function bodyToTiptap(text: string): string {
   const content = text
@@ -59,12 +55,10 @@ function bodyToTiptap(text: string): string {
   return JSON.stringify({ content, type: "doc" });
 }
 
-/** The parse the chips preview: a finite run previews its first page. */
 function firstParsed(result: ParseResult): ParsedInput | undefined {
   return result.type === "finite" ? result.inputs[0] : result.input;
 }
 
-/** How a parsed reminder lead reads on the preview chip. */
 function reminderChipLabel(minutes: number): string {
   if (minutes === DAY_BEFORE_MINUTES) return "Day before";
   if (minutes === 0) return "At time";
@@ -77,15 +71,11 @@ function reminderChipLabel(minutes: number): string {
   return `${hours} hour${hours === 1 ? "" : "s"} before`;
 }
 
-// ── QuickAddDialog (shell) ────────────────────────────────────────────────────
-
 export function QuickAddDialog() {
   const { openDialog, setOpenDialog } = useUI();
   const isOpen = openDialog === "quick-add";
 
-  // Mod+N from anywhere opens the dialog. Idempotent when already open —
-  // focus is kept on the input by each chip's onClose handler, so no inner
-  // refocus shortcut is needed.
+  // Mod+N opens the dialog from anywhere; idempotent when already open.
   useKeyboardShortcut("Mod+N", () => setOpenDialog("quick-add"), {
     allowInInputs: true,
     group: "Navigation",
@@ -117,8 +107,6 @@ export function QuickAddDialog() {
   );
 }
 
-// ── QuickAddDialogBody (mounted only while open) ──────────────────────────────
-
 interface QuickAddDialogBodyProps {
   onClose: () => void;
 }
@@ -146,10 +134,8 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
-  // ── Chip state ───────────────────────────────────────────────────────────────
-  // Each field has an NLP-set value and a "manually set" flag. runPreview only
-  // updates fields the user hasn't touched directly — manual selections survive typing.
-  // Tags are split further: nlpTags vs manualTags (union displayed).
+  // Each field has an NLP-set value and a "manually set" flag; runPreview updates only fields the user
+  // hasn't touched. Tags split into nlpTags and manualTags (union displayed).
 
   const [dateValue, setDateValue] = useState<string | null>(() =>
     dateActiveToday ? localToday() : null
@@ -184,7 +170,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     inputRef.current?.focus();
   }
 
-  // Refocus the input on mount and after the batch-add feedback clears.
   useEffect(() => {
     if (addedFeedback !== null) return;
     inputRef.current?.focus();
@@ -202,10 +187,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     },
     { allowInInputs: true, group: "Quick add", label: "Schedule for today", preventDefault: true }
   );
-
-  // ── Debounce preview ─────────────────────────────────────────────────────────
-  // Fires 200ms after the user stops typing. Parses the full input and updates
-  // chip previews — never modifies the input text. Manual fields are preserved.
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -227,9 +208,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       const parsed = firstParsed(result);
       if (!parsed) return;
 
-      // Show recurrence / finite preview.
-      // Recurrence chip tracks rruleValue; finite stays as a separate label
-      // since finite produces N independent pages, not a recurring rule.
+      // Finite recurrence stays a separate label: it produces N independent pages, not a rule.
       if (result.type === "recurring") {
         if (!rruleManual) setRruleValue(result.rrule);
         setFiniteLabel(null);
@@ -298,8 +277,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     }
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────────
-
   /** Shared submission logic. Returns the created page's id + title, or null on validation fail.
    *  For finite-recurrence input, `id` is the first created page. */
   async function submitPage(): Promise<{ id: string; title: string } | null> {
@@ -325,11 +302,9 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     }
   }
 
-  /** Actually creates the page(s) from a parse result (after any confirmation). */
   async function executeCreate(result: ParseResult): Promise<{ id: string; title: string } | null> {
     const parsed = firstParsed(result);
 
-    // Folder: NLP folderQuery takes precedence over chip selection.
     let resolvedFolderId = folderValue;
     if (parsed?.folderQuery) {
       const match = fuzzyMatchFolder(parsed.folderQuery, creatableFolders);
@@ -340,7 +315,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
     }
 
-    // Merge: parsed values override chip state; chip state is the fallback.
     const resolvedDate = parsed?.scheduledStart ?? dateValue;
     const resolvedPriority =
       parsed?.priority !== undefined
@@ -349,26 +323,19 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
           : (NLP_PRIORITY_MAP[parsed.priority] ?? 0)
         : priorityValue;
 
-    // Use parsed.title (tokens already stripped by parser) as the page title.
-    // When the parser strips everything (input was only tokens, e.g. "tomorrow"
-    // or "#work !high"), title is empty and the page shows as "Untitled" —
-    // we deliberately do NOT fall back to inputValue, which would persist the
-    // raw tokens as a misleading title.
+    // parsed.title already has tokens stripped. If the input was only tokens ("tomorrow"), the title is
+    // empty and shows as "Untitled": falling back to inputValue would persist the raw tokens.
     const title = parsed?.title ?? "";
 
-    // Fresh NLP tags from re-parse + manual additions.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
 
     const patch: NewPageFields = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
-    // Body from the "//" separator, written as the page's document so opening
-    // the page shows the note already typed out.
     if (parsed?.content) {
       patch.content = bodyToTiptap(parsed.content);
     }
 
-    /** The parsed reminder leads, written as rows on a page that now exists. */
     async function writeReminders(pageId: string, inp: ParsedInput | undefined) {
       if (!storage) return;
       for (const minutesBefore of inp?.reminderMinutes ?? []) {
@@ -387,15 +354,11 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         : null;
 
     if (resolvedRrule) {
-      // Infinite recurrence: 1 template page + recurrence rule.
       const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
       const tz = getLocalTimezone();
-      // Snap onto the first date the rule permits — a chip-set M/W/F rule on a
-      // Sunday date must start Monday, not render a stray Sunday head. An NLP
-      // rrule can land here off-pattern too, when the input names a date *and* a
-      // cadence ("on wednesday every monday"); the end travels with the start so
-      // it can't end up before it.
+      // Snap onto the first date the rule permits: a chip-set M/W/F rule on a Sunday must start Monday. An
+      // NLP rrule can land off-pattern too ("on wednesday every monday"); the end travels with the start.
       const { end: ruleEnd, start: ruleStart } = snapScheduleToRule(
         resolvedRrule,
         resolvedDate ?? localToday(),
@@ -408,7 +371,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
         timezone: tz,
       });
-      // Set head's scheduledStart denorm so it appears in Today/calendar
       updatePage(page.id, {
         scheduledStart: ruleStart,
         ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
@@ -418,7 +380,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     }
 
     if (result.type === "finite") {
-      // Finite recurrence: N independent pages, each with its own schedule.
       let firstId: string | null = null;
       for (const inp of result.inputs) {
         const finPatch: NewPageFields = {};
@@ -442,7 +403,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       return firstId ? { id: firstId, title } : null;
     }
 
-    // Single page
     const page = await createPage({ folderId: resolvedFolderId, title, ...patch });
 
     if (resolvedDate) {
@@ -454,13 +414,11 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     return { id: page.id, title };
   }
 
-  /** Enter — commit and close. */
   async function handleSubmit() {
     const result = await submitPage();
     if (result !== null) onClose();
   }
 
-  /** Shift+Enter — commit, open the new page in the editor, close the dialog. */
   async function handleSubmitAndOpen() {
     const result = await submitPage();
     if (result === null) return;
@@ -468,10 +426,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     onClose();
   }
 
-  /**
-   * Cmd+Enter — commit, show brief confirmation, then reset fields so the user
-   * can immediately add another page in the same folder scope.
-   */
+  /** Cmd+Enter: commit, show brief confirmation, then reset fields to add another in the same folder scope. */
   async function handleSubmitBatch() {
     const result = await submitPage();
     if (result === null) return;
@@ -489,7 +444,6 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     setReminderPreview([]);
     setDateManual(false);
     setPriorityManual(false);
-    // Keep folderValue and folderManual — user stays in same folder scope.
     setTimeout(() => {
       setAddedFeedback(null);
     }, 1000);
@@ -530,16 +484,13 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
             {submitError}
           </p>
         )}
-        {/* Validation announcement — screen-reader-only; sighted users see
-            the shake animation. aria-live="assertive" so it interrupts and
-            reads immediately when submission fails. A refused write announces
-            through its own visible `role="alert"` instead, so it stays one copy. */}
+        {/* Screen-reader-only; sighted users see the shake. aria-live="assertive" interrupts. A refused write
+            announces through its own visible `role="alert"` instead, so it stays one copy. */}
         <div aria-atomic="true" aria-live="assertive" className="sr-only" id="quick-add-error">
           {validationError ?? ""}
         </div>
       </div>
 
-      {/* Metadata chips + Add button */}
       <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-sm text-subtle">
         <PageMetadataChips
           groups={[
@@ -552,10 +503,8 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
                     onChange: (id) => {
                       setFolderValue(id);
                       setFolderManual(true);
-                      // Synchronous refocus on selection — onCloseAutoFocus fires later
-                      // (async, after Radix processes the close), so the keyboard-only
-                      // flow "pick folder → press Enter to submit" needs this to land
-                      // focus on the main input before the next keypress arrives.
+                      // Synchronous refocus: onCloseAutoFocus fires later, and "pick folder, press Enter" needs focus on the
+                      // input before the next keypress.
                       refocusInput();
                     },
                     onClose: refocusInput,
@@ -590,14 +539,10 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
                     onChange: (rrule) => {
                       setRruleValue(rrule);
                       setRruleManual(true);
-                      // If the user picks a rule without a date set, anchor to today
-                      // so the chip's implicit "Starts today" becomes concrete on the
-                      // date chip too.
                       if (rrule && !dateValue) {
                         setDateValue(localToday());
                         setDateManual(true);
                       }
-                      // See FolderChip — sync refocus on selection.
                       refocusInput();
                     },
                     onClose: refocusInput,
@@ -606,9 +551,8 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
                     ...(finiteLabel ? { overrideLabel: finiteLabel } : {}),
                   },
                 },
-                // Read-only echo of the parsed lead: the reminder picker needs a
-                // page to attach to, so before there is one the input is the only
-                // way to set this, and the chip is only here to show it landed.
+                // Read-only echo: the reminder picker needs a page, so before there is one the input is the only way
+                // to set this, and the chip shows it landed.
                 reminderPreview.length > 0 && {
                   id: "reminder-preview",
                   kind: "node" as const,
