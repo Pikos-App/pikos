@@ -15,8 +15,7 @@ fact links there.
    says stay out.
 3. **An inline comment** at the line that needs it, for the reason the code can't show. Why
    this approach, a constraint you can't see from here, or how it breaks. Never what the
-   line does. When it disagrees with the doc comment above it, trust the inline comment,
-   because it sits nearer the code.
+   line does.
 4. **The folder's README.** What the folder is for, where new code in it goes, and any rule
    every caller has to follow. Skip the file tour, the copy of the API, and the code
    samples, because they drift the first time the code moves.
@@ -57,5 +56,6 @@ If a lint rule or a test can enforce a rule, write the check and delete the pros
 
 ## When two docs disagree
 
-One of them is a copy. Keep the one in the right home from the list above and delete the
-other. The code beats both.
+Neither wins on its own. The code settles it, and whichever doc or comment is wrong gets
+fixed. When the two say the same thing, one of them is a copy: keep the one in the right home
+from the list above and delete the other.
