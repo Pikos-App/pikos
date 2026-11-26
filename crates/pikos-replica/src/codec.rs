@@ -21,7 +21,6 @@ const TOMB: &str = "tomb";
 /// transport put what it fetched. A transport stores the file itself, never the path.
 pub const FILE: &str = "file";
 
-/// A field's name and how many columns it holds, in the entity's field order.
 pub type Shape<'a> = &'a [(&'a str, usize)];
 
 #[derive(Debug, Clone, PartialEq)]

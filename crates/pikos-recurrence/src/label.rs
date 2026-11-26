@@ -34,9 +34,7 @@ const MONTH_NAMES: [&str; 12] = [
     "December",
 ];
 
-/// Ordinal wording shared by BYSETPOS, BYMONTHDAY, and BYDAY ordinals:
-/// `3` → "3rd", `-1` → "last", `-2` → "2nd last". Mirrors rrule.js so labels
-/// don't shift on the engine swap.
+/// `3` → "3rd", `-1` → "last", `-2` → "2nd last", as rrule.js words them.
 fn ordinal(n: i32) -> String {
     if n == -1 {
         return "last".to_string();
@@ -58,7 +56,6 @@ fn ordinal(n: i32) -> String {
     }
 }
 
-/// "June and July", "June, July and August" — rrule.js month-list join.
 fn month_list(months: &[u32]) -> Option<String> {
     let names: Vec<&str> = months
         .iter()
@@ -75,8 +72,6 @@ fn and_join(items: &[&str]) -> String {
     }
 }
 
-/// "weekday" for MO–FR, "day" for all seven, a name for one, an or-join for the
-/// rest — the BYSETPOS day-set wording (`bySetPosLabel` in the historical TS).
 fn day_set_phrase(days: &[u8]) -> String {
     let mut sorted = days.to_vec();
     sorted.sort_unstable();
@@ -161,13 +156,11 @@ pub fn rrule_to_label(rrule: &str) -> Option<String> {
         };
         out.push(' ');
         out.push_str(unit);
-        // DAILY/WEEKLY month scope, and the interval>1 deviation: "in June and July".
         if !rule.bymonth.is_empty() {
             out.push_str(&format!(" in {}", month_list(&rule.bymonth)?));
         }
     }
 
-    // Day clause.
     if !rule.bysetpos.is_empty() {
         let positions: Vec<String> = rule.bysetpos.iter().map(|&p| ordinal(p)).collect();
         let days: Vec<u8> = rule.byday.iter().map(|b| b.weekday).collect();
@@ -183,7 +176,6 @@ pub fn rrule_to_label(rrule: &str) -> Option<String> {
             } else if is_weekdays {
                 out.push_str(" on weekdays");
             } else {
-                // Weekly/daily BYDAY carries no meaningful ordinals.
                 let mut sorted: Vec<u8> = rule.byday.iter().map(|b| b.weekday).collect();
                 sorted.sort_unstable();
                 sorted.dedup();
@@ -194,7 +186,6 @@ pub fn rrule_to_label(rrule: &str) -> Option<String> {
                 out.push_str(&format!(" on {}", names.join(", ")));
             }
         } else {
-            // MONTHLY/YEARLY: "on Monday and on the 2nd Wednesday".
             let terms: Vec<String> = rule
                 .byday
                 .iter()
@@ -231,8 +222,7 @@ pub fn rrule_to_label(rrule: &str) -> Option<String> {
     Some(out)
 }
 
-/// Compact label for space-constrained bylines (e.g. the quick-add dialog).
-/// Returns the raw RRULE on parse failure, matching the wrapper's fallback.
+/// Compact label for bylines; the raw RRULE on parse failure.
 pub fn rrule_to_short_label(rrule: &str) -> String {
     let Some(opts) = parse_rrule(rrule) else {
         return rrule.to_string();

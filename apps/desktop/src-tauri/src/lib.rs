@@ -20,11 +20,8 @@ pub use db::dev::{backdate_page_impl, dev_seed_synced_calendar_impl, BackdatePar
 use db::DbState;
 use notifications::scheduler::{NotificationSettingsState, SchedulerRuntimeState};
 
-/// What the window is being painted with, in the log, for a blank-window report.
-///
-/// A blank window says nothing about which render path produced it, and the answer decides the
-/// next step: the DMABUF override below, compositing, or the session being Wayland. Reading it
-/// out of a user's log beats asking them to reproduce it with three environment variables.
+/// A blank window says nothing about which render path produced it, and the answer decides
+/// the next step: the DMABUF override, compositing, or Wayland.
 #[cfg(target_os = "linux")]
 fn log_render_environment() {
     let read = |name: &str| std::env::var(name).unwrap_or_else(|_| "unset".to_string());
@@ -37,21 +34,14 @@ fn log_render_environment() {
     );
 }
 
-/// Refuse a second Pikos against one profile, on every desktop platform.
+/// Two copies is two notification schedulers and two sync loops over one SQLite file, so a
+/// reminder arrives twice, and macOS picks freely which copy a notification click activates.
+/// This applies on macOS too: two bundles at different paths are distinct to LaunchServices.
 ///
-/// Two copies is two notification schedulers and two sync loops over one SQLite
-/// file, so a reminder arrives twice; and since both claim the same bundle
-/// identifier, macOS picks freely which one a notification click activates. The
-/// guard was `cfg(linux/windows)` on the grounds that macOS routes deep-link URLs
-/// natively, which is true and says nothing about a second process: two bundles
-/// at different paths are distinct to LaunchServices and both will run.
-///
-/// Goes first in the builder chain so a second launch exits during plugin setup,
-/// before the scheduler and the sync loop start.
+/// Goes first in the builder chain so a second launch exits before the scheduler and sync loop start.
 fn single_instance_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        // The URL itself arrives through the deep-link plugin's on_open_url
-        // handler registered in setup(), so only the window is handled here.
+        // The URL arrives through the deep-link plugin's on_open_url handler in setup().
         log::info!("second_instance_refused — focused the running window");
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
@@ -65,10 +55,8 @@ pub fn run() {
     #[cfg(feature = "bench")]
     bench::mark_start();
 
-    // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
-    // GPU/driver stacks. Disabling it forces the stable render path.
-    // Set before any GTK/webview init. Respect an existing override so
-    // users can re-enable it if their stack works.
+    // WebKitGTK's DMABUF renderer paints a blank window on several Linux GPU/driver stacks.
+    // Set before any GTK/webview init, and an existing override is respected.
     #[cfg(target_os = "linux")]
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
@@ -103,11 +91,7 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             log_render_environment();
 
-            // macOS: install the foreground-presentation delegate and request
-            // notification authorization via the modern UserNotifications
-            // framework, so reminders show even while Pikos is focused. Runs on
-            // the main thread (Tauri setup) and degrades to the plugin path on
-            // unbundled dev binaries. See notifications/macos.rs.
+            // Must run on the main thread; degrades to the plugin path on unbundled dev binaries.
             #[cfg(target_os = "macos")]
             notifications::macos::setup(app.handle());
 
@@ -121,19 +105,14 @@ pub fn run() {
             let sync_handle = app.handle().clone();
             tauri::async_runtime::spawn(db::sync_loop::run(sync_handle, sync_trigger_rx));
 
-            // Restore saved window size/position. Replaces tauri-plugin-window-state
-            // which had a drift bug on macOS with our custom title bar.
             window_state::restore(app.handle());
 
-            // Register pikos:// scheme at runtime for Linux (and Windows dev builds);
-            // macOS and Windows release builds register via the bundle config.
+            // macOS and Windows release builds register the scheme via the bundle config.
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
                 let _ = app.deep_link().register("pikos");
             }
 
-            // Forward incoming pikos:// URLs to the frontend. Fires for both
-            // cold-start (URL launched the app) and warm-start.
             let emit_handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {
@@ -148,9 +127,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Save on every resize/move so state is always current on disk.
-            // CloseRequested doesn't fire reliably on macOS Cmd+Q (NSApp
-            // terminate), so we can't depend on it for persistence.
+            // CloseRequested doesn't fire reliably on macOS Cmd+Q, so save on every resize/move.
             match event {
                 WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
                     window_state::save(window.app_handle());
@@ -164,7 +141,6 @@ pub fn run() {
         .menu(menu::build)
         .on_menu_event(menu::on_event);
 
-    // The app's whole invoke surface, declared and registered in one place —
     // `run()` names no commands, so none can be declared and left unregistered.
     db::commands::register(builder)
         .run(tauri::generate_context!())

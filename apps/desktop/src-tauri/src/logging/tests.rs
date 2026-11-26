@@ -32,9 +32,7 @@ fn parses_module_path_target() {
 
 #[test]
 fn skips_unparseable_pairs() {
-    // Bare directives ("info") and unknown levels are silently ignored.
-    // Bare directives are intentionally not supported — we don't want to
-    // raise the global default by accident on a typo.
+    // Bare directives ("info") are unsupported on purpose: a typo must not raise the global default.
     assert_eq!(
         parse_rust_log("info,pikos_lib=debug,bogus=loud"),
         vec![("pikos_lib".into(), LevelFilter::Debug)]

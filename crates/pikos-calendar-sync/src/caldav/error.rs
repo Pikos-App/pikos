@@ -11,11 +11,9 @@ pub enum CaldavError {
     #[error("The server refused the sign-in. Check the username and app password.")]
     Unauthorized,
 
-    /// Transport-level failure (DNS, TLS, connection, timeout, read).
     #[error("CalDAV network error: {0}")]
     Network(String),
 
-    /// Reached the server but it answered a PROPFIND with an unexpected status.
     #[error("unexpected CalDAV status {0}")]
     UnexpectedStatus(u16),
 
@@ -24,7 +22,6 @@ pub enum CaldavError {
     #[error("CalDAV discovery failed: {0}")]
     NotCaldav(String),
 
-    /// Malformed XML, or a redirect with no `Location`.
     #[error("malformed CalDAV response: {0}")]
     Protocol(String),
 }

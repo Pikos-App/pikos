@@ -1,8 +1,5 @@
-//! Layer-1 Google sync tests: recorded Calendar API responses → asserted
-//! [`SyncDelta`]. Fixtures are hand-authored against the documented `events.list`
-//! / `events.get` / `calendarList.list` shapes (no live account), covering the
-//! series regrouping, both cancelled branches, and the orphaned instance.
-//! No network — the transport replays a scripted queue and records its queries.
+//! Calendar API responses → asserted [`SyncDelta`]. Fixtures are hand-authored against the
+//! documented shapes (no live account); the transport replays a scripted queue.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -21,13 +18,11 @@ const PAGE_2: &str = include_str!("../../tests/fixtures/google/05_paged_page2.js
 
 const CAL: &str = "alex@example.com";
 
-/// One recorded request: the path, and its query as key/value pairs.
 type Call = (String, Vec<(String, String)>);
 
 #[derive(Default)]
 struct Replay {
     responses: RefCell<VecDeque<(u16, String)>>,
-    /// Recorded per call, so a test can assert what was actually asked for.
     calls: RefCell<Vec<Call>>,
 }
 
@@ -103,8 +98,6 @@ fn occurrences(delta: &SyncDelta) -> Vec<pikos_db::sync_delta::OccurrenceDelta> 
         .collect()
 }
 
-// ─── backfill ─────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn backfill_carries_its_own_token() {
     let t = Replay::ok(BACKFILL);
@@ -128,13 +121,9 @@ async fn no_google_delta_ever_arms_the_sweep() {
         .await
         .unwrap();
 
-    // See `backfill`'s doc — Google opts out of the sweep by leaving
-    // `authoritative_from` unset even on a full enumerate.
     for delta in [&full, &incremental] {
         assert!(delta.authoritative_from.is_none());
     }
-    // `full_enumerate` and `authoritative_from` are separate signals; Google sets
-    // only the former.
     assert!(full.full_enumerate && !incremental.full_enumerate);
     assert!(
         full.removals.is_empty() && incremental.removals.len() == 1,
@@ -186,8 +175,6 @@ async fn backfill_regroups_a_series_from_its_separate_resources() {
         OccurrenceFidelity::Complete,
         "a full enumerate carries every child, so the occurrence set is whole"
     );
-    // One EXDATE line, one cancelled child event — both cancel one occurrence,
-    // both must land as EXDATEs.
     assert_eq!(
         rec.exdates,
         vec!["2026-06-29T09:00:00", "2026-06-15T09:00:00"]
@@ -195,12 +182,9 @@ async fn backfill_regroups_a_series_from_its_separate_resources() {
     assert_eq!(rec.overrides.len(), 1);
     assert_eq!(rec.overrides[0].original_date, "2026-06-08T09:00:00");
     assert_eq!(rec.overrides[0].schedule.start, "2026-06-08T11:00:00");
-    // The instances folded into the master; none leaked out as standalone events.
     assert_eq!(delta.upserts.len(), 3);
     assert!(delta.removals.is_empty());
 }
-
-// ─── incremental: the cancelled split + orphans ───────────────────────────────
 
 #[tokio::test]
 async fn incremental_bundles_are_master_only() {
@@ -243,12 +227,8 @@ async fn cancelled_instance_becomes_an_occurrence_cancel_not_a_removal() {
     );
 }
 
-/// The all-day twin of the cancel split, on both arms. A birthday or holiday
-/// series is where this bites: its instances carry `originalStartTime.date`, not
-/// `.dateTime`, and an exclusion that comes out timed matches no occurrence in a
-/// date-only expansion — so the year the user cancelled upstream silently returns,
-/// with nothing on screen to say why. With the master in the same page the
-/// cancellation folds into its exdates; arriving alone it is an occurrence delta.
+/// All-day instances carry `originalStartTime.date`; a timed exclusion matches no occurrence
+/// in a date-only expansion, so the cancelled year silently returns.
 #[tokio::test]
 async fn a_cancelled_all_day_instance_excludes_in_the_date_only_basis() {
     let t = Replay::ok(
@@ -347,8 +327,6 @@ async fn moved_instance_without_its_master_becomes_an_occurrence_modify() {
     }
 }
 
-// ─── stale token + targeted fetch ─────────────────────────────────────────────
-
 #[tokio::test]
 async fn a_gone_token_falls_back_to_a_full_enumerate() {
     let t = Replay::with(vec![(410, ""), (200, BACKFILL)]);
@@ -365,8 +343,7 @@ async fn a_gone_token_falls_back_to_a_full_enumerate() {
         delta.next_token.as_ref().map(|t| t.0.as_str()),
         Some("TOKEN-1")
     );
-    // Recovery carries both a fresh cursor and a full enumerate — a combination
-    // `next_token.is_none()` alone couldn't detect.
+    // A fresh cursor and a full enumerate together: `next_token.is_none()` can't detect it.
     assert!(delta.full_enumerate);
 }
 
@@ -404,8 +381,6 @@ async fn a_user_supplied_calendar_id_is_percent_encoded_into_the_path() {
     );
 }
 
-// ─── paging ───────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn a_series_split_across_pages_still_folds_into_one_bundle() {
     let t = Replay::with(vec![(200, PAGE_1), (200, PAGE_2)]);
@@ -422,8 +397,6 @@ async fn a_series_split_across_pages_still_folds_into_one_bundle() {
     );
 }
 
-// ─── rate limiting ────────────────────────────────────────────────────────────
-
 fn quota_error(reason: &str) -> String {
     format!(
         r#"{{"error":{{"code":403,"message":"blocked","errors":[{{"domain":"usageLimits","reason":"{reason}"}}]}}}}"#
@@ -438,9 +411,7 @@ async fn a_rate_limited_poll_classifies_as_network_not_a_dead_credential() {
         .await
         .unwrap_err();
 
-    // RateLimited maps to AppError::Network → Offline: the cursor stays put and
-    // the next poll retries. Reading it as a credential failure would flag the
-    // account and force a re-authorization over a quota blip.
+    // A credential failure here would force a re-authorization over a quota blip.
     assert!(matches!(err, GoogleError::RateLimited));
     assert!(matches!(
         pikos_db::error::AppError::from(err),
@@ -472,8 +443,6 @@ async fn an_unreadable_403_backs_off_rather_than_demanding_a_reconnect() {
     assert!(matches!(err, GoogleError::RateLimited));
 }
 
-// ─── calendar list ────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn calendar_list_prefers_the_users_own_name_and_drops_removed_entries() {
     let t = Replay::ok(CALENDAR_LIST);
@@ -482,7 +451,6 @@ async fn calendar_list_prefers_the_users_own_name_and_drops_removed_entries() {
     assert_eq!(cals.len(), 2, "a deleted entry is not a syncable calendar");
     assert_eq!(cals[0].calendar_id, "alex@example.com");
     assert_eq!(cals[0].color.as_deref(), Some("#9fe1e7"));
-    // summaryOverride is the user's own rename of a shared calendar.
     assert_eq!(cals[1].display_name, "Design Team");
 }
 
@@ -491,9 +459,7 @@ async fn the_primary_calendar_id_labels_the_account() {
     let t = Replay::ok(CALENDAR_LIST);
     let (_, primary) = list_calendars_for_connect(&t).await.unwrap();
 
-    // This becomes the account's display_name, the key a reconnect matches a
-    // dormant account by — get it wrong and reconnecting duplicates the account
-    // instead of re-linking its detached pages.
+    // The display_name is the key a reconnect matches a dormant account by.
     assert_eq!(primary, "alex@example.com");
 }
 
@@ -526,12 +492,9 @@ async fn a_list_without_a_primary_still_enumerates_for_a_routine_sync() {
     assert_eq!(cals.len(), 1);
 }
 
-/// Google stamps most events with their own `timeZone`, but not all — an event
-/// created in the calendar's default zone can arrive without one, and then the
-/// collection's `timeZone` is what says where it happened. Losing that fallback
-/// makes such events float: they'd render at the same wall-clock everywhere
-/// instead of at their instant, which is the whole native/synced distinction.
-/// Every recorded fixture carries a per-event zone, so nothing else reaches this.
+/// An event in the calendar's default zone can arrive without a `timeZone`; losing the
+/// collection fallback makes it float at the same wall-clock everywhere. No recorded
+/// fixture reaches this.
 #[tokio::test]
 async fn an_event_without_its_own_zone_takes_the_calendars() {
     let t = Replay::ok(

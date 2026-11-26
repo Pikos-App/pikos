@@ -1,44 +1,20 @@
-// Cross-module workflow tests — the integration layer above pikos-db's
-// per-module `*_tests.rs` unit suites.
+// Cross-module workflow tests: the integration layer above pikos-db's per-module unit suites.
 //
-// WHY THIS FILE EXISTS (architecture decision):
-// Each pikos-db writer module already has thorough unit coverage against
-// `test_pool()`. What those suites don't prove is that the modules compose the
-// way the desktop app actually drives them: a page created in `pages`, scheduled
-// in `schedules`, completed through the recurring path, then found again via
-// `search` — all against ONE pool, with the FTS triggers, foreign-key cascades
-// and the pages.tags⇄page_tags denorm invariant all firing together. These are
-// the behaviours a per-module unit test can't see and that production QA
-// otherwise has to verify by hand.
+// Each module is unit-tested against `test_pool()`. These prove they compose the way the
+// app drives them, against ONE pool with the FTS triggers, foreign-key cascades and the
+// pages.tags <-> page_tags denorm all firing together. They live in the desktop crate
+// because they assert how the desktop app composes pikos-db.
 //
-// WHY IT LIVES IN THE DESKTOP CRATE (not pikos-db):
-// These assert how the desktop app composes pikos-db's modules, so they belong
-// beside the code that does the composing. The desktop crate's dev-deps enable
-// pikos-db's `test-support` feature precisely so they can reuse `test_pool` /
-// `insert_test_*` against the production migration tree and call the public API.
+// They enter at `*_impl` rather than the Tauri shims, which only resolve the pool and
+// delegate. The wire below the shims is `ipc_tests.rs`; asset and export shims stay out
+// of both because they would write to real OS locations under a mock runtime.
 //
-// We test at the impl/pool level rather than through the Tauri command shims. The
-// shims are deliberately thin (`state.get_pool().await?; delegate to *_impl`), so
-// the data logic — which is what these tests are about — lives in `*_impl`. The
-// export → re-import round-trip and the asset-copy coverage live alongside the
-// `build_export_json_impl` / `save_asset` code they exercise (db/dev, db/assets).
-// The wire *below* those shims is not covered here and is not meant to be: see
-// `ipc_tests.rs`, which drives real invokes through MockRuntime for the argument
-// deserialization no `*_impl` test can reach. Asset and export shims stay out of
-// that too — they resolve `app_data_dir()` / `$HOME/Downloads` and under a mock
-// runtime would write to real OS locations.
-//
-// Two groups below:
-//   1. `test_pool()` (in-memory, FK-on, full migration tree) for the multi-step
-//      workflows.
-//   2. `open_pool()` against a real on-disk file for the things an in-memory or
-//      mocked pool can't honestly assert: WAL + pragmas, FK cascade enforcement,
-//      and the FTS triggers firing on live insert/update/delete.
+// Two groups: `test_pool()` (in-memory, FK-on, full migration tree) for multi-step
+// workflows, and `open_pool()` on a real file for what an in-memory pool can't honestly
+// assert: WAL pragmas, FK cascade enforcement, and FTS triggers on live writes.
 
 use pikos_db::*;
 use sqlx::SqlitePool;
-
-// ── builders ────────────────────────────────────────────────────────────────
 
 fn new_page(title: &str) -> NewPage {
     NewPage {
@@ -61,7 +37,6 @@ fn new_page(title: &str) -> NewPage {
 }
 
 async fn count(pool: &SqlitePool, table: &str, page_id: &str) -> i64 {
-    // `table` is a test-local literal, never user input.
     sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE page_id = ?")) // sql-ok:
         .bind(page_id)
         .fetch_one(pool)
@@ -69,18 +44,10 @@ async fn count(pool: &SqlitePool, table: &str, page_id: &str) -> i64 {
         .unwrap()
 }
 
-// ── 1. create → schedule → complete recurring head → search finds the clone ──
-
-/// The headline workflow: a recurring task is scheduled, the current occurrence
-/// is completed (which clones a "done" snapshot and advances the head to the
-/// next occurrence), and unified search then surfaces that completed clone.
-/// Exercises pages + schedules + recurrence + the FTS insert/update triggers in
-/// one pool, the way the desktop app drives a recurring-task completion.
 #[tokio::test]
 async fn recurring_completion_clone_is_searchable() {
     let pool = test_pool().await;
 
-    // A recurring "Standup" task with content text + a tag.
     let mut head = new_page("Standup");
     head.content = pikos_db::build_tiptap_doc("daily standup notes");
     head.tags = vec!["work".to_string()];
@@ -115,7 +82,6 @@ async fn recurring_completion_clone_is_searchable() {
     .await
     .unwrap();
 
-    // The occurrence date isn't passed — it's derived server-side from the head.
     let result = complete_recurring_page_impl(
         &pool,
         CompleteRecurringInput {
@@ -129,8 +95,6 @@ async fn recurring_completion_clone_is_searchable() {
     .await
     .unwrap();
 
-    // The clone is a done snapshot of the occurrence just completed; the head
-    // stays open, recomputed to the next date.
     assert_eq!(result.clone.status, "done");
     assert_eq!(result.head.status, "not_started");
     assert_eq!(
@@ -138,10 +102,8 @@ async fn recurring_completion_clone_is_searchable() {
         Some("2026-05-30T09:00:00")
     );
     assert_ne!(result.clone.id, head.id);
-    // Clone inherits the head's tags through the same tag-sync path.
     assert_eq!(result.clone.tags, vec!["work".to_string()]);
 
-    // Excluding completed: only the still-open head matches.
     let open = search_pages_impl(&pool, "Standup".to_string(), Some(false))
         .await
         .unwrap();
@@ -156,8 +118,6 @@ async fn recurring_completion_clone_is_searchable() {
         "the clone counts as a completed match"
     );
 
-    // Including completed: the FTS insert trigger fired for the clone, so it is
-    // now findable. Both head and clone match the title.
     let all = search_pages_impl(&pool, "Standup".to_string(), Some(true))
         .await
         .unwrap();
@@ -169,17 +129,8 @@ async fn recurring_completion_clone_is_searchable() {
     assert!(ids.contains(&head.id.as_str()));
 }
 
-// ── 2. folder deletion: the two paths behave differently ─────────────────────
-
-/// `delete_folder_impl` is the HARD folder delete. It soft-deletes the folder's
-/// pages, then `DELETE`s the folder row — at which point the `ON DELETE SET
-/// NULL` FK orphans those (now-trashed) pages to the inbox. Crucially it does
-/// NOT remove their schedules.
-///
-/// This documents the actual behaviour: the task framing ("folder cascade-delete
-/// removes the folder's pages, schedules, and links") is not what the code does.
-/// Pages are soft-deleted (recoverable from trash, not hard-removed), schedules
-/// survive, and folder_id is nulled by the FK rather than left dangling.
+/// The hard folder delete soft-deletes its pages, then `ON DELETE SET NULL` orphans them to the
+/// inbox. Their schedules survive, since the page rows still exist.
 #[tokio::test]
 async fn hard_folder_delete_soft_deletes_pages_nulls_folder_and_keeps_schedules() {
     let pool = test_pool().await;
@@ -216,11 +167,8 @@ async fn hard_folder_delete_soft_deletes_pages_nulls_folder_and_keeps_schedules(
 
     delete_folder_impl(&pool, folder.id.clone()).await.unwrap();
 
-    // Folder row is hard-gone.
     assert!(get_folder_impl(&pool, &folder.id).await.unwrap().is_none());
 
-    // The page is soft-deleted (still on disk, deleted_at stamped) and the FK
-    // SET NULL has orphaned it to the inbox.
     let row = get_page(&pool, &page.id)
         .await
         .unwrap()
@@ -240,14 +188,9 @@ async fn hard_folder_delete_soft_deletes_pages_nulls_folder_and_keeps_schedules(
         "page should be soft-deleted, not hard-removed"
     );
 
-    // Schedules are NOT cascaded away by a hard folder delete (pages were only
-    // soft-deleted, so the page row — and its schedule FK — still exist).
     assert_eq!(count(&pool, "page_schedules", &page.id).await, 1);
 }
 
-/// `soft_delete_folder_impl` is the reversible path used by the sidebar: it
-/// stamps the folder and its pages with the same `deleted_at`, leaves folder_id
-/// intact, and `restore_folder_impl` revives exactly that cohort.
 #[tokio::test]
 async fn soft_folder_delete_then_restore_round_trips_pages() {
     let pool = test_pool().await;
@@ -271,10 +214,8 @@ async fn soft_folder_delete_then_restore_round_trips_pages() {
         .await
         .unwrap();
 
-    // Both vanish from the live listings...
     assert!(list_folders_impl(&pool).await.unwrap().is_empty());
     assert!(list_pages_impl(&pool, None).await.unwrap().is_empty());
-    // ...but folder_id is preserved (unlike the hard-delete path).
     let row = get_page(&pool, &page.id).await.unwrap().unwrap();
     assert_eq!(row.folder_id.as_deref(), Some(folder.id.as_str()));
 
@@ -290,16 +231,11 @@ async fn soft_folder_delete_then_restore_round_trips_pages() {
     assert_eq!(pages[0].id, page.id);
 }
 
-// ── 3. tag writes round-trip + the pages.tags ⇄ page_tags invariant ──────────
-
-/// Asserts the denorm invariant the migration skill calls out: `pages.tags`
-/// (JSON, FTS-indexed) and the `page_tags` join (queried) must agree after every
-/// write, with tags normalised (trimmed, lowercased, de-duped) on the way in.
+/// `pages.tags` (JSON, FTS-indexed) and the `page_tags` join (queried) must agree after every write.
 #[tokio::test]
 async fn tag_writes_normalize_and_keep_denorm_in_sync() {
     let pool = test_pool().await;
 
-    // Mixed case + whitespace + a duplicate collapse to two canonical tags.
     let mut p = new_page("Tagged");
     p.tags = vec![
         "Work".to_string(),
@@ -312,7 +248,6 @@ async fn tag_writes_normalize_and_keep_denorm_in_sync() {
     assert_eq!(count(&pool, "page_tags", &page.id).await, 2);
     assert_denorm_matches_join(&pool, &page.id).await;
 
-    // Update to a new set: "work" association drops, "urgent" stays, "new" adds.
     let updated = update_page_impl(
         &pool,
         page.id.clone(),
@@ -328,15 +263,12 @@ async fn tag_writes_normalize_and_keep_denorm_in_sync() {
     assert_eq!(count(&pool, "page_tags", &page.id).await, 2);
     assert_denorm_matches_join(&pool, &page.id).await;
 
-    // Autocomplete reads the global tags table (work survives there even though
-    // the page no longer references it — the tags table is not GC'd on update).
+    // Autocomplete reads the global tags table, which update doesn't GC.
     let mut suggestions = search_tags(&pool, "").await.unwrap();
     suggestions.sort();
     assert_eq!(suggestions, vec!["new", "urgent", "work"]);
 }
 
-/// The pages.tags JSON denorm must list exactly the tag names joined through
-/// page_tags — no more, no less.
 async fn assert_denorm_matches_join(pool: &SqlitePool, page_id: &str) {
     let denorm: String = sqlx::query_scalar("SELECT tags FROM pages WHERE id = ?")
         .bind(page_id)
@@ -360,8 +292,6 @@ async fn assert_denorm_matches_join(pool: &SqlitePool, page_id: &str) {
         "pages.tags JSON must equal the page_tags join"
     );
 }
-
-// ── 4. page links follow the body on save ───────────────────────────────────
 
 fn body_linking(ids: &[&str]) -> String {
     let links: Vec<serde_json::Value> = ids
@@ -406,11 +336,9 @@ async fn page_links_follow_the_body_through_create_and_update() {
     assert_eq!(untouched.links, vec!["page-c".to_string()]);
 }
 
-// ── 5. the real open_pool path: WAL + pragmas, FK cascade, live FTS triggers ──
 //
-// These need a real on-disk file (a `:memory:` pool reports a different
-// journal_mode and starts empty on reopen), so each test uses a unique temp path
-// and cleans up the DB + WAL/SHM sidecars.
+// A `:memory:` pool reports a different journal_mode and starts empty on reopen, so these use a
+// unique temp file and clean up the DB + WAL/SHM sidecars.
 
 struct TempDb {
     path: String,
@@ -434,9 +362,7 @@ impl Drop for TempDb {
     }
 }
 
-/// `open_pool` must apply the WAL journal mode and foreign_keys pragmas the
-/// desktop app relies on for safe concurrent access with the CLI. A fresh
-/// on-disk workspace is the only honest way to assert journal_mode = wal.
+/// The WAL and foreign_keys pragmas make concurrent access with the CLI safe.
 #[tokio::test]
 async fn open_pool_sets_wal_and_foreign_keys() {
     let db = TempDb::new("pragmas");
@@ -457,11 +383,8 @@ async fn open_pool_sets_wal_and_foreign_keys() {
     pool.close().await;
 }
 
-/// On the real pool, hard-deleting a page must cascade to every child table that
-/// declares `ON DELETE CASCADE` (schedules, recurrence rule, reminders, the
-/// page_tags join) while a `SET NULL` reference (focus_sessions) keeps the row
-/// and nulls the link. Proves the FKs are actually enforced end-to-end, not just
-/// declared in the schema.
+/// Proves the FKs are enforced, not just declared: `ON DELETE CASCADE` children go, while
+/// `SET NULL` (focus_sessions) keeps its row.
 #[tokio::test]
 async fn open_pool_enforces_fk_cascade_on_hard_delete() {
     let db = TempDb::new("cascade");
@@ -499,7 +422,6 @@ async fn open_pool_enforces_fk_cascade_on_hard_delete() {
     .unwrap();
     create_page_reminder(&pool, &page.id, 10).await.unwrap();
 
-    // A focus session references the page via ON DELETE SET NULL.
     sqlx::query(
         "INSERT INTO focus_sessions (id, page_id, started_at, duration_s) VALUES (?, ?, ?, ?)",
     )
@@ -511,7 +433,6 @@ async fn open_pool_enforces_fk_cascade_on_hard_delete() {
     .await
     .unwrap();
 
-    // Sanity: everything is wired up before the delete.
     assert_eq!(count(&pool, "page_schedules", &page.id).await, 1);
     assert_eq!(count(&pool, "page_recurrence_rules", &page.id).await, 1);
     assert_eq!(count(&pool, "page_reminders", &page.id).await, 1);
@@ -519,7 +440,6 @@ async fn open_pool_enforces_fk_cascade_on_hard_delete() {
 
     delete_page_impl(&pool, &page.id).await.unwrap();
 
-    // CASCADE children are gone.
     assert_eq!(
         count(&pool, "page_schedules", &page.id).await,
         0,
@@ -541,7 +461,6 @@ async fn open_pool_enforces_fk_cascade_on_hard_delete() {
         "tag links should cascade"
     );
 
-    // SET NULL child survives with a nulled page_id.
     let orphaned: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM focus_sessions WHERE page_id IS NULL")
             .fetch_one(&pool)
@@ -555,16 +474,12 @@ async fn open_pool_enforces_fk_cascade_on_hard_delete() {
     pool.close().await;
 }
 
-/// The FTS index is trigger-maintained (insert/update/delete) on the live
-/// `pages` table. Drive each writer through the real pool and confirm search
-/// reflects the change immediately — the guarantee the per-module search tests
-/// (which seed rows directly) don't make against `open_pool`.
+/// The per-module search tests seed rows directly and don't prove the triggers fire against `open_pool`.
 #[tokio::test]
 async fn open_pool_fts_triggers_track_writer_inserts_updates_deletes() {
     let db = TempDb::new("fts");
     let pool = open_pool(&db.path).await.unwrap();
 
-    // INSERT trigger: a created page is immediately searchable by title.
     let page = create_page_impl(&pool, new_page("Artichoke"))
         .await
         .unwrap();
@@ -577,7 +492,6 @@ async fn open_pool_fts_triggers_track_writer_inserts_updates_deletes() {
         "insert trigger should index the new page"
     );
 
-    // UPDATE trigger: the old title stops matching, the new one starts.
     update_page_impl(
         &pool,
         page.id.clone(),
@@ -606,7 +520,6 @@ async fn open_pool_fts_triggers_track_writer_inserts_updates_deletes() {
         "update trigger should index the new title"
     );
 
-    // DELETE trigger: a hard-deleted page leaves no FTS residue.
     delete_page_impl(&pool, &page.id).await.unwrap();
     assert!(
         search_pages_impl(&pool, "Broccoli".to_string(), Some(false))

@@ -49,8 +49,6 @@ const PERMISSION_REASONS: [&str; 4] = [
     "accessNotConfigured",
 ];
 
-/// Incremental sync from `since`, or a time-bounded backfill when it's `None` or
-/// the token has expired.
 pub(crate) async fn sync_calendar<T: GoogleTransport>(
     transport: &T,
     calendar_id: &str,
@@ -197,8 +195,6 @@ async fn list_calendars_with_primary<T: GoogleTransport>(
         "calendarList paging did not terminate".into(),
     ))
 }
-
-// ─── paging + status ────────────────────────────────────────────────────────────
 
 /// Every page of one `events.list` call. Only the final page carries
 /// `nextSyncToken`, so a delta split across pages must be fully drained before

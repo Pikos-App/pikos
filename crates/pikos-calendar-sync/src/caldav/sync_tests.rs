@@ -1,9 +1,5 @@
-//! Layer-1 CalDAV sync tests: recorded REPORT responses → asserted [`SyncDelta`].
-//! Fixtures were captured 2026-06-19 from radicale 3.3.3 (basic auth, the seeded
-//! work-calendar corpus: a zoned timed event, an all-day single, a multi-day
-//! all-day span, and a recurring series carrying a TZID + UTC EXDATE, a moved
-//! `RECURRENCE-ID` override, and a `STATUS:CANCELLED` override). No network — the
-//! transport replays the fixtures, dispatching on the REPORT body.
+//! Recorded REPORT responses from radicale 3.3.3 → asserted [`SyncDelta`]. The transport
+//! replays the fixtures, dispatching on the REPORT body.
 
 use super::super::error::CaldavError;
 use super::super::report_xml::parse_report;
@@ -26,18 +22,13 @@ const CAL: &str = "http://127.0.0.1:5232/testuser/work-calendar/";
 
 #[derive(Clone, Copy)]
 enum Mode {
-    /// sync-collection returns the whole corpus (etags only) → multiget all four.
     Full,
-    /// sync-collection returns one changed + one deleted href → multiget the change.
     Delta,
-    /// sync-collection 403s `valid-sync-token` → falls back to a calendar-query.
     Stale,
 }
 
 struct FixtureTransport {
     mode: Mode,
-    /// Every REPORT body the run issued, so a test can check what the server was
-    /// actually asked for and not just what came back.
     queries: std::sync::Mutex<Vec<String>>,
 }
 
@@ -101,8 +92,6 @@ async fn run_capturing(mode: Mode, since: Option<&str>) -> (SyncDelta, Vec<Strin
     (delta, queries)
 }
 
-// ─── helpers ────────────────────────────────────────────────────────────────────
-
 fn events(delta: &SyncDelta) -> Vec<&EventUpsert> {
     delta
         .upserts
@@ -121,8 +110,6 @@ fn by_uid<'a>(delta: &'a SyncDelta, uid: &str) -> &'a EventUpsert {
         .unwrap_or_else(|| panic!("no event with uid {uid}"))
 }
 
-// ─── backfill (calendar-query, inline calendar-data) ────────────────────────────
-
 #[tokio::test]
 async fn backfill_returns_the_whole_corpus_with_no_token_or_removals() {
     let delta = run(Mode::Full, None).await;
@@ -138,13 +125,10 @@ async fn backfill_returns_the_whole_corpus_with_no_token_or_removals() {
     assert!(delta.full_enumerate, "a backfill is a full enumerate");
 }
 
-/// A backfill carries no removals of its own, so `authoritative_from` is the only
-/// thing that lets the engine notice a CalDAV deletion that happened while nothing
-/// was polling. Losing it turns those into permanent ghost mirrors; naming a later
-/// window than the one queried sweeps live events instead. Both CalDAV full
-/// enumerates — first connect and the stale-token fallback — have to arm it, and at
-/// the same date the REPORT actually asked for. (Google's deliberate never-arm is
-/// pinned by `no_google_delta_ever_arms_the_sweep`.)
+/// `authoritative_from` is the only thing that lets the engine notice a CalDAV deletion made
+/// while nothing was polling: losing it leaves permanent ghosts, and naming a later window
+/// than the one queried sweeps live events. Both full enumerates must arm it at the date the
+/// REPORT asked for. (Google never arms it: `no_google_delta_ever_arms_the_sweep`.)
 #[tokio::test]
 async fn every_backfill_arms_the_sweep_at_the_window_it_queried() {
     for (mode, since) in [(Mode::Full, None), (Mode::Stale, Some("stale-token"))] {
@@ -177,11 +161,9 @@ async fn a_backfill_asks_for_a_closed_range_so_icloud_returns_events_with_only_a
     assert!(query.contains(r#" end="21000101T000000Z""#), "{query}");
 }
 
-/// Sync tokens are opaque server strings and several servers put a URL in them, so
-/// an `&` in one is ordinary. Interpolated raw it breaks the REPORT body's XML —
-/// the server rejects the request, and since a rejected token is indistinguishable
-/// from an invalidated one the engine falls back to a full re-enumerate on every
-/// single poll, forever, without ever saying so.
+/// Servers put URLs in sync tokens, so an `&` is ordinary. Interpolated raw it breaks the
+/// REPORT XML, and since a rejected token looks like an invalidated one the engine would
+/// fall back to a full re-enumerate on every poll, silently.
 #[tokio::test]
 async fn a_token_with_xml_metacharacters_is_escaped_into_the_report() {
     let (_, queries) = run_capturing(Mode::Delta, Some("http://x/ns/sync/a&b<c")).await;
@@ -225,7 +207,6 @@ async fn timed_event_maps_identity_schedule_and_mirror_fields() {
 async fn all_day_end_is_carried_raw_exclusive() {
     let delta = run(Mode::Full, None).await;
 
-    // Single all-day: DTEND carried raw, not pre-subtracted (see ExclusiveEnd).
     let h = by_uid(&delta, "holiday-1@pikos.test");
     assert_eq!(h.schedule.start, "2026-06-15");
     assert_eq!(
@@ -235,7 +216,6 @@ async fn all_day_end_is_carried_raw_exclusive() {
     );
     assert_eq!(h.schedule.timezone, None, "all-day carries no zone");
 
-    // Multi-day span: Jun 15–17 inclusive arrives as DTEND Jun 18, carried raw.
     let t = by_uid(&delta, "trip-1@pikos.test");
     assert_eq!(
         (t.schedule.start.as_str(), t.schedule.end.as_deref()),
@@ -252,8 +232,7 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
     assert_eq!(s.schedule.timezone.as_deref(), Some("America/New_York"));
 
     let rec = s.recurrence.as_ref().expect("series carries a recurrence");
-    // Raw RRULE: every field preserved (no lossy round-trip) and UNTIL kept as the
-    // wire UTC token — the reconciler, not the provider, rewrites it to wall-clock.
+    // UNTIL stays the wire UTC token: the reconciler, not the provider, rewrites it.
     assert!(rec.rrule.contains("FREQ=WEEKLY"), "got {}", rec.rrule);
     assert!(
         rec.rrule.contains("BYDAY=MO"),
@@ -266,7 +245,6 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
         rec.rrule
     );
 
-    // One moved override (RECURRENCE-ID), keyed by the original wall-clock date.
     assert_eq!(rec.overrides.len(), 1);
     let ov = &rec.overrides[0];
     assert_eq!(ov.original_date, "2026-06-08T09:00:00");
@@ -274,10 +252,7 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
     assert_eq!(ov.schedule.end.as_deref(), Some("2026-06-08T11:30:00"));
     assert_eq!(ov.schedule.timezone.as_deref(), Some("America/New_York"));
 
-    // EXDATEs, every instant normalized to source-zone wall-clock:
-    //  - the TZID EXDATE is already source wall-clock (literal),
-    //  - the UTC EXDATE 13:00Z on Jul 6 (EDT, UTC-4) converts to 09:00,
-    //  - the STATUS:CANCELLED override becomes a cancellation, not a moved instance.
+    // Every EXDATE instant is source-zone wall-clock; a STATUS:CANCELLED override is a cancellation, not a move.
     let mut exdates = rec.exdates.clone();
     exdates.sort();
     assert_eq!(
@@ -290,8 +265,6 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
         "TZID literal + UTC-converted + cancelled override, all bare wall-clock"
     );
 }
-
-// ─── incremental sync-collection ────────────────────────────────────────────────
 
 #[tokio::test]
 async fn incremental_delta_applies_change_removal_and_advances_token() {
@@ -348,8 +321,6 @@ async fn stale_token_falls_back_to_full_reenumerate() {
     assert!(delta.full_enumerate, "a 403 recovery is a full enumerate");
 }
 
-// ─── sync-collection multistatus shape ──────────────────────────────────────────
-
 #[tokio::test]
 async fn report_parser_splits_changes_from_deletions() {
     let report = parse_report(DELTA).unwrap();
@@ -374,8 +345,6 @@ async fn report_parser_splits_changes_from_deletions() {
     assert!(report.sync_token.unwrap().contains("30f466c6"));
 }
 
-// ─── fetch_event (single-resource refetch) ──────────────────────────────────────
-
 #[tokio::test]
 async fn fetch_one_refetches_a_single_resource() {
     let t = FixtureTransport {
@@ -389,10 +358,6 @@ async fn fetch_one_refetches_a_single_resource() {
     assert_eq!(ev.schedule.start, "2026-06-15T10:00:00");
 }
 
-// ─── one malformed body must not sink the whole delta ────────────────────────────
-
-/// A transport that fails any request — proves inline-bodied entries never hit
-/// the network (no multiget for resources that already carry calendar-data).
 struct NoNetwork;
 impl DavTransport for NoNetwork {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
@@ -440,8 +405,7 @@ DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nE
     );
 }
 
-/// A partial 207: the multiget omits `calendar-data` (server hiccup / permissions).
-/// Tracked in `unresolved`, not dropped — a backfill would otherwise sweep it as a deletion.
+/// Tracked in `unresolved`, not dropped: a backfill would otherwise sweep it as a deletion.
 #[tokio::test]
 async fn resolve_upserts_tracks_a_bodyless_multiget_entry() {
     let present = vec![super::super::report_xml::ReportEntry {
@@ -462,7 +426,6 @@ async fn resolve_upserts_tracks_a_bodyless_multiget_entry() {
     );
 }
 
-/// Answers a multiget with the requested hrefs but no `calendar-data` element.
 struct BodylessMultiget;
 impl DavTransport for BodylessMultiget {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
@@ -492,9 +455,6 @@ impl DavTransport for BodylessMultiget {
     }
 }
 
-// ─── auth + sync-token bootstrap status mapping ──────────────────────────────────
-
-/// A transport returning a fixed status for every REPORT.
 struct StatusOnly(u16);
 impl DavTransport for StatusOnly {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
@@ -511,9 +471,7 @@ impl DavTransport for StatusOnly {
 
 #[tokio::test]
 async fn backfill_maps_non_207_status() {
-    // A backfill (no cursor): 401/403 → Unauthorized (reconnect); any other non-207
-    // → UnexpectedStatus, so the poll fails loudly instead of reading an error body
-    // as an empty authoritative set (which would sweep every stored page).
+    // Any other non-207 is UnexpectedStatus, not an empty authoritative set that would sweep every page.
     let err = sync_calendar(&StatusOnly(500), CAL, None)
         .await
         .unwrap_err();
@@ -551,8 +509,6 @@ async fn current_sync_token_captures_the_cursor_on_207() {
     );
 }
 
-/// 207 for sync-collection, but 401 for the follow-up multiget — an app password
-/// revoked between the two round-trips.
 struct AuthFailsOnMultiget;
 impl DavTransport for AuthFailsOnMultiget {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
@@ -582,10 +538,7 @@ async fn a_401_during_multiget_surfaces_as_unauthorized() {
     );
 }
 
-// ─── multiget batching (>75 hrefs) ───────────────────────────────────────────────
-
-/// Echoes one calendar-data response per requested href and counts REPORTs, so a
-/// busy delta exercises the cross-chunk accumulation, not just a single batch.
+/// Counts REPORTs, so a busy delta exercises cross-chunk accumulation.
 struct EchoMultiget {
     calls: std::sync::atomic::AtomicUsize,
 }
@@ -647,12 +600,9 @@ async fn multiget_batches_above_seventy_five_hrefs() {
     );
 }
 
-// ─── status + parse error mapping ────────────────────────────────────────────
-
 #[tokio::test]
 async fn an_unexpected_status_is_surfaced_not_swallowed() {
-    // A 500 on the sync-collection must propagate as UnexpectedStatus (→ a calm
-    // network/stale indicator), never be read as an empty delta.
+    // Never read a 500 as an empty delta.
     let err = sync_calendar(&StatusOnly(500), CAL, Some(&SyncToken("t1".into())))
         .await
         .unwrap_err();
@@ -661,16 +611,11 @@ async fn an_unexpected_status_is_surfaced_not_swallowed() {
 
 #[test]
 fn parse_report_rejects_malformed_xml() {
-    // A truncated/ill-formed multistatus must error (→ Protocol), not silently
-    // parse to an empty/partial delta that looks like "nothing changed".
+    // Must error, not parse to a partial delta that looks like "nothing changed".
     let result = parse_report("<multistatus><response></multistatus>");
     assert!(matches!(result, Err(CaldavError::Protocol(_))));
 }
 
-// ─── ctag PROPFIND ───────────────────────────────────────────────────────────────
-
-/// A PROPFIND-only transport with a fixed status + body (getctag uses PROPFIND,
-/// not REPORT).
 struct PropfindResponse {
     status: u16,
     body: String,
@@ -709,8 +654,7 @@ async fn current_ctag_parses_getctag_from_a_207() {
 
 #[tokio::test]
 async fn current_ctag_ignores_a_getctag_in_a_404_propstat() {
-    // A server without the prop returns it under a 404 block — must be dropped, not
-    // read as an (empty) ctag that would wrongly match next poll.
+    // A prop under a 404 block is dropped, or an empty ctag would wrongly match next poll.
     let body = r#"<?xml version="1.0"?>
 <d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
   <d:response><d:href>/cal/</d:href><d:propstat>

@@ -20,20 +20,17 @@ use quick_xml::NsReader;
 const NS_DAV: &[u8] = b"DAV:";
 const NS_CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 
-/// One `<response>` reduced to what the sync path reads.
 pub(crate) struct ReportEntry {
     pub href: String,
     /// A response-level `<status>` (outside any propstat) — a `404` here marks a
     /// resource deleted from the collection. `None` when the resource is present.
     pub response_status: Option<u16>,
     pub etag: Option<String>,
-    /// The raw ICS body, present only on a `calendar-multiget` response.
     pub calendar_data: Option<String>,
 }
 
 pub(crate) struct ReportResult {
     pub entries: Vec<ReportEntry>,
-    /// The collection's next `sync-token` (`sync-collection` only).
     pub sync_token: Option<String>,
 }
 

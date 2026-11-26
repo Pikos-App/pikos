@@ -27,7 +27,6 @@ const MULTIGET_BATCH: usize = 75;
 
 const DELETED: u16 = 404;
 
-/// Incremental sync from `since`, or a time-bounded backfill when it's `None`.
 pub(crate) async fn sync_calendar<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -96,9 +95,6 @@ pub(crate) async fn current_ctag<T: DavTransport>(
     }
 }
 
-/// Refetches one resource: CalDAV's `fetch_event`, a single-href
-/// `calendar-multiget`. CalDAV never orphans a master, so this is a plain
-/// refetch, never a series reconstruction.
 pub(crate) async fn fetch_one<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -116,8 +112,6 @@ pub(crate) async fn fetch_one<T: DavTransport>(
     )
 }
 
-/// Full re-enumerate of the visible window via `calendar-query` with inline
-/// `calendar-data`. No removals (the result is authoritative) and no token.
 async fn backfill<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -145,9 +139,6 @@ async fn backfill<T: DavTransport>(
     })
 }
 
-/// Partition report entries into present resources and deletions (a response-level
-/// `404`). A deletion becomes a whole-event [`Removal`]; the reconciler decides
-/// detach-vs-delete.
 fn split_present(entries: Vec<ReportEntry>) -> (Vec<ReportEntry>, Vec<Removal>) {
     let mut present = Vec::new();
     let mut removals = Vec::new();
@@ -221,8 +212,6 @@ async fn multiget<T: DavTransport>(
         other => Err(CaldavError::UnexpectedStatus(other)),
     }
 }
-
-// ─── request bodies ─────────────────────────────────────────────────────────────
 
 const GETCTAG_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">

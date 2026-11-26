@@ -29,8 +29,6 @@ const ENUM_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
   </d:prop>
 </d:propfind>"#;
 
-/// A PROPFIND whose redirects have been followed; `final_url` is the URL the 207
-/// actually came from, so its hrefs resolve against the right origin.
 struct Followed {
     final_url: Url,
     body: String,
@@ -118,8 +116,6 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
     Ok(calendars)
 }
 
-/// Resolve `current-user-principal` from `start`, returning `None` when the
-/// request 404s or yields no principal — the signal to try the next location.
 async fn principal_at<T: DavTransport>(
     transport: &T,
     base: &Url,
@@ -206,8 +202,6 @@ async fn propfind_follow<T: DavTransport>(
     ))
 }
 
-/// Resolve an href against the URL it came from, re-applying https if the result
-/// would downgrade to http (see [`propfind_follow`]).
 fn resolve(base: &Url, from: &Url, href: &str) -> Result<Url, CaldavError> {
     let mut url = from
         .join(href)

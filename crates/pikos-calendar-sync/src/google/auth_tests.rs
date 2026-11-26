@@ -1,7 +1,5 @@
-//! Layer-1 auth tests. Google's token and revocation endpoints are scripted
-//! through `AsyncHttpClient`; the OAuth client is built here rather than from
-//! the build's credentials, so the whole flow runs in a build that ships no
-//! Google client at all.
+//! Token and revocation endpoints are scripted through `AsyncHttpClient`, and the OAuth
+//! client is built here, so the flow runs in a build that ships no Google client.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -28,8 +26,6 @@ fn test_client() -> GoogleOauthClient {
 #[error("scripted transport failure")]
 struct TransportDown;
 
-/// Replays canned responses in order and records the form bodies sent, so a test
-/// can assert what Pikos actually asked Google for.
 struct Scripted {
     responses: RefCell<VecDeque<(u16, String)>>,
     sent: RefCell<Vec<String>>,
@@ -51,12 +47,10 @@ impl Scripted {
         Self::new([(status, body.to_string())])
     }
 
-    /// No scripted responses — any request the code makes fails the test.
     fn silent() -> Self {
         Self::new([])
     }
 
-    /// The form fields of the nth request, as `key=value` pairs.
     fn form(&self, index: usize) -> Vec<(String, String)> {
         let body = &self.sent.borrow()[index];
         Url::parse(&format!("http://form.example/?{body}"))
@@ -179,7 +173,6 @@ async fn a_live_access_token_is_reused_without_calling_google() {
         &credentials("live-access", "rt", Some("2099-01-01T00:00:00.000Z")),
     )
     .unwrap();
-    // No scripted responses: any request would fail the test outright.
     let http = Scripted::silent();
 
     let token = access_token_with(&keychain, ACCOUNT, &test_client(), &http)
@@ -321,14 +314,10 @@ async fn a_second_account_gets_its_own_credentials() {
     assert_eq!(personal.refresh_token, "home-rt");
 }
 
-// ─── the redirect leg of the grant ──────────────────────────────────────────────
 //
-// Everything above starts from stored credentials; these drive the one-shot
-// exchange that produces them. The loopback is real (the same TCP round-trip the
-// browser makes) and the token endpoint is scripted, so the whole grant runs in a
-// build carrying no Google client. `complete_with` consumes the authorization and
-// waits on the listener, so the redirect has to be driven concurrently — and on
-// this task, since the scripted transport is not `Send`.
+// These drive the one-shot exchange that produces stored credentials, over a real
+// loopback. `complete_with` waits on the listener, so the redirect is driven concurrently
+// on this task, since the scripted transport is not `Send`.
 
 fn loopback_port(pending: &PendingAuth) -> u16 {
     pending
@@ -339,7 +328,6 @@ fn loopback_port(pending: &PendingAuth) -> u16 {
         .expect("loopback redirect carries a port")
 }
 
-/// Answer the pending authorization's redirect the way the browser would.
 async fn redirect_with(port: u16, state: &str) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -357,10 +345,8 @@ async fn redirect_with(port: u16, state: &str) {
     stream.read_to_string(&mut response).await.unwrap();
 }
 
-/// The CSRF check is what stops a page the user happens to have open from firing a
-/// code of its own at the listener — the loopback answers anything that reaches the
-/// port. Rejection has to come *before* the exchange: the scripted transport holds
-/// no responses, so a token request at all fails the test.
+/// The CSRF check stops any page the user has open from firing a code at the listener.
+/// Rejection must come *before* the exchange: a token request at all fails the test.
 #[tokio::test]
 async fn a_redirect_carrying_someone_elses_state_never_reaches_the_token_endpoint() {
     let pending = begin_with(test_client()).await.unwrap();
@@ -375,8 +361,7 @@ async fn a_redirect_carrying_someone_elses_state_never_reaches_the_token_endpoin
     assert!(matches!(result, Err(GoogleError::Protocol(_))));
 }
 
-/// Google's granular consent lets the user approve a subset. Syncing on a partial
-/// grant would poll calendars it can never read, so connect refuses instead.
+/// A partial grant would poll calendars it can never read, so connect refuses.
 #[tokio::test]
 async fn a_grant_missing_a_scope_is_refused_rather_than_half_connected() {
     let pending = begin_with(test_client()).await.unwrap();

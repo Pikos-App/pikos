@@ -65,7 +65,6 @@ pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError>
     })
 }
 
-/// The two words `status` may hold, checked before anything is written.
 pub fn validate_status(s: &str) -> Result<(), CliError> {
     if s != "not_started" && s != "done" {
         return Err(CliError::usage(format!(
@@ -75,7 +74,6 @@ pub fn validate_status(s: &str) -> Result<(), CliError> {
     Ok(())
 }
 
-/// Priorities are the five the app offers — 0 (none) through 4 (low).
 pub fn validate_priority(p: i64) -> Result<(), CliError> {
     if !(0..=4).contains(&p) {
         return Err(CliError::usage(format!("priority must be 0–4 (got {p})")));
@@ -83,10 +81,6 @@ pub fn validate_priority(p: i64) -> Result<(), CliError> {
     Ok(())
 }
 
-// ─── Listing ────────────────────────────────────────────────────────────────
-
-/// Every filter `list` can express, in the shape the flags (and the MCP tool
-/// arguments) arrive in. Translated to a [`PageFilter`] and [`ListExtras`] by [`list_pages`].
 #[derive(Default)]
 pub struct ListQuery {
     pub folder: Option<String>,
@@ -105,7 +99,6 @@ pub struct ListQuery {
     pub limit: Option<usize>,
 }
 
-/// A listed page, with its repeat rule or reminders when the query asked about them.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListEntry {
@@ -118,7 +111,6 @@ pub struct ListEntry {
     pub reminders: Option<Vec<i64>>,
 }
 
-/// Midnight starting a local day, as the UTC instant `created_at` is stored in.
 fn local_day_start_utc(day: &str) -> Result<String, CliError> {
     let date = NaiveDate::parse_from_str(day, "%Y-%m-%d")
         .map_err(|_| CliError::usage(format!("not a date: \"{day}\"")))?;
@@ -222,9 +214,6 @@ pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<ListEntry
     Ok(entries)
 }
 
-// ─── Folders ────────────────────────────────────────────────────────────────
-
-/// A folder plus how many live pages sit in it.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderEntry {
@@ -233,9 +222,8 @@ pub struct FolderEntry {
     pub page_count: usize,
 }
 
-/// Folders with their page counts. The tally comes from one page listing rather
-/// than a per-folder query, so the whole command is two round trips regardless
-/// of how many folders exist.
+/// The tally comes from one page listing rather than a per-folder query, so the command
+/// is two round trips however many folders exist.
 pub async fn list_folders(pool: &SqlitePool) -> Result<Vec<FolderEntry>, CliError> {
     let folders = list_folders_impl(pool).await.map_err(classify)?;
     let pages = list_pages_impl(pool, None).await.map_err(classify)?;
@@ -271,8 +259,6 @@ pub async fn create_folder(pool: &SqlitePool, name: &str) -> Result<Folder, CliE
     .map_err(classify)
 }
 
-/// The live folder a rename or delete names, by id or by its whole name.
-///
 /// Exact, unlike [`resolve_folder_ref`]: deleting a folder trashes every page in it, so
 /// "proj" must not reach "Projects" the way it may when only filtering a list.
 pub async fn require_folder(pool: &SqlitePool, needle: &str) -> Result<Folder, CliError> {
@@ -327,8 +313,6 @@ pub async fn rename_folder(
     .map_err(classify)
 }
 
-/// Trash a folder with every page in it, as the sidebar's delete does; [`restore_folder`]
-/// brings both back.
 pub async fn trash_folder(pool: &SqlitePool, needle: &str) -> Result<Folder, CliError> {
     let folder = require_folder(pool, needle).await?;
     refuse_calendar_folder(&folder)?;
@@ -338,7 +322,6 @@ pub async fn trash_folder(pool: &SqlitePool, needle: &str) -> Result<Folder, Cli
     Ok(folder)
 }
 
-/// Takes an id only: a trashed folder is in no listing a name could be matched against.
 pub async fn restore_folder(pool: &SqlitePool, id: &str) -> Result<Folder, CliError> {
     if get_folder_impl(pool, id).await.map_err(classify)?.is_none() {
         return Err(CliError::not_found(format!(
@@ -354,12 +337,9 @@ pub async fn restore_folder(pool: &SqlitePool, id: &str) -> Result<Folder, CliEr
         .ok_or_else(|| CliError::internal("the folder vanished while it was restored"))
 }
 
-/// Resolve a `--folder` argument to the value a [`PageFilter`] wants: an exact id
-/// first, then the same fuzzy name match `add` uses for `~folder`.
-///
-/// `inbox` names the unfiled view (`folder_id IS NULL`), but only when no real
-/// folder answers to it — the same precedence Quick Add applies, so one string
-/// never means two things depending on which binary read it.
+/// An exact id first, then the fuzzy name match `add` uses for `~folder`. `inbox` names
+/// the unfiled view only when no real folder answers to it, as in Quick Add, so one
+/// string never means two things depending on which binary read it.
 pub async fn resolve_folder_ref(pool: &SqlitePool, needle: &str) -> Result<Value, CliError> {
     let folders = list_folders_impl(pool).await.map_err(classify)?;
     if let Some(exact) = folders.iter().find(|f| f.id == needle) {
@@ -379,8 +359,6 @@ pub async fn resolve_folder_ref(pool: &SqlitePool, needle: &str) -> Result<Value
         "No folder matches \"{needle}\" — run `pikos folders list` to see them."
     )))
 }
-
-// ─── Reminders ──────────────────────────────────────────────────────────────
 
 pub async fn list_reminders(
     pool: &SqlitePool,
@@ -414,11 +392,6 @@ pub async fn remove_reminder(pool: &SqlitePool, reminder_id: &str) -> Result<(),
         .map_err(classify)
 }
 
-// ─── Trash ──────────────────────────────────────────────────────────────────
-
-/// Un-trash a soft-deleted page — the other half of `delete`, which until now
-/// could put a page in the trash and never take it out.
-///
 /// Idempotent: a page that was never trashed comes back unchanged, which is why
 /// the result is the page rather than a verb.
 pub async fn restore(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
@@ -427,30 +400,23 @@ pub async fn restore(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     require_page(pool, id).await
 }
 
-/// Trashed pages, newest first, so a page can be restored without already holding its id.
 pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<TrashedPage>, CliError> {
     list_trashed_pages_impl(pool).await.map_err(classify)
 }
 
-/// Tags on open pages, most used first, so a filter or a retag can spell one as stored.
 pub async fn list_tags(pool: &SqlitePool) -> Result<Vec<pikos_db::reads::TagCount>, CliError> {
     pikos_db::reads::list_tags(pool).await.map_err(classify)
 }
 
-/// Run the natural-language parser and hand back what it produced, verbatim,
-/// without writing anything.
-///
-/// This is the agent-preview mode behind `add --dry-run`: the shape is exactly
-/// what [`cmd_add`] would then persist, so a caller can show the parse for
-/// approval and re-issue the same text to commit it.
+/// The agent-preview mode behind `add --dry-run`: the shape is exactly what [`cmd_add`]
+/// would then persist, so a caller can show the parse for approval and re-issue the text.
 pub fn parse_only(text: &str) -> Result<Value, CliError> {
     let parsed = run_bridge("parse", text)?;
     Ok(parsed["result"].clone())
 }
 
-/// Parse natural-language text into pages, then write them exactly as Quick Add
-/// would. Returns the created pages, re-read so the caller sees the derived
-/// denormalised schedule rather than what was asked for.
+/// Writes as Quick Add would. The created pages are re-read so the caller sees the
+/// derived schedule rather than what was asked for.
 pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
     let parsed = parse_only(text)?;
     let result: ParseResult = serde_json::from_value(parsed)
@@ -554,8 +520,6 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
     Ok(created)
 }
 
-/// Tick a page off. On a repeating page `date` names the occurrence; without it, the
-/// oldest one still open.
 pub async fn mark_done(pool: &SqlitePool, id: &str, date: Option<&str>) -> Result<Page, CliError> {
     let page = require_page(pool, id).await?;
     let rule = get_recurrence_rule_impl(pool, id).await.map_err(classify)?;
@@ -616,8 +580,7 @@ async fn write_patch(pool: &SqlitePool, id: &str, upd: PageUpdate) -> Result<Pag
         .map_err(classify)
 }
 
-/// Set a page's status without inventing a third word for it. `done` goes through
-/// [`mark_done`] so a recurring series still advances.
+/// `done` goes through [`mark_done`] so a recurring series still advances.
 pub async fn set_status(pool: &SqlitePool, id: &str, state: &str) -> Result<Page, CliError> {
     validate_status(state)?;
     if state == "done" {
@@ -641,16 +604,13 @@ pub async fn set_status(pool: &SqlitePool, id: &str, state: &str) -> Result<Page
     .await
 }
 
-/// Move a page to the trash — recoverable, and the only removal an agent gets.
 pub async fn trash(pool: &SqlitePool, id: &str) -> Result<(), CliError> {
     require_page(pool, id).await?;
     soft_delete_page_impl(pool, id).await.map_err(classify)
 }
 
-/// Results per search page when the caller doesn't say.
 const SEARCH_PAGE_SIZE: usize = 20;
 
-/// A page of search results, and whether it needed every word or fell back to any.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchOutcome {
@@ -659,8 +619,6 @@ pub struct SearchOutcome {
     pub any_word: bool,
 }
 
-/// Search for pages holding every word, and when none does, pages holding any of them.
-///
 /// The fallback runs only on a first page: a cursor belongs to one mode, so a caller paging
 /// through any-word results says so with `any_word`, which the outcome hands back.
 pub async fn search(
@@ -694,10 +652,6 @@ pub async fn search(
     })
 }
 
-// ─── Updating ───────────────────────────────────────────────────────────────
-
-/// Everything `update` can change about a page. The three schedule fields carry
-/// the same meaning they do on the command line — see [`resolve_schedule_change`].
 #[derive(Default)]
 pub struct PageEdit {
     pub title: Option<String>,
@@ -725,8 +679,8 @@ pub struct PageEdit {
     pub no_end: bool,
 }
 
-/// A tag as the writer stores it, so `--untag Work` finds the stored `work`. A
-/// leading `#` is Quick Add's syntax for a tag, not part of its name.
+/// `--untag Work` must find the stored `work`; a leading `#` is Quick Add syntax, not
+/// part of the name.
 fn tag_name(raw: &str) -> Result<String, CliError> {
     let name = raw.trim().trim_start_matches('#').trim().to_lowercase();
     if name.is_empty() {
@@ -735,7 +689,6 @@ fn tag_name(raw: &str) -> Result<String, CliError> {
     Ok(name)
 }
 
-/// The page's tags after the edit, or None when the edit names no tag.
 fn edited_tags(
     current: &[String],
     add: &[String],
@@ -770,7 +723,6 @@ fn edited_tags(
     Ok(Some(tags))
 }
 
-/// The section edit `edit` asks for, with the markdown it places.
 fn section_edit(edit: &PageEdit) -> Result<Option<(SectionEdit, String)>, CliError> {
     let body_writes = [
         &edit.content,
@@ -804,8 +756,8 @@ fn section_edit(edit: &PageEdit) -> Result<Option<(SectionEdit, String)>, CliErr
     }
 }
 
-/// Apply an edit, settling every rejection before the first write so a bad field
-/// can't leave the title and priority half-applied.
+/// Every rejection is settled before the first write, so a bad field can't leave the
+/// title and priority half-applied.
 pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<Page, CliError> {
     let page = require_page(pool, id).await?;
     // clap enforces this pair for the CLI; MCP arguments arrive unguarded, and

@@ -39,18 +39,9 @@ fn ext_from_path_falls_back_to_bin() {
 
 #[test]
 fn ext_from_path_handles_multiple_dots() {
-    // Should pick up the trailing extension, not the first segment.
     assert_eq!(ext_from_path(Path::new("/tmp/foo.bar.png")), "png");
 }
 
-// ── save_asset_into_dir (the filesystem core of save_asset) ────────────────────
-// These cover the copy path that the validate_image_ext / ext_from_path unit
-// tests don't: a real file is copied into a UUID-named entry under the assets
-// dir, and the failure modes (missing source, bad extension) surface the right
-// AppError. The AppHandle / app_data_dir() wiring around this is trivial glue
-// and stays out of scope (it would need a MockRuntime writing to real app-data).
-
-/// Unique temp dir per test — they run in parallel and share temp_dir().
 fn unique_tmp_dir() -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("pkos_asset_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -71,10 +62,8 @@ async fn save_asset_copies_into_assets_dir_with_uuid_name() {
     let name = saved
         .strip_prefix("assets/")
         .expect("the stored path is relative to the app data dir");
-    // Extension is normalized to lowercase; filename is a fresh UUID, not the source name.
     assert!(is_pikos_asset_name(name), "{name}");
     assert!(name.ends_with(".png"));
-    // Bytes are copied faithfully.
     assert_eq!(
         std::fs::read(resolve_asset_path(&assets_dir, &saved)).unwrap(),
         b"\x89PNG fake bytes"
@@ -115,7 +104,6 @@ async fn save_asset_rejects_missing_source() {
         .await
         .unwrap_err();
     assert!(matches!(err, AppError::NotFound(_)));
-    // The assets dir is not created when the source is missing (early return).
     assert!(!dir.join("assets").exists());
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -135,7 +123,6 @@ async fn save_asset_rejects_disallowed_extension() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// An image file named as `save_asset` names one, written `age` ago.
 fn image_file(assets_dir: &Path, age: Duration) -> String {
     let name = format!("{}.png", uuid::Uuid::new_v4());
     let path = assets_dir.join(&name);

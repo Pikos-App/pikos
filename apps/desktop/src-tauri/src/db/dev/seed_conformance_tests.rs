@@ -1,21 +1,15 @@
 //! Mock calendar-sync seed conformance — the writer half of a table both seeders run.
 //!
-//! The seed exists to make behaviours reachable by hand that no unit test covers, so
-//! what it *contains* is its contract — and it is written twice: here as SQL through
-//! [`dev_seed_synced_calendar_impl`], and again in TypeScript
-//! (`apps/desktop/seeds/syncedCalendar.ts`) against `MockStorageAdapter`, which is what test
-//! mode, the `VITE_SEED` harness and Playwright plant. The two halves drifted apart
-//! unnoticed once, and the manual QA pass runs against both, so a drift corrupts QA
-//! itself rather than failing a test.
+//! The seed is written twice, as SQL through [`dev_seed_synced_calendar_impl`] and in TypeScript
+//! (`apps/desktop/seeds/syncedCalendar.ts`) against `MockStorageAdapter`. The manual QA pass
+//! runs against both, so a drift corrupts QA itself rather than failing a test.
 //!
-//! `tests/fixtures/synced-seed-lifecycle.json` is the contract: this runner asserts the
-//! SQL writer satisfies it, `syncedCalendar.conformance.test.ts` asserts the mock
-//! satisfies the same rows, and the fixture's `scope` says what is deliberately left
-//! out (display names, sort-order numbers, the mock's missing ownership seam).
+//! `tests/fixtures/synced-seed-lifecycle.json` is the contract: this runner asserts the SQL
+//! writer satisfies it and `syncedCalendar.conformance.test.ts` asserts the mock does; the
+//! fixture's `scope` says what is deliberately left out.
 //!
-//! Rows are described as an outcome — title, placement, schedule, zone, flags — never
-//! as the calls that produce them, and dates are offsets from the run's own local
-//! today, so the table says nothing about the day it is run on.
+//! Rows are described as outcomes, never as the calls that produce them, and dates are offsets
+//! from the run's local today.
 
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::Deserialize;
@@ -27,8 +21,7 @@ use super::seed::dev_seed_synced_calendar_impl;
 const TABLE: &str =
     include_str!("../../../../../../crates/pikos-db/tests/fixtures/synced-seed-lifecycle.json");
 
-/// The zone a detached row's rule carries, spelled in the fixture as a sentinel
-/// because it is whatever machine the seed ran on.
+/// Spelled in the fixture as a sentinel because it is whatever machine the seed ran on.
 const DEVICE_ZONE: &str = "$device";
 
 #[derive(Deserialize)]
@@ -39,7 +32,6 @@ struct Table {
     scenarios: Vec<Scenario>,
 }
 
-/// The fixture's header: what it pins, and what it deliberately leaves alone.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Scope {
@@ -60,7 +52,6 @@ struct Scenario {
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
 enum Step {
-    /// Plant the mock calendar-sync scenario. The mock has no other way in either.
     Seed,
 }
 
@@ -125,13 +116,11 @@ struct PageExpect {
     attendees: Vec<String>,
     #[serde(default)]
     pending_description: Option<String>,
-    /// The page's indexed plain text (`pages.content_text`) — the user's own notes on
-    /// a mirror, which is what a search has to be able to find.
+    /// `pages.content_text`: the user's own notes on a mirror, which search must find.
     #[serde(default)]
     body_text: String,
-    /// `page_sync.user_modified` — whether the mirror reads as the user's. Teardown
-    /// keeps an owned page and destroys a bare one, so a seeder that drops the flag
-    /// loses the row the manual QA pass is meant to find still standing.
+    /// `page_sync.user_modified`. Teardown keeps an owned page and destroys a bare one, so a
+    /// seeder that drops the flag loses the row QA is meant to find still standing.
     #[serde(default)]
     user_modified: bool,
 }
@@ -143,22 +132,19 @@ struct SeriesExpect {
     calendar: String,
     sync_state: String,
     rrule: String,
-    /// A provider `UNTIL`, kept structural: the day offset and the raw time the rule
-    /// ends on. Mid-day is what makes the recurrence chip lock.
+    /// A provider `UNTIL`: the day offset and the raw time. Mid-day locks the recurrence chip.
     #[serde(default)]
     until_day: Option<i64>,
     #[serde(default)]
     until_time: Option<String>,
     rule_zone: String,
     base: Span,
-    /// Where the head sits once the series exists. The writer stamps it; the mock
-    /// derives it — the two agreeing is the point.
+    /// The writer stamps the head and the mock derives it; their agreeing is the point.
     head: Span,
     #[serde(default)]
     exdates: Vec<Instant>,
     #[serde(default)]
     moved: Option<MovedExpect>,
-    /// Local day the series reads as connected on, as an offset from today.
     #[serde(default)]
     connected_day: i64,
 }
@@ -179,9 +165,7 @@ struct MovedExpect {
     zone: Option<String>,
 }
 
-/// A wall-clock the runners resolve rather than the fixture spelling out: `day` days
-/// from the run's local today (or the last day of its month), at `time`. A date-only
-/// instant is an all-day row.
+/// `day` days from the run's local today (or the last day of its month), at `time`; date-only is all-day.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Instant {
@@ -227,7 +211,6 @@ fn day_offset(offset: i64) -> String {
         .to_string()
 }
 
-/// The zone the fixture asks for, with the device sentinel resolved.
 fn expected_zone(zone: &str) -> String {
     if zone == DEVICE_ZONE {
         pikos_db::device_zone().name().to_string()
@@ -265,9 +248,8 @@ async fn the_seeded_workspace_matches_the_shared_table() {
     }
 }
 
-/// One check per expectation key. The TS twin holds the same set in a
-/// `Record<keyof Expect, …>`, which is what stops a key being asserted on one side
-/// only — here `deny_unknown_fields` on [`Expect`] does that job.
+/// The TS twin holds the same set in a `Record<keyof Expect, …>`; here `deny_unknown_fields`
+/// on [`Expect`] stops a key being asserted on one side only.
 async fn check(pool: &SqlitePool, want: &Expect, scenario: &str) {
     if let Some(account) = &want.account {
         check_account(pool, account, scenario).await;
@@ -599,8 +581,6 @@ async fn check_series(pool: &SqlitePool, want: &[SeriesExpect], scenario: &str) 
     }
 }
 
-/// The rule the fixture describes: a bare `FREQ=…`, plus the provider `UNTIL` where
-/// the shape is the point (a mid-day one is what locks the recurrence chip).
 fn expected_rrule(series: &SeriesExpect) -> String {
     match (series.until_day, &series.until_time) {
         (Some(day), Some(time)) => {

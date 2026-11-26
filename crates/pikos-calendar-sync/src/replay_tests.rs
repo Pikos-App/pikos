@@ -1,5 +1,5 @@
-//! Sync against recorded provider exchanges: the real CalDAV client, the real reconciler, a
-//! server that only replays. See `replay.rs` for how requests are matched.
+//! The real CalDAV client and reconciler against a server that only replays. See
+//! `replay.rs` for how requests are matched.
 
 use chrono::NaiveDate;
 
@@ -8,7 +8,6 @@ use crate::replay::{Fixture, Replay};
 use crate::test_support::MemoryStore;
 use crate::{connect_caldav, resync_account_auto};
 
-/// Read when the test runs, so the recording test still builds before its fixture exists.
 fn recording(name: &str) -> String {
     let path = format!(
         "{}/tests/fixtures/sync-replay/{name}.json",
@@ -16,13 +15,10 @@ fn recording(name: &str) -> String {
     );
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"))
 }
-/// Past this, a recording fails rather than passes: a provider changes, and a stale exchange would
-/// go on proving behaviour it no longer has. Re-record with `scripts/record-sync.sh`.
+/// Past this a recording fails rather than passes, since a stale exchange would go on proving
+/// behaviour a provider no longer has. Re-record with `scripts/record-sync.sh`.
 const FRESH_FOR_DAYS: i64 = 180;
 
-/// Connect as a person does, turn the named calendars on, and sync them. One keychain store
-/// throughout, so the sync reads the credential the connect stored. Returns the account and that
-/// store, for a test that syncs again.
 async fn connect_and_sync(
     pool: &sqlx::SqlitePool,
     base_url: &str,
@@ -109,7 +105,6 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
             .unwrap();
     assert_eq!(titles, ["Company offsite", "Design review", "Team standup"]);
 
-    // A timed one-off keeps its own zone's wall clock.
     let review: (String, String) = sqlx::query_as(
         "SELECT s.scheduled_start, s.timezone FROM page_schedules s
          JOIN pages p ON p.id = s.page_id WHERE p.title = 'Design review'",
@@ -122,7 +117,6 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
         ("2026-10-07T10:00:00".into(), "America/Los_Angeles".into())
     );
 
-    // An all-day day is a date, with no zone.
     let offsite: String = scalar(
         &pool,
         "SELECT s.scheduled_start FROM page_schedules s
@@ -131,7 +125,6 @@ async fn a_recorded_radicale_calendar_syncs_to_its_three_shapes() {
     .await;
     assert_eq!(offsite, "2026-10-09");
 
-    // The series: its rule, the cancelled week, and the moved instance at its new time.
     let (rrule, exdates): (String, String) = sqlx::query_as(
         "SELECT r.rrule, r.rrule_exdates FROM page_recurrence_rules r
          JOIN pages p ON p.id = r.page_id WHERE p.title = 'Team standup'",
@@ -237,11 +230,10 @@ async fn a_connected_accounts_password_is_nowhere_in_the_workspace_files() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Writes a fixture when `scripts/record-sync.sh caldav` runs it against a live server, through the
-/// same connect and sync the app uses. The account is `CALDAV_USER` and `CALDAV_PASSWORD`, the
-/// calendars turned on are `PIKOS_RECORD_CALENDARS`, and both default to the local Radicale the
-/// first fixture came from. With `PIKOS_RECORD_POLL_SECS` it goes on syncing every ten seconds that
-/// long, so changes made upstream meanwhile are recorded as the app would see them.
+/// Run by `scripts/record-sync.sh caldav` against a live server. The account is
+/// `CALDAV_USER` and `CALDAV_PASSWORD` and the calendars `PIKOS_RECORD_CALENDARS`, defaulting
+/// to the local Radicale. `PIKOS_RECORD_POLL_SECS` keeps syncing every ten seconds that long,
+/// to record upstream changes made meanwhile.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "records a live server through the recording proxy; see scripts/record-sync.sh"]
 async fn record_a_live_caldav_calendar() {
@@ -276,8 +268,6 @@ async fn record_a_live_caldav_calendar() {
     }
 }
 
-/// Every page a sync produced: title, folder, then each schedule row's start, end, zone and the
-/// occurrence it overrides, with the page's rule and exclusions. One row per schedule row.
 type Synced = (
     String,
     String,
@@ -315,27 +305,24 @@ fn row(title: &str, folder: &str, [start, end, zone, original, rule]: [Option<&s
     )
 }
 
-/// The wall-clock day of the last occurrence of each seeded series that ends. The sync window
-/// starts a week before today and a series that ended before it isn't mirrored, so the real clock
-/// takes each of these out of the set in turn, as it took the summer course before the recording.
+/// The sync window starts a week before today and a series that ended before it isn't
+/// mirrored, so the real clock takes each of these out of the set in turn.
 const SERIES_LAST_DAYS: [(&str, &str); 3] = [
     ("Physio", "2026-10-26"),
     ("Swim practice", "2026-11-12"),
     ("Swim class (term ends)", "2026-11-14"),
 ];
 
-/// Whether a series last occurring on `last_day` still yields an occurrence the reconciler counts
-/// as in the window: one on or after the day the window starts. The reconciler asks for the next
-/// occurrence after the day before, which means after that day ends, not after it begins.
+/// The reconciler asks for the next occurrence after the day before the window starts, which
+/// means after that day ends, not after it begins.
 fn still_in_window(last_day: &str) -> bool {
     let last_day = NaiveDate::parse_from_str(last_day, "%Y-%m-%d").expect("last day");
 
     last_day >= pikos_db::reconciler::backfill_window_start()
 }
 
-/// The seed corpus, `S-01` to `S-22`, as Fastmail serves it, less any series [`SERIES_LAST_DAYS`]
-/// says has ended. Fastmail holds one copy of an event per account, so the shared kickoff is in
-/// the second calendar only.
+/// Fastmail holds one copy of an event per account, so the shared kickoff is in the second
+/// calendar only.
 fn seeded() -> Vec<Synced> {
     let (la, london, tokyo) = (
         Some("America/Los_Angeles"),
@@ -523,9 +510,8 @@ fn seeded() -> Vec<Synced> {
     rows
 }
 
-/// `rows` after the five edits `seed.py cycle` makes upstream: the standup renamed, the London
-/// review two hours later, one more weekly review cancelled, and the offsite deleted. The fifth,
-/// a line added to the trip notes, is in the body rather than these rows.
+/// The fifth `seed.py cycle` edit, a line added to the trip notes, is in the body rather than
+/// these rows.
 fn with_upstream_edits(mut rows: Vec<Synced>) -> Vec<Synced> {
     rows.retain(|r| r.0 != "Company offsite");
     for r in &mut rows {
@@ -562,7 +548,6 @@ async fn a_recorded_fastmail_account_syncs_every_seeded_shape() {
     );
 }
 
-/// What the seed wrote as the trip notes' description, with its trailing newline.
 const TRIP_NOTES: &str = "Packing & logistics: don't forget <passport>, 'adapters', snacks.\n\
 Itinéraire : Zürich → Kyōto → São Paulo. 東京で会いましょう。Привет! 🧳✈️🌏🍣\n\
 Budget 1,200 €; check-in by 7am; seats 14A & 14B.\n";
@@ -583,8 +568,8 @@ async fn a_long_description_with_markup_characters_reads_back_from_fastmail_inta
     assert_eq!(text, TRIP_NOTES.repeat(12).trim_end());
 }
 
-/// Fastmail's later polls answer an unchanged calendar with an empty change list. Read as a full
-/// listing, that would sweep every event away, so two more syncs must leave every page as it was.
+/// Fastmail answers an unchanged calendar with an empty change list; read as a full listing
+/// that would sweep every event away.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fastmail_polls_that_report_no_change_leave_every_page_untouched() {
     let replay = Replay::start(&fixture(&recording("fastmail"))).await;
@@ -652,9 +637,8 @@ async fn connecting_fastmail_lists_its_calendars_with_every_one_off() {
     assert_eq!(scalar::<i64>(&pool, "SELECT COUNT(*) FROM pages").await, 0);
 }
 
-/// After the first sync the recording carries the five edits `seed.py cycle` made on Fastmail,
-/// then the poll that picked them up. Syncing until the recording is spent must land each one and
-/// leave every other shape as seeded.
+/// Syncing until the recording is spent must land each upstream edit and leave every other
+/// shape as seeded.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn changes_made_on_fastmail_reach_pikos() {
     let replay = Replay::start(&fixture(&recording("fastmail"))).await;
@@ -714,8 +698,6 @@ async fn a_wrong_fastmail_password_fails_and_keeps_nothing() {
     assert!(store.is_empty(), "nothing reached the keychain");
 }
 
-/// Connect a Google account as a person does, from the calendar list a fresh grant reads, then
-/// turn its QA calendar on and sync. The OAuth half is skipped: replaying needs no grant.
 async fn connect_and_sync_google(
     pool: &sqlx::SqlitePool,
     google: &crate::google::replay_provider::ReplayGoogle,
@@ -762,8 +744,6 @@ async fn sync_google(
     );
 }
 
-/// The seed as Google holds it: no CalDAV-only shapes, and the yearly rule's parts in Google's
-/// own order.
 fn seeded_google() -> Vec<Synced> {
     let caldav_only = ["Floating wake-up", "Dentist", "Shared kickoff"];
     let mut rows = seeded();

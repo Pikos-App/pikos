@@ -1,7 +1,5 @@
-//! The calendar-sync commands that are not pure delegation. The other nine —
-//! connect/reconnect, disconnect, resync, refresh, status and the calendar
-//! reads — are declared in `commands.rs` and pulled in below, so `db::sync`
-//! still names every sync command.
+//! The sync commands that are not pure delegation; the rest are declared in `commands.rs`
+//! and pulled in below, so `db::sync` still names every sync command.
 
 use tauri::State;
 
@@ -13,8 +11,6 @@ pub use super::commands::sync::*;
 use super::DbState;
 use crate::error::AppResult;
 
-/// Whether this build carries the Google OAuth client. The panel disables the
-/// Google option when it doesn't, rather than offering a connect that can only fail.
 #[tauri::command]
 pub fn google_sync_available() -> bool {
     google::is_available()
@@ -31,9 +27,7 @@ pub async fn connect_google_account(state: State<'_, DbState>) -> AppResult<Acco
     .await
 }
 
-/// Generic over the runtime so a `MockRuntime` test can invoke it — the wire
-/// test reaches this command's `syncCalendarId`, which a concrete `Wry` handle
-/// would put out of reach.
+/// Generic over the runtime so a `MockRuntime` test can invoke it.
 #[tauri::command]
 pub async fn toggle_sync_calendar<R: tauri::Runtime>(
     state: State<'_, DbState>,

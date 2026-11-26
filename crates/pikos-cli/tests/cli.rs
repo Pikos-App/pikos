@@ -1,9 +1,8 @@
 //! End-to-end tests: drive the built `pikos` binary against a temp workspace.
 //!
-//! The DB-only commands run unconditionally (the binary links pikos-db, no GTK,
-//! no Node). The `add` / recurring-`done` paths need the @pikos/bridge bundle +
-//! Node; they run when packages/pikos-bridge/dist/bridge.mjs exists (built via
-//! `pnpm --filter @pikos/bridge build`) and are skipped with a note otherwise.
+//! The `add` / recurring-`done` paths need the @pikos/bridge bundle and Node; they run
+//! when packages/pikos-bridge/dist/bridge.mjs exists and are skipped with a note
+//! otherwise. Everything else runs unconditionally.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -15,9 +14,8 @@ use serde_json::Value;
 
 const BIN: &str = env!("CARGO_BIN_EXE_pikos");
 
-// Per-process monotonic counter so parallel tests never collide on a path.
-// (macOS truncates SystemTime to microsecond resolution, so a nanos-only
-// suffix produced ~95% duplicates between threads — flaked the suite.)
+// Monotonic counter, because macOS truncates SystemTime to microseconds and a
+// timestamp-only suffix collides between parallel tests.
 static SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn unique_db() -> PathBuf {
@@ -47,7 +45,6 @@ fn base_page(title: &str) -> NewPage {
     }
 }
 
-/// Open (creating + migrating) the DB and insert the given pages; returns ids.
 async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     let pool = open_pool(db).await.unwrap();
     let mut ids = Vec::new();
@@ -57,13 +54,10 @@ async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     ids
 }
 
-/// Link a page to a synced calendar, creating a throwaway account on first use.
-/// `sync_state` ∈ active | detached | tombstoned.
 async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
     mark_synced_at(db, page_id, sync_state, "2026-01-01T00:00:00Z").await;
 }
 
-/// [`mark_synced`], connected at `connected` (UTC), which sets the page's synced-since day.
 async fn mark_synced_at(db: &str, page_id: &str, sync_state: &str, connected: &str) {
     let pool = open_pool(db).await.unwrap();
     sqlx::query(
@@ -138,7 +132,6 @@ fn bridge_js() -> Option<String> {
     p.exists().then(|| p.to_string_lossy().into_owned())
 }
 
-/// Run a command that needs the parser bridge; None when the bridge isn't built.
 fn cli_bridge(db: &str, args: &[&str]) -> Option<Output> {
     let js = bridge_js()?;
     Some(
@@ -152,10 +145,8 @@ fn cli_bridge(db: &str, args: &[&str]) -> Option<Output> {
     )
 }
 
-/// Run a bridge-needing command with PATH cleared so the inner `node` spawn
-/// fails ENOENT — simulates a user who hasn't installed Node.js. The CLI binary
-/// itself is invoked by absolute path (BIN), so clearing PATH only affects what
-/// the CLI subprocess can find.
+/// PATH is cleared so the inner `node` spawn fails ENOENT, as for a user without Node.
+/// The binary itself is invoked by absolute path, so only its subprocess is affected.
 fn cli_bridge_without_node(db: &str, args: &[&str]) -> Option<Output> {
     let js = bridge_js()?;
     Some(
@@ -177,8 +168,6 @@ fn json(out: &Output) -> Value {
 fn code(out: &Output) -> i32 {
     out.status.code().unwrap_or(-1)
 }
-
-// ─── DB-only commands (always run) ─────────────────────────────────────────────
 
 #[tokio::test]
 async fn read_returns_page_json() {
@@ -413,10 +402,6 @@ async fn completing_stamps_local_wall_clock() {
     );
 }
 
-// ─── delete: origin × --hard ─────────────────────────────────────────────────
-
-/// Soft-deleted rows keep their `pages` row (so `read` still resolves) but drop
-/// out of every list; only a hard delete removes the row.
 async fn page_row_count(db: &str, id: &str) -> i64 {
     scalar(db, &format!("SELECT COUNT(*) FROM pages WHERE id = '{id}'")).await
 }
@@ -473,7 +458,6 @@ async fn hard_delete_refuses_on_an_active_synced_page() {
     let ids = seed(dbs, vec![base_page("Standup")]).await;
     mark_synced(dbs, &ids[0], "active").await;
 
-    // Destroying a live mirror is theatre — the next poll recreates it.
     let out = cli(dbs, &["delete", &ids[0], "--hard", "--yes", "--json"]);
     assert_eq!(code(&out), 4);
     assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
@@ -521,7 +505,6 @@ async fn delete_soft_deletes_a_detached_page() {
         .status
         .success());
     assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
-    // A detached link stays detached through trash → restore.
     assert_eq!(sync_state(dbs, &ids[0]).await.as_deref(), Some("detached"));
 }
 
@@ -556,8 +539,6 @@ async fn delete_in_json_mode_without_yes_refuses_exit_2() {
     let out = cli(dbs, &["delete", &ids[0], "--json"]);
     assert_eq!(code(&out), 2); // refuses without --yes in --json mode
 }
-
-// ─── update --due ────────────────────────────────────────────────────────────
 
 async fn scheduled_start(db: &str, id: &str) -> Option<String> {
     scalar(
@@ -603,7 +584,6 @@ async fn scheduled_end(db: &str, id: &str) -> Option<String> {
     .await
 }
 
-/// A two-hour meeting, through the flags a user would actually type.
 async fn seed_timed_meeting(db: &str) -> String {
     let ids = seed(db, vec![base_page("Review")]).await;
     assert!(cli(
@@ -734,7 +714,6 @@ async fn update_due_rejects_freeform_without_touching_the_row() {
     let ids = seed(dbs, vec![base_page("Task")]).await;
 
     for bad in ["tomorrow", "2026-9-1", "2026-13-45", "2026-09-01T14:00"] {
-        // --title rides along to prove nothing lands when the flag is rejected.
         let out = cli(
             dbs,
             &[
@@ -750,14 +729,12 @@ async fn update_due_rejects_freeform_without_touching_the_row() {
     }
 }
 
-/// Each flag that moves a schedule, with a value that would move it.
 const SCHEDULE_FLAGS: [[&str; 2]; 3] = [
     ["--due", "2026-09-02T10:00:00"],
     ["--all-day", "2026-09-02"],
     ["--end", "2026-09-01T18:00:00"],
 ];
 
-/// The flags that change a schedule without taking a value.
 const BARE_SCHEDULE_FLAGS: [&str; 2] = ["--unschedule", "--no-end"];
 
 // qa: CLI-10:6
@@ -967,8 +944,6 @@ async fn update_subtitle_sets_and_clears_the_line_under_the_title() {
     assert_eq!(json(&cleared)["subtitle"], "");
 }
 
-// ─── workspace targeting + migration consent ─────────────────────────────────
-
 #[tokio::test]
 async fn a_debug_build_resolves_the_dev_workspace() {
     // The CLI opens the same file as the installed app and migrates on connect, so
@@ -1043,8 +1018,7 @@ async fn add_without_node_exits_7_with_actionable_error() {
         msg.contains("nodejs.org") || msg.contains("brew install node"),
         "message should hint at install path: {msg}",
     );
-    // Reassure the user that DB-only commands still work — that's the whole point
-    // of distinguishing this error from a generic Internal failure.
+    // The user is told DB-only commands still work, which is why this isn't a generic Internal failure.
     assert!(
         msg.contains("DB-only") || msg.contains("list") || msg.contains("today"),
         "message should mention DB-only commands as a fallback: {msg}",
@@ -1060,8 +1034,6 @@ async fn schema_newer_than_cli_exits_6() {
     let out = cli(dbs, &["status", "whatever", "done"]);
     assert_eq!(code(&out), 6);
 }
-
-// ─── Bridge-backed commands (run when the bridge bundle is built) ───────────────
 
 #[tokio::test]
 async fn add_single_parses_via_bridge() {
@@ -1155,7 +1127,6 @@ async fn done_recurring_advances_and_clones() {
     assert_eq!(head["status"], "not_started"); // head advanced, not completed
     assert_ne!(head["scheduledStart"].as_str().unwrap(), before);
 
-    // A completed clone now exists.
     let search = cli(dbs, &["search", "Standup", "--include-completed", "--json"]);
     let results = json(&search);
     let has_done = results["results"]
@@ -1166,11 +1137,9 @@ async fn done_recurring_advances_and_clones() {
     assert!(has_done, "expected a completed Standup clone");
 }
 
-/// An explicit date *plus* a weekday cadence is the only input that reaches the
-/// CLI off-pattern — a bare "every monday" is resolved to a Monday by the parser
-/// itself, and a cadence with no weekday (`FREQ=DAILY`, `FREQ=MONTHLY`) yields
-/// whatever day it is anchored on. Naming both is what disagrees, and the app
-/// snaps it before writing the rule.
+/// An explicit date *plus* a weekday cadence is the only input that reaches the CLI
+/// off-pattern: a bare "every monday" resolves to a Monday in the parser, and a cadence
+/// with no weekday yields whatever day it is anchored on. The app snaps it before writing.
 #[tokio::test]
 async fn add_recurring_snaps_an_off_pattern_anchor_onto_the_rule() {
     let db = unique_db();
@@ -1235,9 +1204,8 @@ async fn make_folder(db: &str, name: &str) -> String {
     .id
 }
 
-/// `~proj` used to reach only an exact "proj" folder and fall through to Inbox,
-/// while Quick Add prefix-matched it — the same string filing two ways depending
-/// on the binary.
+/// `~proj` prefix-matches a folder as Quick Add does, so one string never files two
+/// ways depending on the binary.
 #[tokio::test]
 async fn add_files_into_a_prefix_matched_folder() {
     let db = unique_db();
@@ -1283,9 +1251,6 @@ async fn add_prefers_a_real_inbox_folder_over_the_inbox_view() {
     assert!(json(&bare)["created"][0]["folderId"].is_null());
 }
 
-// ─── done: the synced guard sits on the series, not the origin ─────────────────
-
-/// Attach a weekly rule so the page reads as a series to the `done` guard.
 async fn mark_recurring(db: &str, page_id: &str, start: &str) {
     let pool = open_pool(db).await.unwrap();
     pikos_db::create_recurrence_rule_impl(
@@ -1303,9 +1268,8 @@ async fn mark_recurring(db: &str, page_id: &str, start: &str) {
     .unwrap();
 }
 
-/// A weekly Monday 9am in London from 2026-10-19, mirrored from a connected calendar.
-/// London leaves summer time on 25 October and the US a week later, so the two
-/// Mondays sit on different offsets for any viewer outside London.
+/// London leaves summer time on 25 October and the US a week later, so the two Mondays
+/// sit on different offsets for any viewer outside London.
 async fn seed_london_standup(db: &str, connected: &str) -> String {
     let ids = seed(db, vec![base_page("Standup")]).await;
     let pool = open_pool(db).await.unwrap();
@@ -1327,7 +1291,6 @@ async fn seed_london_standup(db: &str, connected: &str) -> String {
     ids.into_iter().next().unwrap()
 }
 
-/// London wall-clock → this machine's, computed apart from the code under test.
 fn on_this_machine(london: &str) -> String {
     let wall = chrono::NaiveDateTime::parse_from_str(london, "%Y-%m-%dT%H:%M:%S").unwrap();
     let utc = pikos_recurrence::zoned::wall_clock_to_utc("Europe/London", wall).unwrap();
@@ -1432,9 +1395,7 @@ async fn done_still_completes_a_synced_one_off() {
     assert_eq!(json(&out)["status"], "done");
 }
 
-// ─── one occurrence of a series ──────────────────────────────────────────────
-
-/// A weekly hour-long meeting on Mondays from 2026-06-01, so every listed date is past.
+/// Weekly from a date long past, so every listed date is past.
 async fn seed_weekly_meeting(db: &str) -> String {
     let ids = seed(db, vec![base_page("Review")]).await;
     let pool = open_pool(db).await.unwrap();
@@ -1622,8 +1583,6 @@ async fn status_not_started_on_a_ticked_off_occurrence_gives_the_date_back_to_th
     assert!(skip.status.success(), "a reopened date can be skipped");
 }
 
-// ─── list: the rest of the PageFilter ────────────────────────────────────────
-
 #[tokio::test]
 async fn list_filters_by_folder_name_id_and_inbox() {
     let db = unique_db();
@@ -1636,7 +1595,6 @@ async fn list_filters_by_folder_name_id_and_inbox() {
     filed.folder_id = Some(projects.clone());
     seed(dbs, vec![filed, base_page("Unfiled")]).await;
 
-    // A prefix of the name resolves the same way `add ~proj` does.
     let by_name = json(&cli(dbs, &["list", "--folder", "proj", "--json"]));
     assert_eq!(by_name.as_array().unwrap().len(), 1);
     assert_eq!(by_name[0]["title"], "Filed");
@@ -1644,7 +1602,6 @@ async fn list_filters_by_folder_name_id_and_inbox() {
     let by_id = json(&cli(dbs, &["list", "--folder", &projects, "--json"]));
     assert_eq!(by_id[0]["title"], "Filed");
 
-    // "inbox" names the unfiled view when no folder answers to it.
     let inbox = json(&cli(dbs, &["list", "--folder", "inbox", "--json"]));
     assert_eq!(inbox.as_array().unwrap().len(), 1);
     assert_eq!(inbox[0]["title"], "Unfiled");
@@ -1733,7 +1690,6 @@ async fn list_filters_by_priority_query_and_schedule() {
     assert_eq!(by_priority.as_array().unwrap().len(), 1);
     assert_eq!(by_priority[0]["title"], "Urgent thing");
 
-    // --query reaches the body, not just the title.
     let by_query = json(&cli(dbs, &["list", "--query", "avocado", "--json"]));
     assert_eq!(by_query.as_array().unwrap().len(), 1);
     assert_eq!(by_query[0]["title"], "Notes");
@@ -1759,8 +1715,6 @@ async fn list_rejects_a_priority_outside_the_scale_exit_2() {
     seed(dbs, vec![]).await;
     assert_eq!(code(&cli(dbs, &["list", "--priority", "9", "--json"])), 2);
 }
-
-// ─── today ───────────────────────────────────────────────────────────────────
 
 /// A local calendar day `offset` days from now. `today` reads the machine clock,
 /// so a fixture for it cannot be a fixed date the way the rest of this file's are.
@@ -1790,7 +1744,6 @@ fn titles(out: &Output) -> Vec<String> {
         .collect()
 }
 
-/// What the app's daily summary would say the same day holds.
 async fn today_count(db: &str, day: &str) -> i64 {
     let pool = open_pool(db).await.unwrap();
     pikos_db::today_scheduled_count(&pool, day).await.unwrap()
@@ -1817,7 +1770,6 @@ async fn today_lists_timed_all_day_and_synced_pages_scheduled_today() {
     schedule(dbs, &ids[2], "--due", &format!("{today}T10:00:00"));
     assert!(cli(dbs, &["done", &ids[2], "--json"]).status.success());
     schedule(dbs, &ids[3], "--due", &format!("{}T09:00:00", local_day(1)));
-    // Scheduled before the mirror locks it — origin doesn't enter into what's due.
     schedule(dbs, &ids[4], "--due", &format!("{today}T11:00:00"));
     mark_synced(dbs, &ids[4], "active").await;
 
@@ -1866,8 +1818,6 @@ async fn today_says_so_when_nothing_is_due() {
     );
 }
 
-// ─── folders ─────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn folders_list_reports_names_and_page_counts() {
     let db = unique_db();
@@ -1909,7 +1859,6 @@ async fn folders_create_makes_a_folder_list_can_filter_on() {
     );
     let id = json(&made)["id"].as_str().unwrap().to_string();
 
-    // The folder the CLI just made is immediately addressable as a filter.
     assert!(json(&cli(dbs, &["list", "--folder", "Reading", "--json"]))
         .as_array()
         .unwrap()
@@ -2018,8 +1967,6 @@ async fn folders_restore_of_an_unknown_id_exits_3() {
     assert_eq!(code(&out), 3);
 }
 
-// ─── reminders ───────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn reminders_add_list_and_rm_round_trip() {
     let db = unique_db();
@@ -2074,8 +2021,6 @@ async fn reminders_reject_minutes_below_the_opt_out_sentinel_exit_2() {
     );
     assert_eq!(code(&out), 2);
 }
-
-// ─── restore ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn restore_brings_a_trashed_page_back_into_the_listing() {
@@ -2191,8 +2136,6 @@ async fn restore_of_a_missing_page_exits_3() {
     assert_eq!(code(&out), 3);
 }
 
-// ─── add --dry-run ───────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn add_dry_run_prints_the_parse_and_writes_nothing() {
     let db = unique_db();
@@ -2215,7 +2158,6 @@ async fn add_dry_run_prints_the_parse_and_writes_nothing() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // The preview is the parser's own shape, which `add` would then persist.
     let v = json(&out);
     assert_eq!(v["type"], "single");
     assert_eq!(v["input"]["title"], "Buy milk");
@@ -2230,8 +2172,6 @@ async fn add_dry_run_prints_the_parse_and_writes_nothing() {
         "a dry run must not write"
     );
 }
-
-// ─── add: reminders and the "//" body ────────────────────────────────────────
 
 #[tokio::test]
 async fn add_writes_the_parsed_reminder_lead() {
@@ -2304,7 +2244,6 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     );
     let v = json(&add);
     assert_eq!(v["created"][0]["title"], "Buy a gift");
-    // The body is markdown, never Quick Add — the "#blue" in it never became a tag.
     assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
     let id = v["created"][0]["id"].as_str().unwrap().to_string();
 
@@ -2355,10 +2294,6 @@ async fn add_dry_run_previews_the_reminder_and_the_body() {
     );
 }
 
-// ─── markdown bodies ─────────────────────────────────────────────────────────
-
-/// The app's own document for a page with a heading, marks, a link, a nested list,
-/// tasks and a quote, from the corpus the desktop suite generates.
 fn agent_edit_page() -> NewPage {
     let corpus: Value = serde_json::from_str(include_str!(
         "../../pikos-core/tests/corpus/markdown-import.json"

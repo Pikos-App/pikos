@@ -1,9 +1,7 @@
 //! The poll scheduler: turns platform triggers (window focus, interval timer,
 //! explicit pokes) into sync passes over every account. The trigger stream is
-//! behind [`TriggerSource`] — the platform seam the spec mandates (mirrors the
-//! keychain's `CredentialStore`): the desktop driver feeds it focus events + a
-//! tokio interval, while a mobile driver swaps in BGTaskScheduler/WorkManager
-//! wakeups without touching this loop.
+//! behind [`TriggerSource`], so a mobile driver can swap in its own wakeups
+//! without touching this loop.
 //!
 //! The loop never dies on a failing pass: account-level errors are collected
 //! into the [`PassReport`] for the driver to log.
@@ -23,21 +21,17 @@ use crate::commands::resync_account;
 #[path = "scheduler_tests.rs"]
 mod scheduler_tests;
 
-/// Why the scheduler woke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncTrigger {
     /// The app window gained focus. Delayed, never dropped, by
     /// [`SchedulerConfig::min_focus_gap`].
     Focus,
-    /// The periodic timer fired.
     Interval,
     /// An explicit request — a calendar was just enabled and needs its initial
     /// backfill now. Never debounced.
     Poke,
 }
 
-/// The platform seam. `next` resolves when the platform wants a sync considered;
-/// returning `None` ends the loop (trigger senders gone / platform shutdown).
 #[allow(async_fn_in_trait)]
 pub trait TriggerSource {
     async fn next(&mut self) -> Option<SyncTrigger>;
@@ -45,16 +39,13 @@ pub trait TriggerSource {
 
 pub struct SchedulerConfig {
     /// A `Focus` trigger this soon after the last completed pass waits out the
-    /// remainder and then runs, rather than being dropped. Returning to the window
-    /// has to end in a sync: dropping it meant a change made in the provider a few
-    /// seconds earlier stayed invisible until the next app switch, which is the
-    /// flipping-between-two-calendars case the short gap exists to serve.
-    /// `Interval` and `Poke` never wait.
+    /// remainder and then runs, rather than being dropped, so a change made in the
+    /// provider a few seconds earlier is visible on return. `Interval` and `Poke`
+    /// never wait.
     ///
     /// The cost is that an alt-tab burst runs one pass per focus event, spaced by
-    /// this gap, where dropping ran one. An unchanged etag or sync token writes
-    /// nothing, so those are the cheapest request a provider serves, and the gap is
-    /// what keeps them spaced.
+    /// this gap. An unchanged etag or sync token writes nothing, so those are the
+    /// cheapest request a provider serves.
     pub min_focus_gap: Duration,
 }
 
@@ -71,24 +62,19 @@ impl Default for SchedulerConfig {
 /// What one pass did, for the driver's reload signal + logging.
 #[derive(Debug, Default)]
 pub struct PassReport {
-    /// Some calendar's poll applied data changes — the driver should tell the
-    /// frontend to reload.
     pub changed: bool,
     /// Per-account failures (`account_id`, error). Transport/credential failures
-    /// are engine *outcomes*, not errors — anything here is a genuine bug worth a
-    /// log line. The pass continues past a failing account.
+    /// are engine *outcomes*, not errors, so anything here is a genuine bug.
     pub errors: Vec<(String, AppError)>,
 }
 
 /// Run the scheduler until the trigger stream ends.
 ///
-/// - `pool_for_pass` re-resolves the DB pool per pass (`None` = not connected
-///   yet / mid workspace-switch → the trigger is dropped, no pass runs).
-/// - `provider_for` constructs the account's provider — it takes the whole
-///   account row so it can branch on `provider` (see [`crate::AnyProvider`]).
-/// - `on_pass_start` / `on_pass_end` bracket every pass — the desktop driver
-///   uses them to suppress its DB-file watcher around the engine's writes and
-///   to emit the frontend reload signal.
+/// - `pool_for_pass` re-resolves the DB pool per pass; `None` (not connected yet,
+///   mid workspace-switch) drops the trigger.
+/// - `provider_for` takes the whole account row so it can branch on `provider`.
+/// - `on_pass_start` / `on_pass_end` bracket every pass, so the driver can suppress
+///   its DB-file watcher around the engine's writes.
 pub async fn run_sync_loop<T, P, F, PoolFut, PoolFn>(
     mut triggers: T,
     pool_for_pass: PoolFn,
@@ -124,8 +110,6 @@ pub async fn run_sync_loop<T, P, F, PoolFut, PoolFn>(
     }
 }
 
-/// One pass: resync every account, aggregating the changed flag and collecting
-/// per-account errors instead of aborting.
 async fn run_pass<P, F>(pool: &SqlitePool, provider_for: &F) -> PassReport
 where
     P: CalendarProvider,

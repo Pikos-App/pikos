@@ -16,7 +16,6 @@ fn bridge_js() -> Result<PathBuf, CliError> {
     if let Ok(p) = std::env::var("PIKOS_BRIDGE_JS") {
         return Ok(PathBuf::from(p));
     }
-    // Candidates relative to the executable, then a dev fallback relative to cwd.
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -82,7 +81,6 @@ pub struct ParsedInput {
     /// anchor) arrives as itself rather than as a lead to reinterpret here.
     #[serde(default, rename = "reminderMinutes")]
     pub reminder_minutes: Vec<i64>,
-    /// Page body, plain text, from the `//` separator.
     pub content: Option<String>,
 }
 

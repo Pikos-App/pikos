@@ -34,8 +34,6 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
     }
 }
 
-/// [`base_page`] with a parsed `//` body already in it, so the page is written
-/// once rather than created empty and immediately patched.
 pub async fn page_with_body(
     pool: &SqlitePool,
     folder_id: Option<String>,
@@ -49,11 +47,9 @@ pub async fn page_with_body(
     Ok(page)
 }
 
-/// Write a parsed page's reminder rows. The values arrive already resolved
-/// against the schedule shape, which is why this goes to `pikos_db` directly
-/// rather than through `ops::add_reminder` — that one guards the hand-typed
-/// `reminders add` range, where -2 would be a typo rather than the all-day
-/// anchor.
+/// Goes to `pikos_db` directly rather than `ops::add_reminder`, which guards the
+/// hand-typed range where -2 would be a typo; here the parser already resolved the
+/// values against the schedule shape.
 pub async fn write_reminders(
     pool: &SqlitePool,
     page_id: &str,
@@ -151,15 +147,11 @@ pub async fn schedule_once(
     Ok(())
 }
 
-/// A markdown body as the app's markdown import reads it (see [`pikos_core::markdown_import`]),
-/// or the reason the editor couldn't hold it.
 pub fn markdown_to_doc(markdown: &str) -> Result<Value, CliError> {
     pikos_core::markdown_to_prosemirror(markdown)
         .map_err(|pikos_core::Refused(why)| CliError::usage(why))
 }
 
-/// A markdown body → the Tiptap doc a page write takes, with each `[[title]]` linked to its
-/// page. `linked` is what the page linked to before this write.
 pub async fn markdown_to_tiptap(
     pool: &SqlitePool,
     markdown: &str,

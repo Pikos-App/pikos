@@ -18,20 +18,14 @@ fn local_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<chrono
     chrono::Local.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
 }
 
-// ─── classify_sqlx ───────────────────────────────────────────────────
-
 #[test]
 fn classify_sqlx_returns_stable_label_without_message() {
-    // Variants we'll realistically see in the scheduler. The point is
-    // to confirm the label is content-free — no Display formatting, no
-    // user-provided strings can leak through this helper.
+    // The label must be content-free: no Display formatting or user strings leak through.
     assert_eq!(classify_sqlx(&sqlx::Error::RowNotFound), "row_not_found");
     assert_eq!(classify_sqlx(&sqlx::Error::PoolTimedOut), "pool_timed_out");
     assert_eq!(classify_sqlx(&sqlx::Error::PoolClosed), "pool_closed");
     assert_eq!(classify_sqlx(&sqlx::Error::WorkerCrashed), "worker_crashed");
 }
-
-// ─── is_quiet_hours ──────────────────────────────────────────────────
 
 #[test]
 fn quiet_hours_disabled_always_false() {
@@ -43,7 +37,6 @@ fn quiet_hours_disabled_always_false() {
 
 #[test]
 fn quiet_hours_overnight_window() {
-    // 22:00 → 08:00 wraps midnight
     let s = settings_with_quiet("22:00", "08:00");
     assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 22, 0))); // start inclusive
     assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 23, 30)));
@@ -56,15 +49,12 @@ fn quiet_hours_overnight_window() {
 
 #[test]
 fn quiet_hours_daytime_window() {
-    // 13:00 → 15:00 same-day (e.g. afternoon focus block)
     let s = settings_with_quiet("13:00", "15:00");
     assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 13, 0)));
     assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 14, 30)));
     assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 15, 0)));
     assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 12, 59)));
 }
-
-// ─── should_fire_daily_summary ───────────────────────────────────────
 
 #[test]
 fn summary_blocked_when_overdue_alerts_off() {
@@ -94,7 +84,6 @@ fn summary_blocked_during_quiet_hours() {
 // qa: NOTIF-06:4
 #[test]
 fn summary_fires_after_quiet_hours_end_when_summary_time_passed() {
-    // Summary 07:00, quiet 22:00-08:00: at 08:00 both conditions met.
     let s = settings_with_quiet("22:00", "08:00");
     let rt = SchedulerRuntime::default();
     assert!(should_fire_daily_summary(
@@ -202,18 +191,13 @@ fn summary_fires_next_day_after_previous() {
     ));
 }
 
-// ─── collect_due ─────────────────────────────────────────────────────
-
-/// Device-local wall-clock `offset_min` from the tick clock — the form a native
-/// `page_schedules` row stores.
 fn local_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
     (*now + chrono::Duration::minutes(offset_min))
         .format("%Y-%m-%dT%H:%M:%S")
         .to_string()
 }
 
-/// The same instant read in UTC — the fixtures' source zone. A zone that never
-/// shifts keeps the expected instants independent of the machine's own zone.
+/// UTC never shifts, so expected instants don't depend on the machine's zone.
 fn utc_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
     (now.to_utc() + chrono::Duration::minutes(offset_min))
         .format("%Y-%m-%dT%H:%M:%S")
@@ -292,9 +276,6 @@ async fn insert_reminder(pool: &SqlitePool, page_id: &str, minutes_before: i64) 
     .unwrap();
 }
 
-/// One page per class the tick asks about — explicit lead, global default,
-/// native recurring, synced one-off, synced moved occurrence — every one of them
-/// due at `now` under a 10-minute global default.
 async fn seed_every_due_class(pool: &SqlitePool, now: &chrono::DateTime<chrono::Local>) {
     for id in ["explicit", "default", "rec", "synced", "moved"] {
         insert_test_page(pool, TestPage::new(id, id)).await.unwrap();
@@ -359,8 +340,7 @@ async fn one_tick_collects_every_due_class_into_one_batch() {
     assert!(matches!(batch.summary, DueSummary::Due { .. }));
 }
 
-/// The in-memory `last_summary_date` is lost on restart, so the log marker is
-/// what stops a second summary the same day.
+/// `last_summary_date` is lost on restart, so the log marker stops a second summary.
 #[tokio::test]
 async fn a_summary_already_in_the_log_is_not_counted_again() {
     let pool = test_pool().await;
@@ -395,8 +375,7 @@ async fn quiet_hours_mark_the_batch_and_hold_the_summary() {
     .await
     .unwrap();
 
-    // The reminders are resolved so each can be recorded as silenced; `quiet` is
-    // what stops every one of them from being delivered.
+    // `quiet` is what stops delivery; the reminders are resolved to be logged as silenced.
     assert!(batch.quiet);
     assert_eq!(batch.reminders.len(), 5);
     assert_eq!(batch.summary, DueSummary::NotDue);
@@ -442,9 +421,8 @@ async fn a_quiet_hours_suppression_is_logged_without_arming_the_dedup() {
     assert_eq!(again.reminders.len(), 5);
 }
 
-/// A reminder anchored on a whole minute sits exactly on a tick, which a closed window put
-/// inside that tick and the next one. Delivery survived it on the dedup row; suppression
-/// writes none, so the same silenced reminder was listed twice.
+/// A reminder on a whole minute sits exactly on a tick, which a closed window put in two ticks.
+/// Delivery is saved by the dedup row; suppression writes none, so it was listed twice.
 #[tokio::test]
 async fn a_reminder_on_a_tick_boundary_is_collected_once() {
     let pool = test_pool().await;
@@ -475,8 +453,7 @@ async fn a_reminder_on_a_tick_boundary_is_collected_once() {
     );
 }
 
-/// After the machine sleeps, two ticks can land seconds apart. Without a floor their windows
-/// share most of a minute, and everything inside it is collected by both.
+/// Without a floor, ticks seconds apart after sleep share most of a minute and both collect it.
 #[tokio::test]
 async fn two_ticks_seconds_apart_do_not_share_a_window() {
     let pool = test_pool().await;
@@ -504,9 +481,6 @@ async fn two_ticks_seconds_apart_do_not_share_a_window() {
     );
 }
 
-// ─── tick ────────────────────────────────────────────────────────────
-
-/// Every banner a tick shows: (title, body, log row id).
 type Shown = Vec<(String, String, String)>;
 
 async fn run_tick(
@@ -725,7 +699,6 @@ async fn a_reminder_silenced_by_quiet_hours_is_not_replayed_when_they_end() {
     quiet.overdue_alerts = false;
     assert!(run_tick(&pool, &quiet, &mut runtime, now).await.is_empty());
 
-    // Quiet hours over, and a tick inside the minute the silenced reminders were due in.
     let mut loud = quiet.clone();
     loud.quiet_hours_enabled = false;
     let after = run_tick(
@@ -739,7 +712,6 @@ async fn a_reminder_silenced_by_quiet_hours_is_not_replayed_when_they_end() {
     assert!(after.is_empty(), "replayed: {after:?}");
 }
 
-/// Settings with only reminders on: no quiet hours, no daily summary to wade through.
 fn reminders_only() -> NotificationSettings {
     let mut settings = settings_with_quiet("22:00", "08:00");
     settings.quiet_hours_enabled = false;
@@ -747,7 +719,6 @@ fn reminders_only() -> NotificationSettings {
     settings
 }
 
-/// A tick every minute from `from` up to `to`, each banner with the minute it showed.
 async fn run_minutes(
     pool: &SqlitePool,
     runtime: &mut SchedulerRuntime,
@@ -840,7 +811,6 @@ async fn an_event_moved_after_its_reminder_fired_fires_again_at_its_new_time() {
     let mut runtime = SchedulerRuntime::default();
     assert_eq!(run_minutes(&pool, &mut runtime, now, now).await.len(), 1);
 
-    // Through the app's own write, which is what clears the fired reminder for the new time.
     pikos_db::update_page_schedule_impl(
         &pool,
         "s".to_string(),
@@ -906,8 +876,7 @@ async fn an_all_day_page_never_fires_a_minutes_before_lead() {
     settings.overdue_alerts = false;
     let mut runtime = SchedulerRuntime::default();
 
-    // Every minute across the day before and the day itself: a lead counted back from a day has
-    // no clock time to count back from.
+    // A lead counted back from a day has no clock time to count back from.
     let mut shown = Shown::new();
     let mut at = local_at(2026, 5, 25, 0, 0);
     while at < local_at(2026, 5, 27, 0, 0) {
@@ -948,8 +917,6 @@ async fn a_synced_all_day_page_reminds_the_day_before_at_nine_reading_starts_tom
     assert_eq!(banners, [("Offsite", "Starts tomorrow")]);
 }
 
-/// The synced all-day page above, its calendar last synced `synced_hours_ago` before
-/// the tick, and what the tick showed for it.
 async fn synced_reminder_body(synced_hours_ago: i64, reconnect_needed: bool) -> String {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("mirror", "Offsite"))
@@ -1006,8 +973,6 @@ async fn a_reminder_from_a_calendar_synced_within_the_hour_says_nothing_more() {
     assert_eq!(synced_reminder_body(0, false).await, "Starts tomorrow");
 }
 
-// ─── format helpers ──────────────────────────────────────────────────
-
 #[test]
 fn lead_time_boundaries() {
     assert_eq!(format_lead_time(0), "now");
@@ -1036,7 +1001,6 @@ fn time_from_iso_invalid() {
 
 #[test]
 fn summary_title_format() {
-    // 2026-04-18 is a Saturday
     let t = format_summary_title(&local_at(2026, 4, 18, 8, 0));
     assert_eq!(t, "Today — Sat, Apr 18");
 }

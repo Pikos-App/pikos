@@ -1,25 +1,16 @@
 //! Every pool-backed Tauri command, and the one place they are registered.
 //!
-//! Most of this app's commands are the same three lines — resolve the pool from
-//! managed state, hand it to a `pikos-db` writer, await. Written out, each one
-//! spread that across four uncoupled edits (the writer, the shim, an import, the
-//! `generate_handler!` list), and the fourth failing silently: a command that is
-//! never registered still compiles, and only fails when a user presses the button.
+//! Most commands are the same three lines: resolve the pool, hand it to a `pikos-db`
+//! writer, await. A command that is never registered still compiles and only fails when a
+//! user presses the button, so [`db_commands!`] emits both the `#[tauri::command]`
+//! functions and the [`register`] call from one list. The e2e bridge's dispatcher comes off
+//! the same list.
 //!
-//! So the shims are declared once, below, and [`db_commands!`] emits both halves
-//! from that single list — the `#[tauri::command]` functions *and* the
-//! [`register`] call that puts them on the builder. Declaring a command is
-//! therefore the same act as registering it; there is no second list to forget.
-//! The e2e bridge's dispatcher comes off the same list, for the same reason.
-//!
-//! Commands with a real body stay hand-written where they live and are named in
-//! the `extras:` block, so they register through the same entry point. See
-//! [`register`] for what is in there and why.
+//! Commands with a real body stay hand-written where they live and are named in the
+//! `extras:` block, so they register through the same entry point.
 
 use serde::Deserialize;
 
-/// Reminder creation input. Lives here rather than beside the command because
-/// the command itself is generated; this is the only hand-written half of it.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewPageReminder {
@@ -27,9 +18,6 @@ pub struct NewPageReminder {
     pub minutes_before: i64,
 }
 
-/// What every generated module gets in scope. One shared prelude rather than a
-/// per-module import list, since the modules below exist only to namespace the
-/// commands and nothing else is written inside them.
 mod prelude {
     pub use tauri::State;
 
@@ -49,8 +37,6 @@ mod prelude {
     pub use crate::db::DbState;
 }
 
-/// Declares pool-backed commands and generates their registration.
-///
 /// One line per command:
 ///
 /// ```ignore
@@ -58,24 +44,15 @@ mod prelude {
 /// ```
 ///
 /// which expands to a `#[tauri::command] pub async fn name(state, arg, …) ->
-/// AppResult<ReturnType>` that resolves the pool and calls
-/// `impl_fn(&pool, call, args…).await`. The pool is threaded in as the first
-/// argument and never spelled at the declaration site; everything after it is
-/// written as it should be passed, so the by-value / `&` / `.as_deref()` /
-/// field-access variations the real writers want are just part of the line.
+/// AppResult<ReturnType>` that resolves the pool and calls `impl_fn(&pool, call, args…)`.
+/// Everything after the pool is written as it should be passed, so the by-value / `&` /
+/// `.as_deref()` variations the real writers want are part of the line.
 ///
-/// Each `mod name { … }` block generates `db::commands::name`, which `db/mod.rs`
-/// (or, where the module also holds hand-written commands, the module's own
-/// file) surfaces at `db::name` — the path this macro registers them under and
-/// the one the rest of the app knows them by.
+/// Each `mod name { … }` block generates `db::commands::name`, which `db/mod.rs` (or the
+/// module's own file) surfaces at `db::name`, the path commands register under.
 ///
-/// The `extras:` block lists commands written by hand elsewhere. They are not
-/// generated, only registered — which is the point: [`register`] is the whole
-/// invoke surface, so a hand-written command reaches the frontend the same way a
-/// declared one does, and dropping it from that block is a compile error at its
-/// own call sites rather than a dead button.
-/// Put the invoke handler on the builder, with the in-app benchmark's commands in front of it in a
-/// `bench` build.
+/// The `extras:` block lists hand-written commands, registered but not generated, so
+/// dropping one from it is a compile error at its own call sites rather than a dead button.
 fn install<F>(builder: tauri::Builder<tauri::Wry>, handler: F) -> tauri::Builder<tauri::Wry>
 where
     F: Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static,
@@ -121,12 +98,7 @@ macro_rules! db_commands {
             }
         )*
 
-        /// Put every command on the builder: the ones declared by
-        /// `db_commands!` above, plus the hand-written ones it was handed.
-        ///
-        /// This is the app's entire invoke surface. `lib.rs` calls it and lists
-        /// nothing itself, so there is no registration list to fall out of sync
-        /// with the commands that exist.
+        /// The app's entire invoke surface; `lib.rs` lists no commands itself.
         pub fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
             #[cfg(debug_assertions)]
             return install(builder, tauri::generate_handler![
@@ -141,14 +113,12 @@ macro_rules! db_commands {
             ]);
         }
 
-        /// The hand-written commands every build registers, debug or release.
         #[cfg(test)]
         pub const EXTRA_COMMANDS: &[&str] = &[$(stringify!($extra)),*];
 
-        /// The declared commands again, reached by name over the e2e bridge
-        /// instead of over IPC. Generated from the same list as [`register`], so
-        /// a command cannot reach one transport and miss the other. The
-        /// `extras:` are not here: the bridge handles the few it needs itself.
+        /// The declared commands again, reached by name over the e2e bridge. Generated from
+        /// the same list as [`register`], so no command reaches one transport and misses the
+        /// other; the bridge handles the `extras:` it needs itself.
         #[cfg(feature = "e2e-bridge")]
         pub mod bridge {
             #[allow(unused_imports)]
@@ -185,13 +155,9 @@ macro_rules! db_commands {
             }
         }
 
-        /// Answer one declared command against a pool, with no Tauri runtime:
-        /// the args object is exactly what `invoke` sends. `None` for a name
-        /// this list does not declare, which includes every `extras` command.
-        ///
-        /// Exists for `examples/seed_workspace.rs`, which plants the desktop
-        /// seeds into a file for the iOS simulator. Generated here so the
-        /// runner answers whatever the adapter can call, without a second list.
+        /// Answer one declared command against a pool with no Tauri runtime; the args object
+        /// is what `invoke` sends. `None` for a name this list does not declare (every
+        /// `extras` command). Used by `examples/seed_workspace.rs`.
         pub async fn dispatch(
             pool: &sqlx::SqlitePool,
             command: &str,
@@ -241,17 +207,9 @@ fn dispatch_arg<T: serde::de::DeserializeOwned>(
 }
 
 db_commands! {
-    // Commands with a real body, registered here but written where they live:
-    //
-    // - `connect_db` owns the pool the generated shims read.
-    // - the asset commands resolve the app data dir, not a pool.
-    // - `expand_recurrence_range` is stateless — no pool at all.
-    // - `google_sync_available` is sync and answers from the build config.
-    // - `connect_google_account` drives an OAuth browser round-trip.
-    // - `toggle_sync_calendar` is generic over the runtime (so a MockRuntime
-    //   test can invoke it) and pokes the sync loop after enabling.
-    // - the notification commands talk to the scheduler and the OS.
-    // - the dev/settings commands each do real work around the pool.
+    // Commands with a real body, registered here but written where they live. None is a plain
+    // pool shim: `connect_db` owns the pool, and `toggle_sync_calendar` is generic over the
+    // runtime so a MockRuntime test can invoke it.
     extras: [
         crate::db::connect_db,
         crate::db::assets::init_assets_dir,
@@ -300,8 +258,7 @@ db_commands! {
         delete_page(id: String) -> () = delete_page_impl(&id);
         soft_delete_page(id: String) -> () = soft_delete_page_impl(&id);
         restore_page(id: String) -> () = restore_page_impl(&id);
-        /// The trash, newest deletion first. Read-only: everything that puts a
-        /// page in it or takes one out is an existing command.
+        /// The trash, newest deletion first.
         list_trashed_pages() -> Vec<TrashedPage> = list_trashed_pages_impl();
         /// Destroy trashed pages deleted more than `older_than_days` ago,
         /// returning how many actually went. `0` is "Empty Trash"; the app's
@@ -329,8 +286,6 @@ db_commands! {
         recompute_recurring_schedules() -> Vec<PageSummary> = recompute_recurring_schedules_impl();
     }
 
-    /// Lists a window at a time and the other reads that replace holding every page, plus
-    /// moves and the change counter.
     mod windows {
         list_view(key: ViewKey, after: Option<ViewCursor>, limit: u32) -> ViewWindow
             = views::list_view(&key, after.as_ref(), limit as usize);
@@ -404,9 +359,7 @@ db_commands! {
             = search_pages_impl(query, include_completed);
     }
 
-    /// Focus sessions. Write-only from here: the totals the Data panel shows are
-    /// read through `get_usage_stats`, which aggregates the table rather than
-    /// listing it, so there is no read counterpart to this command.
+    /// Focus sessions. Write-only from here: `get_usage_stats` aggregates the table.
     mod focus {
         create_focus_session(
             page_id: String,
@@ -425,8 +378,6 @@ db_commands! {
         record_first_run_seed() -> () = pikos_db::replica::record_seed();
     }
 
-    /// Per-page reminder CRUD. The write/read logic lives in
-    /// `pikos_db::reminders` (pool-based, unit-tested).
     mod notifications {
         create_page_reminder(data: NewPageReminder) -> PageReminder
             = pikos_db::create_page_reminder(&data.page_id, data.minutes_before);
@@ -434,16 +385,12 @@ db_commands! {
             = pikos_db::list_page_reminders(&page_id);
         delete_page_reminder(id: String) -> () = pikos_db::delete_page_reminder(&id);
         delete_page_reminders(page_id: String) -> () = pikos_db::delete_page_reminders(&page_id);
-        /// The notification log, newest first — what the scheduler fired, and
-        /// what quiet hours silenced. Read-only: the log's only writer is the
-        /// scheduler, so there is no frontend counterpart to this command.
+        /// The notification log, newest first: what the scheduler fired, and what quiet hours
+        /// silenced. Its only writer is the scheduler.
         list_notification_history(limit: i64) -> Vec<NotificationHistoryEntry>
             = pikos_db::list_notification_history(limit);
     }
 
-    /// The sync commands that are pure delegation. The keychain is constructed
-    /// per call — credentials live in the OS keychain, keyed by account id, so
-    /// there is no shared sync state to hold.
     mod sync {
         connect_caldav_account(
             base_url: String,
@@ -456,8 +403,6 @@ db_commands! {
             = reconnect_caldav(Keychain::system(), &account_id, password);
         disconnect_sync_account(account_id: String) -> ()
             = disconnect_account(Keychain::system(), &account_id);
-        /// Credential teardown for a full data wipe — `wipe_app_data` doesn't
-        /// reach the keychain.
         release_sync_credentials() -> () = release_all_credentials(Keychain::system());
         list_sync_calendars(account_id: String) -> Vec<SyncCalendar>
             = list_sync_calendars_impl(&account_id);

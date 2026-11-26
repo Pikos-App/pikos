@@ -30,9 +30,6 @@ use pikos_db::sync_delta::{
 
 use super::error::CaldavError;
 
-/// Parse one resource body into a normalized upsert. `href` is the resource
-/// identity (`external_id`); `etag` its change tag. Errs on a body with no
-/// VEVENT — the caller skips that resource rather than sinking the batch.
 pub(crate) fn parse_resource(
     href: &str,
     etag: Option<&str>,
@@ -104,8 +101,6 @@ fn parse_calendar(ics: &str) -> Result<ICalendar, CaldavError> {
     }
 }
 
-// ─── identity + mirror fields ───────────────────────────────────────────────────
-
 fn core_of(comp: &ICalendarComponent, href: &str, etag: Option<&str>) -> EventCore {
     EventCore {
         external_id: href.to_string(),
@@ -142,13 +137,10 @@ fn strip_mailto(s: &str) -> &str {
         .unwrap_or(s)
 }
 
-// ─── schedule + zone ────────────────────────────────────────────────────────────
-
 /// The event's source zone, taken from `DTSTART`: its `TZID` (resolved through
 /// any inline `VTIMEZONE`), or UTC for a `Z`-stamped start. `None` for a date-only
 /// (all-day) or floating start — neither carries a meaningful zone.
 struct SourceZone {
-    /// Resolved IANA id, stored alongside the wall-clock as provenance.
     iana: String,
     chrono: ChronoTz,
 }
@@ -179,7 +171,6 @@ fn source_zone(master: &ICalendarComponent, resolver: &TzResolver<&str>) -> Opti
     Some(SourceZone { iana, chrono })
 }
 
-/// `DTSTART`/`DTEND` → a normalized [`EventSchedule`].
 fn schedule_of(
     comp: &ICalendarComponent,
     resolver: &TzResolver<&str>,
@@ -220,8 +211,6 @@ fn schedule_of(
         },
     })
 }
-
-// ─── recurrence ─────────────────────────────────────────────────────────────────
 
 fn build_recurrence(
     master: &ICalendarComponent,
@@ -293,12 +282,6 @@ fn build_recurrence(
     })
 }
 
-// ─── instant normalization ──────────────────────────────────────────────────────
-
-/// One datetime → source-zone wall-clock (`YYYY-MM-DDTHH:MM:SS`), or a bare
-/// `YYYY-MM-DD` for all-day. A same-zone value is taken literally; UTC (`Z`), a
-/// fixed offset, or a foreign `TZID` is converted into the source zone so
-/// wall-clock expansion matches it.
 fn instant_wall_clock(
     pdt: &PartialDateTime,
     tzid: Option<&str>,
@@ -361,9 +344,6 @@ fn convert_to_zone(
     Some(WallClock::timed(zoned::wall_clock_at(src.chrono, instant)).format())
 }
 
-/// `start + DURATION` → an end wall-clock string, `None` if there's no DURATION.
-/// A date-only start yields a raw-exclusive date end (like DTEND); a timed start
-/// yields a date-time end.
 fn duration_end(
     comp: &ICalendarComponent,
     start: &PartialDateTime,
@@ -387,8 +367,6 @@ fn duration_end(
     )
 }
 
-/// `PartialDateTime` → a `NaiveDateTime`; an absent time defaults to midnight so
-/// an all-day date still anchors duration arithmetic. `None` if the date is incomplete.
 fn naive_dt(pdt: &PartialDateTime) -> Option<NaiveDateTime> {
     NaiveDate::from_ymd_opt(pdt.year? as i32, pdt.month? as u32, pdt.day? as u32)?.and_hms_opt(
         pdt.hour.unwrap_or(0) as u32,

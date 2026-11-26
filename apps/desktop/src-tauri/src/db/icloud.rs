@@ -1,10 +1,9 @@
 //! iCloud sync on the Mac: the workspace half of the bridge to the Swift transport, `PikosSyncMac`,
 //! which the build script links in when the `icloud-sync` feature is on.
 //!
-//! Swift calls one function, [`pikos_replica_call`], with an operation name and JSON, and gets JSON
-//! back; Rust calls `pikos_sync_start` and `pikos_sync_stop` as Settings turns sync on and off. A C
-//! ABI that small keeps the Swift side free of a second copy of the Rust code, which linking the
-//! phone's bindings would have brought.
+//! Swift calls one function, [`pikos_replica_call`], with an operation name and JSON; Rust
+//! calls `pikos_sync_start` and `pikos_sync_stop`. A C ABI that small keeps the Swift side
+//! free of a second copy of the Rust code.
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, CStr, CString};
@@ -22,7 +21,6 @@ use crate::error::{AppError, AppResult};
 
 const CONTAINER: &str = env!("PIKOS_ICLOUD_CONTAINER");
 
-/// Emitted when the line under the Settings switch changes.
 const STATUS_EVENT: &str = "icloud-sync:status";
 
 static WORKSPACE: OnceLock<(SqlitePool, AppHandle)> = OnceLock::new();
@@ -63,7 +61,6 @@ pub fn attach(app: AppHandle, pool: SqlitePool) {
     });
 }
 
-/// Hands the workspace's zone to the Swift transport, which starts sending and fetching.
 async fn hand_over(pool: &SqlitePool) -> AppResult<()> {
     let meta = pikos_db::replica::meta(pool).await?;
     let zone = pikos_replica::zone::zone_name(&meta.workspace_id);
@@ -200,7 +197,6 @@ pub unsafe extern "C" fn pikos_replica_free(ptr: *mut u8, len: usize) {
     drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)) });
 }
 
-/// A field's value, tagged by type since JSON alone can't tell an integer from a real.
 #[derive(Serialize, Deserialize)]
 enum Wire {
     #[serde(rename = "i")]
@@ -275,7 +271,6 @@ enum Request {
     Join {
         zones: Vec<String>,
     },
-    /// The line Settings shows, worked out by the transport, which owns its wording.
     Status {
         text: String,
         action: String,

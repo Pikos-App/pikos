@@ -1,8 +1,5 @@
-//! Desktop driver for the calendar-sync scheduler: feeds the portable trigger
-//! loop (`pikos_calendar_sync::run_sync_loop`) from a tokio interval, window
-//! focus, and explicit pokes (calendar enable). The loop itself — debounce
-//! policy, per-account passes, error isolation — lives in the crate behind the
-//! `TriggerSource` seam; this file is only the platform half.
+//! Feeds `pikos_calendar_sync::run_sync_loop` from a tokio interval, window focus, and
+//! explicit pokes; this file is only the platform half of the `TriggerSource` seam.
 
 use std::time::Duration;
 
@@ -24,16 +21,11 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// listens and reloads (see `useSyncAppliedReload`).
 pub(crate) const SYNC_APPLIED_EVENT: &str = "calendar-sync:applied";
 
-/// Emitted after every completed pass, changed or not. The sync panel's freshness
-/// (`sync_calendar.last_synced_at`) moves on a no-change poll too, and a calendar
-/// enable pokes a backfill that lands *after* the toggle's own read — so the panel
-/// needs a signal the workspace reload deliberately doesn't get. Kept separate
-/// because reloading the workspace on every poll is exactly what the applied event's
-/// `changed` gate exists to prevent.
+/// Emitted after every completed pass, changed or not: the panel's freshness moves on a
+/// no-change poll, and an enable's backfill lands after the toggle's own read. Separate
+/// from the applied event, whose `changed` gate exists to stop a reload on every poll.
 const SYNC_PASS_EVENT: &str = "calendar-sync:pass";
 
-/// Managed sender half of the trigger stream, so window focus and the
-/// calendar-enable command can wake the loop.
 pub struct SyncTriggerSender(mpsc::Sender<SyncTrigger>);
 
 impl SyncTriggerSender {
@@ -49,17 +41,12 @@ impl SyncTriggerSender {
     }
 }
 
-/// Window gained focus → a (debounced) sync consideration.
 pub fn on_focus(app: &AppHandle) {
     app.state::<SyncTriggerSender>().send(SyncTrigger::Focus);
 }
 
-/// A calendar was just enabled → immediate pass, so its initial backfill runs
-/// without waiting for the interval or a manual resync.
-///
-/// Generic over the runtime so its caller can be too — a command taking a concrete
-/// `AppHandle` cannot be registered under `MockRuntime`, which puts it out of reach
-/// of the IPC argument tests (`db/ipc_tests.rs`).
+/// Generic over the runtime: a command taking a concrete `AppHandle` can't be registered
+/// under `MockRuntime`, which puts it out of reach of the IPC argument tests.
 pub fn poke<R: tauri::Runtime>(app: &AppHandle<R>) {
     app.state::<SyncTriggerSender>().send(SyncTrigger::Poke);
 }
@@ -78,7 +65,6 @@ impl TriggerSource for DesktopTriggers {
     }
 }
 
-/// Main sync loop — spawned from `lib.rs` setup, runs for the app's lifetime.
 pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
     // The frontend calls connect_db after mount — wait for the pool so the interval's
     // first tick becomes the launch sync instead of a dropped trigger.

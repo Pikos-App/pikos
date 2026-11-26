@@ -1,8 +1,4 @@
 //! The application menu: what it contains, and what each item does.
-//!
-//! Lifted out of `run()` whole — the builder chain there is about wiring
-//! plugins, state and windows, and 100-odd lines of menu construction in the
-//! middle of it buried that.
 
 use std::time::Duration;
 
@@ -11,7 +7,6 @@ use tauri::menu::{
 };
 use tauri::{AppHandle, Manager, Runtime};
 
-/// Build the whole menu bar. Handed straight to `Builder::menu`.
 pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let settings = MenuItemBuilder::new("Settings…")
         .id("settings")
@@ -52,7 +47,6 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&quit)
         .build()?;
 
-    // ── File ──────────────────────────────────────────────────────
     let new_page = MenuItemBuilder::new("New Page")
         .id("new_page")
         .accelerator("CmdOrCtrl+N")
@@ -66,7 +60,6 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&close_page)
         .build()?;
 
-    // ── Edit ─────────────────────────────────────────────────────
     let edit_menu = SubmenuBuilder::new(handle, "Edit")
         .undo()
         .redo()
@@ -77,7 +70,6 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .select_all()
         .build()?;
 
-    // ── View ─────────────────────────────────────────────────────
     let toggle_sidebar = MenuItemBuilder::new("Toggle Sidebar")
         .id("toggle_sidebar")
         .accelerator("CmdOrCtrl+\\")
@@ -121,14 +113,12 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&go_forward)
         .build()?;
 
-    // ── Window ───────────────────────────────────────────────────
     let window_menu = SubmenuBuilder::new(handle, "Window")
         .minimize()
         .separator()
         .fullscreen()
         .build()?;
 
-    // ── Help ─────────────────────────────────────────────────────
     let help_docs = MenuItemBuilder::new("Pikos FAQ")
         .id(HELP_DOCS)
         .build(handle)?;
@@ -190,7 +180,6 @@ const HELP_DOCS: &str = "help_docs";
 const HELP_RELEASE_NOTES: &str = "help_release_notes";
 const HELP_BUG: &str = "help_bug";
 
-/// The page a Help item opens, by its menu id.
 fn help_url(id: &str) -> Option<String> {
     match id {
         HELP_DOCS => Some("https://pikos.app/faq".into()),
@@ -211,8 +200,6 @@ fn help_url(id: &str) -> Option<String> {
     }
 }
 
-/// Route a menu click. The items the frontend owns are forwarded to it by id;
-/// the rest are handled here.
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let id = event.id().0.clone();
     if let Some(url) = help_url(&id) {
