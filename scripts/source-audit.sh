@@ -114,6 +114,21 @@ else
   pass "No references nobody outside can follow"
 fi
 
+# A comment states what is true now. A version tag or a word of history in one is a change log
+# that goes stale; the history belongs in git and the decision in its record. Narrow on purpose:
+# "no longer" and "now" also describe present behaviour, so they aren't matched.
+hits=$(src_files 'apps/ios/**' 'apps/apple/**' \
+  | grep -E '\.(ts|tsx|rs|swift)$' \
+  | grep -vE '(/generated/|/pkg/|PikosCore/Sources/PikosCore/)' \
+  | xargs grep -nE '^\s*(//|\*|/\*).*(\(v?[0-9]+\.[0-9]+(\.[0-9]+)?\)|\b(in|since) v?[0-9]+\.[0-9]+\.[0-9]+\b|\b(previously|used to be|until recently)\b)' 2>/dev/null \
+  || true)
+
+if [ -n "$hits" ]; then
+  fail "Comments carrying version tags or history (say what is true now)" $hits
+else
+  pass "No history in comments"
+fi
+
 hits=$(ts_src_files \
   | xargs grep -nE '(^\s*console\.log\(|^\s*debugger\b)' 2>/dev/null || true)
 
