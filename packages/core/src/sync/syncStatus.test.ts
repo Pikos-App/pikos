@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./syncStatus";
+import type { AccountWithCalendars } from "../types";
+import {
+  accountConnectionState,
+  accountsNotSyncing,
+  calendarSyncDot,
+  NOT_SYNCING_AFTER_MS,
+  STALE_AFTER_MS,
+} from "./syncStatus";
 
 const NOW = new Date("2026-06-19T12:00:00Z");
 
@@ -65,5 +72,76 @@ describe("accountConnectionState", () => {
   // evidence a credential was rejected — and the scheduler has stopped polling.
   it("is reconnectNeeded from the stored flag alone, with no results", () => {
     expect(accountConnectionState([undefined], true)).toBe("reconnectNeeded");
+  });
+});
+
+describe("accountsNotSyncing", () => {
+  const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+  const HOUR = NOT_SYNCING_AFTER_MS;
+
+  function account(
+    calendars: { enabled: boolean; lastSyncedAt: string | null }[],
+    reconnectNeeded = false
+  ): AccountWithCalendars {
+    return {
+      authKind: "oauth",
+      calendars: calendars.map((c, i) => ({
+        accountId: "a",
+        calendarId: `cal-${i}`,
+        color: null,
+        detachedPages: 0,
+        displayName: `Calendar ${i}`,
+        enabled: c.enabled,
+        folderId: c.enabled ? `folder-${i}` : null,
+        id: `row-${i}`,
+        lastSyncedAt: c.lastSyncedAt,
+      })),
+      createdAt: ago(30 * 24 * HOUR),
+      displayName: "me@work.example",
+      id: "a",
+      provider: "google",
+      reconnectNeeded,
+    };
+  }
+
+  // qa: SYNC-37:1
+  it("names an account that needs reconnecting, before any pass has run", () => {
+    const found = accountsNotSyncing([account([cal(true, ago(3 * HOUR))], true)], null, NOW);
+    expect(found.map((f) => f.reason)).toEqual(["reconnectNeeded"]);
+    expect(found[0]?.lastSyncedAt).toBe(ago(3 * HOUR));
+  });
+
+  it("leaves out an account with no calendar switched on, as it shows no events", () => {
+    expect(accountsNotSyncing([account([cal(false, ago(3 * HOUR))], true)], null, NOW)).toEqual([]);
+  });
+
+  // qa: SYNC-38:1
+  it("names an account a pass failed to update for over an hour", () => {
+    const found = accountsNotSyncing([account([cal(true, ago(HOUR + 60_000))])], NOW, NOW);
+    expect(found.map((f) => f.reason)).toEqual(["unreachable"]);
+  });
+
+  // qa: SYNC-38:2
+  it("says nothing after the Mac wakes until a pass has failed", () => {
+    // The last pass ended when the last sync did, hours ago, before the Mac slept.
+    const slept = ago(8 * HOUR);
+    expect(accountsNotSyncing([account([cal(true, slept)])], new Date(slept), NOW)).toEqual([]);
+  });
+
+  it("says nothing within the hour, though a pass missed the calendar", () => {
+    expect(accountsNotSyncing([account([cal(true, ago(HOUR - 60_000))])], NOW, NOW)).toEqual([]);
+  });
+
+  it("says nothing for a calendar that has never synced yet", () => {
+    expect(accountsNotSyncing([account([cal(true, null)])], NOW, NOW)).toEqual([]);
+  });
+
+  it("gives the oldest last sync of the account's calendars", () => {
+    const found = accountsNotSyncing(
+      [account([cal(true, ago(2 * HOUR)), cal(true, ago(5 * HOUR)), cal(false, ago(9 * HOUR))])],
+      NOW,
+      NOW
+    );
+    expect(found[0]?.lastSyncedAt).toBe(ago(5 * HOUR));
   });
 });

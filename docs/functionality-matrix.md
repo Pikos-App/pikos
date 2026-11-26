@@ -875,16 +875,16 @@ Neither re-seeds `seeded_description_hash`: resolving
 a notice is not a re-seed, and re-stamping it would make the _following_ change overwrite the
 body silently.
 
-| Account operation                      | CalDAV                                           | Google                                    | iOS                                   | iCloud                                                 |
-| -------------------------------------- | ------------------------------------------------ | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
-| Connect                                | ✅ app password; discovery validates first       | ✅ OAuth PKCE loopback ⁷⁴                 | ⚠️ CalDAV only                        | 🚫 accounts stay on the device                         |
-| Reconnect the same account             | ✅ reuses the row, re-links dormant pages ⁷⁵     | ✅ same ⁷⁵                                | ⚠️ CalDAV only                        | 🚫 same                                                |
-| Disconnect                             | ⚠️ teardown per calendar, then dormant ⁷⁶        | ⚠️ same + token revoke ⁷⁶                 | ✅ either provider                    | ⚠️ detached pages join                                 |
-| Manual resync ("Resync now")           | ✅ incremental poll from the stored cursor ⁷⁷    | ✅ same; `410 Gone` → full re-enumerate   | ✅ only when asked                    | — per device                                           |
-| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷ | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               | — per device                                           |
-| Credentials expire / rotate            | ⚠️ reconnect badge, polling stops ⁷⁸             | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only | — per device                                           |
-| Offline / unreachable                  | ✅ stale dot, cursor kept, retries               | ✅ same; rate limits map here too         | ✅ reported, nothing changed          | — per device                                           |
-| Delete all data                        | ✅ keychain cleared, dormant swept               | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             | ⚠️ this device leaves sync; the others keep everything |
+| Account operation                      | CalDAV                                                      | Google                                    | iOS                                   | iCloud                                                 |
+| -------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Connect                                | ✅ app password; discovery validates first                  | ✅ OAuth PKCE loopback ⁷⁴                 | ⚠️ CalDAV only                        | 🚫 accounts stay on the device                         |
+| Reconnect the same account             | ✅ reuses the row, re-links dormant pages ⁷⁵                | ✅ same ⁷⁵                                | ⚠️ CalDAV only                        | 🚫 same                                                |
+| Disconnect                             | ⚠️ teardown per calendar, then dormant ⁷⁶                   | ⚠️ same + token revoke ⁷⁶                 | ✅ either provider                    | ⚠️ detached pages join                                 |
+| Manual resync ("Resync now")           | ✅ incremental poll from the stored cursor ⁷⁷               | ✅ same; `410 Gone` → full re-enumerate   | ✅ only when asked                    | — per device                                           |
+| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷            | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               | — per device                                           |
+| Credentials expire / rotate            | ⚠️ banner + badge, polling stops ⁷⁸                         | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only | — per device                                           |
+| Offline / unreachable                  | ✅ stale dot, cursor kept, retries; banner after an hour ⁷⁸ | ✅ same; rate limits map here too         | ✅ reported, nothing changed          | — per device                                           |
+| Delete all data                        | ✅ keychain cleared, dormant swept                          | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             | ⚠️ this device leaves sync; the others keep everything |
 
 ⁷⁴ Needs build-time client credentials (`option_env!`). Without them the Google option is
 disabled with "Not available in this build". Google's granular consent can withhold a scope;
@@ -909,7 +909,11 @@ _provider_ rejected.
 The account **stops being polled**. `load_accounts` selects `WHERE reconnect_needed = 0`, so
 the background pass skips it outright rather than spending a 401 per pass. "Resync now" runs
 regardless of the flag and clears it on the first clean sync, so a manual retry is what takes
-the badge down.
+the badge down. On the desktop a banner over the editor and the calendar names the account,
+with Reconnect, from the moment the flag is set; it also shows for a calendar a sync pass has
+failed to update for over an hour, with Try again. Hiding it lasts until the app next opens. A
+reminder from either kind of calendar still fires, with "Calendar not syncing, so this may have
+changed" under its time. The log records the flag being set and cleared.
 ⁷⁹ `release_all_credentials` runs before the wipe, dormant accounts included. Their ids are the
 keychain keys and the rows are about to go. The dev-only `reset_db` goes through the same path,
 so it sweeps dormant rows too. iOS runs the same two steps from Settings, and the disconnect half is best-effort on purpose: a

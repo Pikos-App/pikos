@@ -538,6 +538,42 @@ appTest(
 );
 
 appTest(
+  "a calendar whose credentials are refused says so over the editor and the calendar",
+  { tag: ["@SYNC-37"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    const banner = app.getByRole("region", { name: "Calendar not syncing" });
+    await expect(banner).toHaveCount(0);
+
+    await appTest.step("SYNC-37 a refused poll puts the banner over both panes", async () => {
+      await upstream(app, "upstream_sync", { calendar: "Personal", rejected: true });
+      await expect(banner).toContainText(
+        "Mock Calendar (dev) needs you to sign in again, so its events and reminders may be out of date."
+      );
+      await openFromSearch(app, "Company offsite");
+      await expect(app.getByLabel("Page title")).toHaveText("Company offsite");
+      await expect(banner).toBeVisible();
+      await openCalendarMode(app);
+      await expect(banner).toBeVisible();
+    });
+
+    await appTest.step("SYNC-37 Reconnect opens the account's reconnect dialog", async () => {
+      await banner.getByRole("button", { name: "Reconnect" }).click();
+      const dialog = app.getByRole("dialog", { name: "Reconnect Mock Calendar (dev)" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toHaveCount(0);
+    });
+
+    await appTest.step("SYNC-37 the banner goes once a poll succeeds", async () => {
+      await upstream(app, "upstream_sync", { calendar: "Personal" });
+      await expect(banner).toHaveCount(0);
+    });
+  }
+);
+
+appTest(
   "a synced virtual resolves alone, and a moved instance is removed from Pikos alone",
   { tag: ["@SYNC-20"] },
   async ({ app }) => {

@@ -62,9 +62,12 @@ pub struct UpstreamCalendar {
 }
 
 /// Hands each calendar the delta a test scripted for it, and every other calendar
-/// an empty incremental one, so a pass touches only what the test named.
+/// an empty incremental one, so a pass touches only what the test named. With
+/// `rejected` it refuses the account's credentials instead, as a revoked Google grant
+/// or a rotated app password does.
 struct Scripted {
     deltas: HashMap<String, SyncDelta>,
+    rejected: bool,
 }
 
 const CURSOR: &str = "e2e-bridge";
@@ -81,6 +84,9 @@ impl CalendarProvider for Scripted {
         calendar: &SyncCalendarRow,
         _since: Option<SyncToken>,
     ) -> AppResult<SyncDelta> {
+        if self.rejected {
+            return Err(AppError::Invalid("the calendar refused the credentials".into()));
+        }
         Ok(self
             .deltas
             .get(&calendar.calendar_id)
@@ -110,13 +116,15 @@ impl CalendarProvider for Scripted {
 }
 
 /// One poll of `calendar`'s account against the scripted upstream. `refresh` runs
-/// the panel's "Refresh from calendar" instead, which drops the cursors first.
+/// the panel's "Refresh from calendar" instead, which drops the cursors first, and
+/// `rejected` has the calendar refuse the account's credentials.
 pub async fn sync(
     pool: &SqlitePool,
     calendar: &str,
     events: Vec<UpstreamEvent>,
     removals: Vec<String>,
     refresh: bool,
+    rejected: bool,
 ) -> AppResult<()> {
     let (account_id, calendar_id) = calendar_by_name(pool, calendar).await?;
     let mut upserts = Vec::with_capacity(events.len());
@@ -140,6 +148,7 @@ pub async fn sync(
     };
     let provider = Scripted {
         deltas: HashMap::from([(calendar_id, delta)]),
+        rejected,
     };
     if refresh {
         refresh_account(pool, &provider, &account_id).await?;
