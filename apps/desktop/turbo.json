@@ -1,0 +1,30 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The update dialog's test reads the site's release notes, so an edited note reruns this
+    // suite. Only this one: as a global input, every note edited for a release reran every
+    // package's checks. A package's inputs replace the root's, so the root's list is repeated,
+    // except that the README is named rather than every .md excluded, which drops the notes too.
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md",
+        "!src-tauri/**/*.rs",
+        "!src-tauri/Cargo.*",
+        "!src-tauri/.cargo/**",
+        "$TURBO_ROOT$/apps/marketing/src/content/release-notes/**"
+      ]
+    },
+    "test:coverage": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md",
+        "!src-tauri/**/*.rs",
+        "!src-tauri/Cargo.*",
+        "!src-tauri/.cargo/**",
+        "$TURBO_ROOT$/apps/marketing/src/content/release-notes/**"
+      ]
+    }
+  }
+}

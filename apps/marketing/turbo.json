@@ -1,0 +1,12 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // `astro check` validates every content entry against its collection's schema, and those
+    // entries are markdown, which the root's inputs leave out. The README is the only markdown
+    // here no check reads.
+    "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
+    }
+  }
+}
