@@ -72,7 +72,10 @@ pub(crate) fn refusing_keychain() -> Keychain {
     Keychain::with_store(Box::new(Refusing))
 }
 
+/// A one-off tomorrow at nine, so it stays inside the sync window whenever the tests
+/// run: a resumed cursor refuses a new page for one that was already over.
 pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> UpsertItem {
+    let day = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d");
     UpsertItem::Event(EventUpsert {
         core: EventCore {
             external_id: external_id.into(),
@@ -84,8 +87,8 @@ pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> Up
             attendees: vec![],
         },
         schedule: EventSchedule {
-            start: "2026-06-20T09:00:00".into(),
-            end: ExclusiveEnd::new(Some("2026-06-20T10:00:00".into())),
+            start: format!("{day}T09:00:00"),
+            end: ExclusiveEnd::new(Some(format!("{day}T10:00:00"))),
             timezone: Some("America/New_York".into()),
         },
         recurrence: None,

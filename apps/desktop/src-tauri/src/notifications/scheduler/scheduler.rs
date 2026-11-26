@@ -646,6 +646,10 @@ fn format_summary_body(today_count: i64, overdue_count: i64) -> String {
     format!("{}\nOpen Pikos to review.", parts.join(" · "))
 }
 
+/// Under a reminder's time when its calendar may be out of date
+/// ([`pikos_db::page_calendar_out_of_date`]).
+const NOT_SYNCING_NOTE: &str = "\nCalendar not syncing, so this may have changed";
+
 async fn fire_reminder(
     pool: &SqlitePool,
     row: &DueReminder,
@@ -654,11 +658,16 @@ async fn fire_reminder(
 ) -> Result<(), sqlx::Error> {
     let lead = format_lead_time(row.minutes_before);
     let time_str = format_time_from_iso(&row.scheduled_start);
-    let body = if time_str.is_empty() {
+    let mut body = if time_str.is_empty() {
         format!("Starts {lead}")
     } else {
         format!("Starts {lead} · {time_str}")
     };
+    // Still shown: a reminder flagged as maybe out of date costs less than a real
+    // meeting missed.
+    if pikos_db::page_calendar_out_of_date(pool, &row.page_id, now.to_utc()).await? {
+        body.push_str(NOT_SYNCING_NOTE);
+    }
 
     // Log to prevent re-firing. The row id doubles as the notification's OS
     // identifier, so a click routes back to this page (see `notifications::click`).

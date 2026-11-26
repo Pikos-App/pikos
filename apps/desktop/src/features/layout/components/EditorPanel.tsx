@@ -5,6 +5,7 @@ import { Activity, useRef } from "react";
 import { CalendarHeader, CalendarView, usePreloadCalendarRange } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
 import { useLayoutMode } from "@/features/layout/breakpoints";
+import { CalendarNotSyncingBanner } from "@/features/settings";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { useCalendarDate } from "@/shared/context/CalendarDateContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
@@ -137,6 +138,7 @@ export function EditorPanel() {
           />
         )}
       </RightPanelHeader>
+      <CalendarNotSyncingBanner />
 
       {/* Both mounted and toggled via `hidden` to eliminate the unmount/remount
           flash when switching panels. The first mount pays the cost for both

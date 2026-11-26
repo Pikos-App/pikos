@@ -4626,6 +4626,81 @@ async fn a_series_whose_last_meeting_opens_the_window_still_syncs() {
     );
 }
 
+/// A one-off `days` from today, an hour long, in UTC.
+fn one_off_on(days: i64, etag: &str) -> UpsertItem {
+    let day = (chrono::Local::now() + chrono::Duration::days(days)).format("%Y-%m-%d");
+    single(
+        core("/one-off.ics", "uid-one-off", etag, "Quarterly planning"),
+        timed(
+            &format!("{day}T09:00:00"),
+            Some(&format!("{day}T10:00:00")),
+            "UTC",
+        ),
+    )
+}
+
+// qa: SYNC-39:1
+#[tokio::test]
+async fn a_one_off_over_before_the_window_gets_no_page_from_a_resumed_cursor() {
+    let pool = setup().await;
+    let outcome = reconcile(&pool, &ctx_now(), &delta(vec![one_off_on(-400, "v1")]))
+        .await
+        .unwrap();
+    assert_eq!(outcome.applied, 0);
+    assert_eq!(page_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn a_full_enumerate_mirrors_the_one_offs_its_own_query_returned() {
+    // The provider's query is windowed already, so whatever it sends is in reach.
+    let pool = setup().await;
+    let full = SyncDelta {
+        full_enumerate: true,
+        ..delta(vec![one_off_on(-400, "v1")])
+    };
+    reconcile(&pool, &ctx_now(), &full).await.unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+#[tokio::test]
+async fn a_one_off_inside_the_window_still_gets_its_page() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx_now(), &delta(vec![one_off_on(-2, "v1")]))
+        .await
+        .unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+// qa: SYNC-39:2
+#[tokio::test]
+async fn a_stored_one_off_that_has_since_aged_out_still_takes_a_change() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![one_off_on(-30, "v1")]))
+        .await
+        .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    let renamed = match one_off_on(-30, "v2") {
+        UpsertItem::Event(ev) => UpsertItem::Event(EventUpsert {
+            core: core(
+                "/one-off.ics",
+                "uid-one-off",
+                "v2",
+                "Quarterly planning (moved room)",
+            ),
+            ..ev
+        }),
+        UpsertItem::Occurrence(_) => unreachable!(),
+    };
+    reconcile(&pool, &ctx_now(), &delta(vec![renamed]))
+        .await
+        .unwrap();
+    assert_eq!(
+        page_title(&pool, &page_id).await,
+        "Quarterly planning (moved room)"
+    );
+}
+
 // qa: SYNC-31:3
 #[tokio::test]
 async fn ended_series_stored_by_an_earlier_build_go_on_the_next_pass() {
@@ -4722,6 +4797,274 @@ async fn a_trashed_ended_series_is_not_mirrored_again_whatever_its_link_says() {
         page_exists(&pool, &page_id).await,
         "the trashed copy stays in the trash"
     );
+}
+
+/// A weekly series titled `title` at 09:00 from `weeks` out, at `offset_days` past that
+/// week's day.
+fn google_weekly(
+    id: &str,
+    etag: &str,
+    (weeks, offset_days): (i64, i64),
+    rrule: &str,
+    title: &str,
+) -> UpsertItem {
+    let start = (chrono::Local::now()
+        + chrono::Duration::weeks(weeks)
+        + chrono::Duration::days(offset_days))
+    .format("%Y-%m-%dT09:00:00")
+    .to_string();
+    UpsertItem::Event(EventUpsert {
+        core: core(id, &format!("{id}@google.com"), etag, title),
+        schedule: timed(&start, None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::MasterOnly,
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// The id the rest of the series gets after the edit: one of its own, with nothing in it
+/// naming the series it carries on, as Google sent it for a split made in its own app.
+const REST_ID: &str = "ir33g2q89nnbkhsmlsfo43jtqv";
+
+async fn page_of(pool: &sqlx::SqlitePool, external_id: &str) -> String {
+    sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = ?")
+        .bind(external_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Ticks the occurrence `weeks` out through the completion command, as the list does.
+async fn tick(pool: &sqlx::SqlitePool, page_id: &str, weeks: i64) {
+    crate::pages::complete_recurring_page_impl(
+        pool,
+        crate::pages::CompleteRecurringInput {
+            page_id: page_id.into(),
+            occurrence_date: Some(week_day(weeks)),
+            scheduled_start: Some(week_occ(weeks)),
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+async fn skip(pool: &sqlx::SqlitePool, page_id: &str, weeks: i64) {
+    crate::pages::skip_occurrence_impl(
+        pool,
+        crate::pages::SkipOccurrenceInput {
+            page_id: page_id.into(),
+            occurrence_date: week_day(weeks),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// The dates resolved on a page: (ticked, skipped).
+async fn resolved(pool: &sqlx::SqlitePool, page_id: &str) -> (Vec<String>, Vec<String>) {
+    let ticked = sqlx::query_scalar(
+        "SELECT occurrence_date FROM completed_set WHERE page_id = ? ORDER BY occurrence_date",
+    )
+    .bind(page_id)
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let skipped = sqlx::query_scalar(
+        "SELECT occurrence_date FROM skip_set WHERE page_id = ? ORDER BY occurrence_date",
+    )
+    .bind(page_id)
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    (ticked, skipped)
+}
+
+async fn done_copies(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE status = 'done' AND id IN (SELECT clone_id FROM completed_set)")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// How the two halves of a split arrive.
+#[derive(Clone, Copy)]
+enum Arrival {
+    /// In one sync, the rest ahead of the end, so the rest is written while the old
+    /// series still runs on.
+    RestFirst,
+    /// The rest in one sync and the old series' end in the next.
+    EndLater,
+    /// The old series' end in one sync and the rest in the next.
+    RestLater,
+}
+
+/// A "this and following" edit of a weekly "Standup".
+struct Split {
+    rest_offset_days: i64,
+    rest_title: &'static str,
+    arrival: Arrival,
+}
+
+const SPLIT: Split = Split {
+    rest_offset_days: 0,
+    rest_title: "Standup",
+    arrival: Arrival::RestFirst,
+};
+
+/// Ticks this week and next and a skip the week after, then the series is edited "this
+/// and following" from next week: the old event ends this week and the rest arrives as a
+/// new one, with an id of its own.
+async fn split_after_resolving(pool: &sqlx::SqlitePool, split: Split) -> (String, String) {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![google_weekly(
+            "evt1",
+            "v1",
+            (0, 0),
+            "FREQ=WEEKLY",
+            "Standup",
+        )]),
+    )
+    .await
+    .unwrap();
+    let old = page_of(pool, "evt1").await;
+    tick(pool, &old, 0).await;
+    tick(pool, &old, 1).await;
+    skip(pool, &old, 2).await;
+
+    let rest = || {
+        google_weekly(
+            REST_ID,
+            "v1",
+            (1, split.rest_offset_days),
+            "FREQ=WEEKLY",
+            split.rest_title,
+        )
+    };
+    let end = || google_weekly("evt1", "v2", (0, 0), &weekly_until(0), "Standup");
+    let syncs = match split.arrival {
+        Arrival::RestFirst => vec![vec![rest(), end()]],
+        Arrival::EndLater => vec![vec![rest()], vec![end()]],
+        Arrival::RestLater => vec![vec![end()], vec![rest()]],
+    };
+    for upserts in syncs {
+        reconcile(pool, &ctx(), &delta(upserts)).await.unwrap();
+    }
+    (old, page_of(pool, REST_ID).await)
+}
+
+#[tokio::test]
+async fn ticks_from_a_split_on_follow_the_series_that_carries_on() {
+    let pool = setup().await;
+    let (old, rest) = split_after_resolving(&pool, SPLIT).await;
+
+    assert_eq!(
+        page_denorm(&pool, &rest).await.0,
+        Some(week_occ(3)),
+        "next due after the dates already resolved"
+    );
+    assert_eq!(
+        resolved(&pool, &rest).await,
+        (vec![week_day(1)], vec![week_day(2)])
+    );
+    assert_eq!(resolved(&pool, &old).await, (vec![week_day(0)], vec![]));
+    assert_eq!(done_copies(&pool).await, 2, "no second copy of either tick");
+}
+
+#[tokio::test]
+async fn ticks_follow_the_rest_whichever_half_arrives_first() {
+    for arrival in [Arrival::EndLater, Arrival::RestLater] {
+        let pool = setup().await;
+        let (old, rest) = split_after_resolving(&pool, Split { arrival, ..SPLIT }).await;
+
+        assert_eq!(
+            resolved(&pool, &rest).await,
+            (vec![week_day(1)], vec![week_day(2)])
+        );
+        assert_eq!(resolved(&pool, &old).await, (vec![week_day(0)], vec![]));
+    }
+}
+
+#[tokio::test]
+async fn a_split_onto_other_days_leaves_ticks_where_they_were_made() {
+    let pool = setup().await;
+    let (old, rest) = split_after_resolving(
+        &pool,
+        Split {
+            rest_offset_days: 1,
+            ..SPLIT
+        },
+    )
+    .await;
+
+    assert_eq!(resolved(&pool, &rest).await, (vec![], vec![]));
+    assert_eq!(
+        resolved(&pool, &old).await,
+        (vec![week_day(0), week_day(1)], vec![week_day(2)])
+    );
+}
+
+#[tokio::test]
+async fn a_rest_under_another_title_takes_nothing() {
+    let pool = setup().await;
+    let (old, rest) = split_after_resolving(
+        &pool,
+        Split {
+            rest_title: "Standup (moved)",
+            ..SPLIT
+        },
+    )
+    .await;
+
+    assert_eq!(resolved(&pool, &rest).await, (vec![], vec![]));
+    assert_eq!(
+        resolved(&pool, &old).await,
+        (vec![week_day(0), week_day(1)], vec![week_day(2)])
+    );
+}
+
+#[tokio::test]
+async fn a_series_that_ended_with_nothing_past_its_end_hands_nothing_on() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![google_weekly(
+            "evt1",
+            "v1",
+            (0, 0),
+            &weekly_until(0),
+            "Standup",
+        )]),
+    )
+    .await
+    .unwrap();
+    let old = page_of(&pool, "evt1").await;
+    tick(&pool, &old, 0).await;
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![google_weekly(
+            REST_ID,
+            "v1",
+            (1, 0),
+            "FREQ=WEEKLY",
+            "Standup",
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let rest = page_of(&pool, REST_ID).await;
+    assert_eq!(resolved(&pool, &rest).await, (vec![], vec![]));
+    assert_eq!(resolved(&pool, &old).await, (vec![week_day(0)], vec![]));
 }
 
 const INVITE: &str = "Join with Google Meet (https://meet.google.com/abc-defg-hij)\nNotes: https://docs.example.com/notes. See https://en.wikipedia.org/wiki/Foo_(bar) too";

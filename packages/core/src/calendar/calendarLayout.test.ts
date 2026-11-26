@@ -1221,7 +1221,10 @@ describe("block treatment across the calendar text-size ladder", () => {
     };
   }
 
-  it("gives every block the treatment it has at the default text size", () => {
+  // Every block at every size is thousands of layouts: about a second alone, and past vitest's
+  // five-second default when it shares the machine with the rest of the verify gate, which twice
+  // failed a commit on a timeout with nothing wrong. Its length says nothing about correctness.
+  it("gives every block the treatment it has at the default text size", { timeout: 30_000 }, () => {
     for (const density of DENSITIES) {
       for (let start = 7 * 60; start < 21 * 60; start += 15) {
         for (const minutes of [15, 30, 45, 60, 75, 90]) {

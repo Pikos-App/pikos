@@ -71,11 +71,36 @@ pub async fn sync_calendar<P: CalendarProvider>(
     folder_id: &str,
 ) -> AppResult<SyncOutcome> {
     match run(pool, provider, account, calendar, folder_id).await {
-        Ok(outcome) => Ok(outcome),
+        Ok(outcome) => {
+            note_reachable(&calendar.id, true);
+            Ok(outcome)
+        }
         // CalDAV flattens keychain-miss and 401/403 alike to `Invalid`.
-        Err(AppError::Network(_)) => Ok(SyncOutcome::Offline),
+        Err(AppError::Network(_)) => {
+            note_reachable(&calendar.id, false);
+            Ok(SyncOutcome::Offline)
+        }
         Err(AppError::Invalid(_)) => Ok(SyncOutcome::ReconnectNeeded),
         Err(e) => Err(e),
+    }
+}
+
+/// Calendars whose latest poll in this process couldn't reach the provider. Offline is
+/// an outcome rather than an error, retried every pass, so the log records only the
+/// change each way.
+static UNREACHABLE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+    std::sync::LazyLock::new(Default::default);
+
+fn note_reachable(calendar_id: &str, reachable: bool) {
+    let mut unreachable = UNREACHABLE.lock().unwrap_or_else(|e| e.into_inner());
+    if reachable {
+        if unreachable.remove(calendar_id) {
+            log::info!("calendar_sync_reachable_again calendar={calendar_id}");
+        }
+    } else if unreachable.insert(calendar_id.to_string()) {
+        // The error's text can carry the request URL, and a Google calendar's id in it is
+        // an email address, so only the fact is logged.
+        log::info!("calendar_sync_unreachable calendar={calendar_id}");
     }
 }
 
@@ -119,6 +144,12 @@ async fn run<P: CalendarProvider>(
     // See `SyncDelta::full_enumerate` — `next_token.is_none()` can't stand in,
     // since Google's full enumerate still carries a `nextSyncToken`.
     let was_full = delta.full_enumerate;
+    if was_full && had_cursor {
+        log::info!(
+            "calendar_sync_cursor_rejected calendar={} re-enumerating the window",
+            calendar.id
+        );
+    }
 
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
     let resolved_masters = resolve_missing_masters(
@@ -133,6 +164,18 @@ async fn run<P: CalendarProvider>(
     let swept = sweep_absent_events(pool, &ctx, &delta, &resolved_masters).await?;
     let ended = pikos_db::reconciler::remove_ended_series(pool, &ctx).await?;
     let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0 || ended > 0;
+    // Counts only, and only for a poll that brought something: a line every five
+    // minutes per calendar would roll the capped log over in days.
+    if was_full || !delta.upserts.is_empty() || !delta.removals.is_empty() {
+        log::info!(
+            "calendar_sync_poll calendar={} kind={} events={} removals={} applied={}",
+            calendar.id,
+            if was_full { "full" } else { "incremental" },
+            delta.upserts.len(),
+            delta.removals.len(),
+            outcome.applied
+        );
+    }
 
     let next = match delta.next_token {
         Some(token) => Some(token),
@@ -295,6 +338,7 @@ async fn resolve_missing_masters<P: CalendarProvider>(
 
     let mut resolved = SyncDelta::default();
     let mut master_ids = Vec::new();
+    let mut not_found = 0;
     for mm in missing {
         match provider.fetch_event(calendar, &mm.series_ref).await {
             Ok(master) => {
@@ -308,10 +352,16 @@ async fn resolve_missing_masters<P: CalendarProvider>(
                     }
                 }
             }
-            Err(AppError::NotFound(_)) => {}
+            Err(AppError::NotFound(_)) => not_found += 1,
             Err(e) => return Err(e),
         }
     }
+    log::info!(
+        "calendar_sync_fetched_series calendar={} asked={} found={} not_found={not_found}",
+        calendar.id,
+        missing.len(),
+        master_ids.len()
+    );
 
     if resolved.upserts.is_empty() {
         return Ok(vec![]);

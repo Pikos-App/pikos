@@ -95,13 +95,16 @@ pub async fn reconcile(
 
     // Two-pass. Whole events/series first, so a master delivered in the same
     // batch is in the store before any occurrence delta that references it.
+    let mut written = Vec::new();
     for item in &delta.upserts {
         if let UpsertItem::Event(ev) = item {
-            if apply_event(&mut tx, ctx, ev).await? {
+            if let Some(page_id) = apply_event(&mut tx, ctx, ev, delta.full_enumerate).await? {
                 outcome.applied += 1;
+                written.push(page_id);
             }
         }
     }
+    carry_split_series(&mut tx, ctx, &written).await?;
     for item in &delta.upserts {
         if let UpsertItem::Occurrence(occ) = item {
             match apply_occurrence(&mut tx, ctx, occ).await? {
@@ -125,12 +128,13 @@ pub async fn reconcile(
 
 /// Upsert a whole event or series: match by external_id, else re-link by
 /// `ical_uid` in-calendar, else create. No-ops on an unchanged etag. Returns
-/// whether it wrote anything — `false` on the tombstoned or etag-no-op skip.
+/// the page it wrote — `None` on the tombstoned or etag-no-op skip.
 async fn apply_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     ev: &EventUpsert,
-) -> AppResult<bool> {
+    full_enumerate: bool,
+) -> AppResult<Option<String>> {
     let mut existing = sqlx::query_as::<_, (String, String, Option<String>, String, bool)>(
         "SELECT ps.id, ps.page_id, ps.etag, ps.sync_state, p.deleted_at IS NOT NULL
          FROM page_sync ps JOIN pages p ON p.id = ps.page_id
@@ -145,7 +149,7 @@ async fn apply_event(
     // User deleted this event locally — its link is tombstoned. Skip the upsert so
     // the next sync can't resurrect it from trash; restoring it reactivates the row.
     if matches!(&existing, Some((_, _, _, state, _)) if state == "tombstoned") {
-        return Ok(false);
+        return Ok(None);
     }
 
     // A detached page the user then trashed (sync severed first, then deleted): keep
@@ -164,11 +168,27 @@ async fn apply_event(
     if ended_before_window(ev, ctx.window_start) {
         return match existing {
             Some((page_sync_id, page_id, _, state, _)) if state == "active" => {
-                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
-                Ok(true)
+                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream, Some(ENDED))
+                    .await?;
+                Ok(Some(page_id))
             }
-            _ => Ok(false),
+            _ => {
+                log::info!(
+                    "calendar_sync_refused event={} why={ENDED}",
+                    ev.core.external_id
+                );
+                Ok(None)
+            }
         };
+    }
+
+    // A full enumerate is already windowed by the provider's own query.
+    if !full_enumerate && existing.is_none() && one_off_ended_before_window(ev, ctx.window_start) {
+        log::info!(
+            "calendar_sync_refused event={} why=one_off_before_window",
+            ev.core.external_id
+        );
+        return Ok(None);
     }
 
     let now = now_iso();
@@ -180,7 +200,7 @@ async fn apply_event(
         // Only when already active: a detached row (calendar re-enabled, same etag)
         // must fall through to reactivate its sync_state, or live sync never resumes.
         if state == "active" && ev.core.etag.is_some() && stored_etag == ev.core.etag {
-            return Ok(false);
+            return Ok(None);
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
         sqlx::query(
@@ -234,7 +254,213 @@ async fn apply_event(
     }
     write_schedule(tx, &page_id, ev, &now).await?;
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
-    Ok(true)
+    Ok(Some(page_id))
+}
+
+/// A synced series as the split check reads it: the day it starts and, when its rule is
+/// bounded by a date, the day it ends, both in the rule's own wall clock.
+struct SeriesSpan {
+    page_id: String,
+    starts: String,
+    ends: Option<String>,
+}
+
+impl SeriesSpan {
+    fn from_row((page_id, rrule, start): (String, String, String)) -> Self {
+        Self {
+            page_id,
+            starts: start.chars().take(10).collect(),
+            ends: until_day(&rrule),
+        }
+    }
+}
+
+/// The day an `UNTIL` bound falls on, as `YYYY-MM-DD`. The reconciler stores it as the
+/// rule's wall clock (`rewrite_until_to_wall_clock`), so its date is the last day the
+/// series can land on. A `COUNT` or an open rule has none.
+fn until_day(rrule: &str) -> Option<String> {
+    let value = rrule
+        .split(';')
+        .find_map(|part| part.strip_prefix("UNTIL="))?;
+    let digits = value
+        .get(..8)
+        .filter(|d| d.bytes().all(|b| b.is_ascii_digit()))?;
+    Some(format!(
+        "{}-{}-{}",
+        &digits[..4],
+        &digits[4..6],
+        &digits[6..]
+    ))
+}
+
+/// Editing a repeating event "this and following" ends the series the day before and starts
+/// a new event for the rest, and neither provider links the two: Google gives the rest an id
+/// of its own, CalDAV a UID of its own. The dates the person already ticked or skipped from
+/// that day on stay keyed to the ended page, past its last day where nothing reads them, while
+/// the rest shows the same dates open.
+///
+/// So once a batch's events are in, each series it wrote is checked from both sides. Ended
+/// with dates resolved past its end, it hands them to the series in its calendar under the
+/// same title that starts first after that end. Newly starting, it takes them from the series
+/// under its title that ended last before it starts. Both sides, after the whole batch,
+/// because the two halves can arrive in either order or in different syncs.
+///
+/// Only dates past the old end move, so a same-titled series that ended on its own has
+/// nothing to hand on. Only dates the rest has an occurrence on move, so one the edit put on
+/// another day stays with the page it was made on. A rest renamed in the same edit isn't
+/// recognised, and its dates stay behind as before.
+async fn carry_split_series(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ctx: &ReconcileContext,
+    written: &[String],
+) -> AppResult<()> {
+    for page_id in written {
+        let Some(series) = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT r.page_id, r.rrule, r.scheduled_start FROM page_recurrence_rules r
+             JOIN page_sync ps ON ps.page_id = r.page_id AND ps.sync_state = 'active'
+             JOIN pages p ON p.id = r.page_id AND p.deleted_at IS NULL
+             WHERE r.page_id = ?",
+        )
+        .bind(page_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(SeriesSpan::from_row) else {
+            continue;
+        };
+        let siblings: Vec<SeriesSpan> = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT r.page_id, r.rrule, r.scheduled_start FROM page_recurrence_rules r
+             JOIN page_sync ps ON ps.page_id = r.page_id AND ps.sync_state = 'active'
+             JOIN pages p ON p.id = r.page_id AND p.deleted_at IS NULL
+             WHERE ps.account_id = ? AND ps.calendar_id = ? AND r.page_id <> ?
+               AND p.title = (SELECT title FROM pages WHERE id = ?)",
+        )
+        .bind(&ctx.account_id)
+        .bind(&ctx.calendar_id)
+        .bind(page_id)
+        .bind(page_id)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(SeriesSpan::from_row)
+        .collect();
+
+        if let Some(ends) = &series.ends {
+            let rest = siblings
+                .iter()
+                .filter(|s| s.starts > *ends)
+                .min_by(|a, b| a.starts.cmp(&b.starts));
+            if let Some(rest) = rest {
+                carry_past_end(tx, &series.page_id, ends, &rest.page_id).await?;
+            }
+        }
+        let ended = siblings
+            .iter()
+            .filter_map(|s| Some((s, s.ends.as_ref()?)))
+            .filter(|(_, ends)| **ends < series.starts)
+            .max_by(|a, b| a.1.cmp(b.1));
+        if let Some((ended, ends)) = ended {
+            carry_past_end(tx, &ended.page_id, ends, &series.page_id).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Moves the ticks and skips `from_page` holds for days after `ends` to `to_page`, each one
+/// `to_page` has an occurrence on, and re-derives both pages' next date when any moved.
+async fn carry_past_end(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    from_page: &str,
+    ends: &str,
+    to_page: &str,
+) -> AppResult<()> {
+    let Some(from_day) = chrono::NaiveDate::parse_from_str(ends, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.succ_opt())
+        .map(|d| d.format("%Y-%m-%d").to_string())
+    else {
+        return Ok(());
+    };
+    let (ticked, ticks_left) = move_occurring_dates(
+        tx,
+        "SELECT occurrence_date FROM completed_set
+         WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
+        "UPDATE completed_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
+        from_page,
+        &from_day,
+        to_page,
+    )
+    .await?;
+    let (skipped, skips_left) = move_occurring_dates(
+        tx,
+        "SELECT occurrence_date FROM skip_set
+         WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
+        "UPDATE skip_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
+        from_page,
+        &from_day,
+        to_page,
+    )
+    .await?;
+    // Dates left behind are the case worth finding in the log. A pass that sees both
+    // halves checks the pair twice, and the second finds nothing left to move.
+    if ticked + skipped + ticks_left + skips_left > 0 {
+        log::info!(
+            "calendar_sync_split_carry from={from_page} to={to_page} after={ends} \
+             ticks={ticked} skips={skipped} left_behind={}",
+            ticks_left + skips_left
+        );
+    }
+    if ticked + skipped > 0 {
+        crate::recurrence_derive::recompute_recurring_schedule(tx, from_page).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(tx, to_page).await?;
+    }
+    Ok(())
+}
+
+/// Moves each date `select` reads off `from_page` from `from_day` on that `to_page` has
+/// an occurrence on. Returns how many moved and how many stayed.
+async fn move_occurring_dates(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    select: &str,
+    update: &str,
+    from_page: &str,
+    from_day: &str,
+    to_page: &str,
+) -> AppResult<(usize, usize)> {
+    let dates: Vec<String> = sqlx::query_scalar(select)
+        .bind(from_page)
+        .bind(from_day)
+        .fetch_all(&mut **tx)
+        .await?;
+    let mut moved = 0;
+    for date in &dates {
+        if crate::pages::synced_occurrence_is_valid(tx, to_page, date).await? {
+            sqlx::query(update)
+                .bind(to_page)
+                .bind(from_page)
+                .bind(date)
+                .execute(&mut **tx)
+                .await?;
+            moved += 1;
+        }
+    }
+    Ok((moved, dates.len() - moved))
+}
+
+/// Whether a one-off event was over before `window`, the first day the sync reaches.
+///
+/// Neither provider's incremental cursor is windowed, so a resumed one hands over every
+/// event changed upstream since it was stored, of any age, where a full enumerate asks
+/// only from the window on. After a re-authorisation two weeks on, Google sent a work
+/// calendar's one-offs from a year and more back, and each became an open page at its
+/// own date. Only a new page is refused. One already stored
+/// was mirrored while it was in reach, and still takes the change.
+fn one_off_ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
+    if ev.recurrence.is_some() {
+        return false;
+    }
+    let last = ev.schedule.end.as_deref().unwrap_or(&ev.schedule.start);
+    let last = date_key(last);
+    last.len() == 8 && last < window.format("%Y%m%d").to_string()
 }
 
 /// Whether a series ran out before `window`, the first day the sync reaches: no occurrence
@@ -305,7 +531,14 @@ pub async fn remove_ended_series(
         let mut removed = 0;
         for (page_sync_id, page_id, rrule, start, tz, moved_in) in rows {
             if !moved_in && rule_ended(&rrule, &start, &tz, ctx.window_start) {
-                detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                detach_or_delete(
+                    &mut tx,
+                    &page_sync_id,
+                    &page_id,
+                    Severed::Upstream,
+                    Some(ENDED),
+                )
+                .await?;
                 removed += 1;
             }
         }
@@ -698,7 +931,14 @@ async fn apply_removal(
     if state != "active" {
         return Ok(false);
     }
-    detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+    detach_or_delete(
+        tx,
+        &page_sync_id,
+        &page_id,
+        Severed::Upstream,
+        Some("removed_upstream"),
+    )
+    .await?;
     Ok(true)
 }
 
@@ -722,16 +962,27 @@ impl Severed {
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
 /// full-enumerate sweep: an owned page detaches (keeps its dormant identity for a
 /// later resync re-link); a bare mirror hard-deletes.
+/// The reason a series that ended before the window was refused or removed, as logged.
+const ENDED: &str = "series_ended_before_window";
+
+/// `why` names the cause in the log, so a page that left a calendar can be traced to
+/// it. Ids only, never a title.
 async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
     by: Severed,
+    why: Option<&str>,
 ) -> AppResult<()> {
-    if is_owned(tx, page_id).await? {
+    let owned = is_owned(tx, page_id).await?;
+    if owned {
         detach_sync(tx, page_sync_id, page_id, by).await?;
     } else {
         hard_delete_page(tx, page_id).await?;
+    }
+    if let Some(why) = why {
+        let what = if owned { "detached" } else { "deleted" };
+        log::info!("calendar_sync_{what} page={page_id} why={why}");
     }
     Ok(())
 }
@@ -793,7 +1044,14 @@ pub async fn sweep_absent(
         ) {
             continue;
         }
-        detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+        detach_or_delete(
+            &mut tx,
+            &page_sync_id,
+            &page_id,
+            Severed::Upstream,
+            Some("absent_from_full_enumerate"),
+        )
+        .await?;
         removed += 1;
     }
 
@@ -933,7 +1191,8 @@ async fn teardown_page_batch(
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
-            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff).await?,
+            // Asked for by the user, page by page through a whole calendar: unlogged.
+            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff, None).await?,
         }
     }
 

@@ -821,15 +821,17 @@ reconciler does when the _provider_ changes something, and the account-level ope
 the Calendar Sync panel. Origin columns don't fit account ops, so that table is per
 provider.
 
-| Upstream event arrives                                  | Native | Synced                                                                         | Detached    | CLI | iOS                              | iCloud                                  |
-| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------ | ----------- | --- | -------------------------------- | --------------------------------------- |
-| Edit (title / time / location)                          | —      | ✅ mirror updates in place ⁶⁹                                                  | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
-| Rewrite of a series' rule                               | —      | ✅ completed/skip sets survive ⁷¹                                              | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Cancel of one instance                                  | —      | ✅ EXDATE — the slot empties ⁷²                                                | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Delete of the event / series                            | —      | ⚠️ detach if owned, else hard-delete ⁷²                                        | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
-| A series that ended before the sync window, a week back | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷² | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| A copy of one instance at its own time                  | —      | ✅ no override row, so one block ⁴⁴                                            | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Description change                                      | —      | ⚠️ silent refresh vs notice ⁷³                                                 | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
+| Upstream event arrives                                          | Native | Synced                                                                          | Detached    | CLI | iOS                              | iCloud                                  |
+| --------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------- | ----------- | --- | -------------------------------- | --------------------------------------- |
+| Edit (title / time / location)                                  | —      | ✅ mirror updates in place ⁶⁹                                                   | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
+| Rewrite of a series' rule                                       | —      | ✅ completed/skip sets survive ⁷¹                                               | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Cancel of one instance                                          | —      | ✅ EXDATE — the slot empties ⁷²                                                 | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Delete of the event / series                                    | —      | ⚠️ detach if owned, else hard-delete ⁷²                                         | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
+| A series that ended before the sync window, a week back         | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷²  | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A one-off over before the sync window, sent by a resumed cursor | —      | ✅ no new page; one already stored still updates ⁷²                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A series edited "this and following"                            | —      | ✅ ticks and skips from that day on follow the rest, when it keeps the title ⁷¹ | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A copy of one instance at its own time                          | —      | ✅ no override row, so one block ⁴⁴                                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Description change                                              | —      | ⚠️ silent refresh vs notice ⁷³                                                  | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
 
 ⁶⁸ `pikos mcp` speaks Model Context Protocol on stdio so an agent can drive the workspace:
 search / read / list / create / update pages, set status, complete (one occurrence of a
@@ -847,11 +849,20 @@ when the calendar has detached pages waiting.
 ⁷¹ The rule is calendar-owned and rewritten wholesale; completions and skips live in Pikos-side
 sets keyed by page, so they survive. On a Google master-only delta, stored exdates and override
 rows carry across only while the pattern is unchanged. A pattern change drops them deliberately
-(they key to dates the old rule yielded).
+(they key to dates the old rule yielded). An edit "this and following" ends the series and starts
+a new event for the rest, and neither provider links the two. So the rest is recognised as the
+series in the same calendar under the same title that starts first after the old one ends, and
+each tick or skip past that end, on a day the rest repeats on, moves to it. One the edit moved to
+another day stays where it was made. A rest renamed in the same edit isn't recognised, and its
+ticks stay on the ended page.
 ⁷² The wire shape is identical for "one instance cancelled" and "event deleted"; the recurrence
 ref discriminates (`RECURRENCE-ID` / `recurringEventId` present → EXDATE on the series; absent
 → lifecycle removal). Ownership = completed, `user_modified`, or user content: owned detaches
-in place, a bare mirror hard-deletes.
+in place, a bare mirror hard-deletes. Neither provider's incremental cursor is windowed, so
+after a long gap a resumed one can send events of any age that changed upstream: Google did,
+for a work calendar re-authorised after two weeks, with one-offs from a year back. A one-off
+over before the window gets no page from an incremental pass. A full enumerate's own query is
+windowed already.
 ⁷³ A Google description saved as HTML reads as the text Google shows for it; plain text is
 kept as written. Each web address in a seeded body is a link. A seeded body the user never
 edited refreshes silently (hash match on `content_text`); an
@@ -864,16 +875,16 @@ Neither re-seeds `seeded_description_hash`: resolving
 a notice is not a re-seed, and re-stamping it would make the _following_ change overwrite the
 body silently.
 
-| Account operation                      | CalDAV                                           | Google                                    | iOS                                   | iCloud                                                 |
-| -------------------------------------- | ------------------------------------------------ | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
-| Connect                                | ✅ app password; discovery validates first       | ✅ OAuth PKCE loopback ⁷⁴                 | ⚠️ CalDAV only                        | 🚫 accounts stay on the device                         |
-| Reconnect the same account             | ✅ reuses the row, re-links dormant pages ⁷⁵     | ✅ same ⁷⁵                                | ⚠️ CalDAV only                        | 🚫 same                                                |
-| Disconnect                             | ⚠️ teardown per calendar, then dormant ⁷⁶        | ⚠️ same + token revoke ⁷⁶                 | ✅ either provider                    | ⚠️ detached pages join                                 |
-| Manual resync ("Resync now")           | ✅ incremental poll from the stored cursor ⁷⁷    | ✅ same; `410 Gone` → full re-enumerate   | ✅ only when asked                    | — per device                                           |
-| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷ | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               | — per device                                           |
-| Credentials expire / rotate            | ⚠️ reconnect badge, polling stops ⁷⁸             | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only | — per device                                           |
-| Offline / unreachable                  | ✅ stale dot, cursor kept, retries               | ✅ same; rate limits map here too         | ✅ reported, nothing changed          | — per device                                           |
-| Delete all data                        | ✅ keychain cleared, dormant swept               | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             | ⚠️ this device leaves sync; the others keep everything |
+| Account operation                      | CalDAV                                                      | Google                                    | iOS                                   | iCloud                                                 |
+| -------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Connect                                | ✅ app password; discovery validates first                  | ✅ OAuth PKCE loopback ⁷⁴                 | ⚠️ CalDAV only                        | 🚫 accounts stay on the device                         |
+| Reconnect the same account             | ✅ reuses the row, re-links dormant pages ⁷⁵                | ✅ same ⁷⁵                                | ⚠️ CalDAV only                        | 🚫 same                                                |
+| Disconnect                             | ⚠️ teardown per calendar, then dormant ⁷⁶                   | ⚠️ same + token revoke ⁷⁶                 | ✅ either provider                    | ⚠️ detached pages join                                 |
+| Manual resync ("Resync now")           | ✅ incremental poll from the stored cursor ⁷⁷               | ✅ same; `410 Gone` → full re-enumerate   | ✅ only when asked                    | — per device                                           |
+| Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷            | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               | — per device                                           |
+| Credentials expire / rotate            | ⚠️ banner + badge, polling stops ⁷⁸                         | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only | — per device                                           |
+| Offline / unreachable                  | ✅ stale dot, cursor kept, retries; banner after an hour ⁷⁸ | ✅ same; rate limits map here too         | ✅ reported, nothing changed          | — per device                                           |
+| Delete all data                        | ✅ keychain cleared, dormant swept                          | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             | ⚠️ this device leaves sync; the others keep everything |
 
 ⁷⁴ Needs build-time client credentials (`option_env!`). Without them the Google option is
 disabled with "Not available in this build". Google's granular consent can withhold a scope;
@@ -898,7 +909,11 @@ _provider_ rejected.
 The account **stops being polled**. `load_accounts` selects `WHERE reconnect_needed = 0`, so
 the background pass skips it outright rather than spending a 401 per pass. "Resync now" runs
 regardless of the flag and clears it on the first clean sync, so a manual retry is what takes
-the badge down.
+the badge down. On the desktop a banner over the editor and the calendar names the account,
+with Reconnect, from the moment the flag is set; it also shows for a calendar a sync pass has
+failed to update for over an hour, with Try again. Hiding it lasts until the app next opens. A
+reminder from either kind of calendar still fires, with "Calendar not syncing, so this may have
+changed" under its time. The log records the flag being set and cleared.
 ⁷⁹ `release_all_credentials` runs before the wipe, dormant accounts included. Their ids are the
 keychain keys and the rows are about to go. The dev-only `reset_db` goes through the same path,
 so it sweeps dormant rows too. iOS runs the same two steps from Settings, and the disconnect half is best-effort on purpose: a
