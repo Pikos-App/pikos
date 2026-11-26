@@ -1076,8 +1076,12 @@ export class MockStorageAdapter implements StorageAdapter {
               : "content";
       const meta = {
         contentPreview: body.slice(0, 80),
+        folderId: page.folderId,
+        isRecurring: page.isRecurring,
         priority: page.priority,
         scheduledDate: page.scheduledStart ?? null,
+        scheduledEnd: page.scheduledEnd ?? null,
+        scheduleLocked: page.scheduleLocked,
         status: page.status,
         subtitle: page.subtitle ?? null,
         tags: page.tags,

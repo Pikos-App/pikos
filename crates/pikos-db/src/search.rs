@@ -35,7 +35,12 @@ pub const DEFAULT_SEARCH_SCAN: SearchScan = SearchScan::Newest(2_000);
 const BM25: &str = "bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0)";
 /// [`SearchRow`]'s columns. The capped query aliases its ranked rows as `pages` to reuse them.
 const SEARCH_COLUMNS: &str = "pages.id, pages.title, pages.subtitle, pages.content_text,
-     pages.status, pages.scheduled_start, pages.priority, pages.tags, pages.mirror_search_text";
+     pages.status, pages.scheduled_start, pages.scheduled_end, pages.folder_id, pages.priority,
+     pages.tags, pages.mirror_search_text,
+     EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_recurrence_rules.page_id = pages.id)
+         AS is_recurring,
+     EXISTS(SELECT 1 FROM page_sync
+         WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') AS schedule_locked";
 const RESULT_LIMIT: i64 = 20;
 /// The matches joined to their pages, with the index driving. `CROSS JOIN` fixes that order:
 /// without table statistics, as before a large workspace's first sampling, SQLite started the
@@ -56,11 +61,16 @@ pub struct SearchResult {
     pub status: String,
     pub subtitle: Option<String>,
     pub scheduled_date: Option<String>,
+    pub scheduled_end: Option<String>,
+    pub folder_id: Option<String>,
     #[ts(type = "0 | 1 | 2 | 3 | 4")]
     pub priority: i32,
     pub tags: Vec<String>,
     /// First ~80 characters of the body, shown when there's no other metadata to show.
     pub content_preview: String,
+    pub is_recurring: bool,
+    /// As `Page::schedule_locked`: a live calendar owns the page's date and title.
+    pub schedule_locked: bool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -71,9 +81,13 @@ struct SearchRow {
     content_text: Option<String>,
     status: String,
     scheduled_start: Option<String>,
+    scheduled_end: Option<String>,
+    folder_id: Option<String>,
     priority: i32,
     tags: Option<String>,
     mirror_search_text: Option<String>,
+    is_recurring: bool,
+    schedule_locked: bool,
 }
 
 fn char_to_byte(s: &str, char_idx: usize) -> usize {
@@ -659,9 +673,13 @@ fn to_result(row: SearchRow, tokens: &[String]) -> SearchResult {
         status: row.status,
         subtitle: row.subtitle,
         scheduled_date: row.scheduled_start,
+        scheduled_end: row.scheduled_end,
+        folder_id: row.folder_id,
         priority: row.priority,
         tags,
         content_preview,
+        is_recurring: row.is_recurring,
+        schedule_locked: row.schedule_locked,
     }
 }
 

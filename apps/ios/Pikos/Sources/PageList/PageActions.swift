@@ -66,6 +66,19 @@ struct PageFacts: Identifiable, Hashable {
         scheduleLocked = entry.scheduleLocked
     }
 
+    init(_ hit: SearchHit) {
+        id = hit.pageId
+        title = hit.title
+        folderId = hit.folderId
+        priority = hit.priority
+        tags = hit.tags
+        status = hit.status
+        scheduledStart = hit.scheduledStart
+        scheduledEnd = hit.scheduledEnd
+        isRecurring = hit.isRecurring
+        scheduleLocked = hit.scheduleLocked
+    }
+
     var isDone: Bool { status == "done" }
 
     /// A repeating page's date belongs to its rule, so it is sent to a day only through the sheet.

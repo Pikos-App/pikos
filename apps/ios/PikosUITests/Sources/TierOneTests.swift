@@ -350,6 +350,32 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'completed ('")).firstMatch.exists)
     }
 
+    // qa: IOS-84
+    func testASearchResultHeldMovesToTodayFromItsMenu() {
+        showView("Inbox")
+        quickAdd("Renew the passport")
+        assertRowExists("Renew the passport")
+
+        app.buttons["Search"].firstMatch.tap()
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        field.typeText("passport")
+        let result = app.buttons["Renew the passport"]
+        XCTAssertTrue(result.waitForExistence(timeout: Self.timeout))
+
+        result.press(forDuration: 1.0)
+        let today = app.buttons["Today"].firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: Self.timeout), "a held result offers the list's menu")
+        XCTAssertTrue(app.buttons["Move to folder"].exists, "with the same moves a list row's has")
+        today.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["“Renew the passport” moved to Today"].waitForExistence(timeout: 5),
+            "the page moves to today from where it was found")
+        XCTAssertTrue(
+            app.staticTexts["Today"].waitForExistence(timeout: Self.timeout), "and the result shows its new date")
+    }
+
     // qa: IOS-05:3
     func testSearchSuggestsThePageLastOpenedBeforeAnythingIsTyped() {
         quickAdd("Trip notes today")

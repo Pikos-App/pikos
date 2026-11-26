@@ -139,6 +139,32 @@ async fn include_completed_returns_done_pages() {
 }
 
 #[tokio::test]
+async fn a_hit_says_whether_its_page_repeats() {
+    let pool = test_pool().await;
+    seed_pages(&pool).await;
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start, timezone, created_at) \
+         VALUES ('r1', 'p1', 'FREQ=WEEKLY', '[]', '2026-06-01T09:00:00', 'America/New_York', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let resp = search_pages_impl(&pool, "morning".into(), None)
+        .await
+        .unwrap();
+    let repeats = |id: &str| {
+        resp.results
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| (r.is_recurring, r.schedule_locked))
+    };
+
+    assert_eq!(repeats("p1"), Some((true, false)));
+    assert_eq!(repeats("p3"), Some((false, false)));
+}
+
+#[tokio::test]
 async fn prefix_match_on_last_token() {
     let pool = test_pool().await;
     seed_pages(&pool).await;

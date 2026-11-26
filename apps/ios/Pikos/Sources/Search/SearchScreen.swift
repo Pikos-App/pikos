@@ -30,6 +30,7 @@ struct SearchScreen: View {
     @State private var knownTags: [String] = []
     @State private var isSearchActive = false
     @State private var hasActivated = false
+    @State private var actions = PageActionState()
 
     private var fullQuery: String {
         (tokens.map(\.query) + [query.trimmingCharacters(in: .whitespaces)])
@@ -78,6 +79,7 @@ struct SearchScreen: View {
         .onChange(of: isSearchActive) { wasActive, isActive in
             if wasActive && !isActive { Task { route.closeSearch() } }
         }
+        .pageActionSheets($actions)
         .noticeOverlay()
         .onAppear {
             // The keyboard is up the first time search opens, as the desktop palette takes focus;
@@ -129,10 +131,7 @@ struct SearchScreen: View {
         if !recents.isEmpty {
             sectionLabel("Recent")
             ForEach(recents, id: \.id) { page in
-                ResultRow(
-                    pageId: page.id, title: page.title, status: page.status, priority: page.priority,
-                    scheduledStart: page.scheduledStart, scheduledEnd: page.scheduledEnd,
-                    titleTerms: [], detail: nil)
+                ResultRow(page: PageFacts(page), titleTerms: [], detail: nil, actions: $actions)
             }
         } else {
             sectionLabel("Recent")
@@ -183,10 +182,8 @@ struct SearchScreen: View {
         if let results {
             ForEach(results.hits, id: \.pageId) { hit in
                 ResultRow(
-                    pageId: hit.pageId, title: hit.title, status: hit.status, priority: hit.priority,
-                    scheduledStart: hit.scheduledStart, scheduledEnd: nil,
-                    titleTerms: hit.highlightsTitle ? results.terms : [],
-                    detail: hit.detail(terms: results.terms))
+                    page: PageFacts(hit), titleTerms: hit.highlightsTitle ? results.terms : [],
+                    detail: hit.detail(terms: results.terms), actions: $actions)
             }
 
             if results.hits.isEmpty && results.completedCount == 0 && fullQuery.count >= 2 {
@@ -321,41 +318,36 @@ struct SearchToken: Identifiable, Hashable {
 
 // MARK: - Row
 
-/// One page in the results or the recents: the list's row, with its checkbox and date, at search's
-/// size, so a page found can be ticked where it was found.
+/// One page in the results or the recents: the list's row, with its checkbox, date and hold menu,
+/// at search's size, so a page found can be ticked or moved where it was found.
 private struct ResultRow: View {
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
 
-    let pageId: String
-    let title: String
-    let status: String
-    let priority: Int64
-    let scheduledStart: String?
-    let scheduledEnd: String?
+    let page: PageFacts
     let titleTerms: [String]
     let detail: SearchHit.Detail?
+    @Binding var actions: PageActionState
 
-    private var isDone: Bool { status == "done" }
-    private var displayTitle: String { title.isEmpty ? String(localized: "Untitled") : title }
+    private var displayTitle: String { page.title.isEmpty ? String(localized: "Untitled") : page.title }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            CompletionToggle(isDone: isDone, priority: PagePriority(stored: priority)) { done in
-                Task { await store.setStatus(pageId: pageId, done: done) }
+            CompletionToggle(isDone: page.isDone, priority: PagePriority(stored: page.priority)) { done in
+                Task { await store.setStatus(pageId: page.id, done: done) }
             }
             Button {
-                route.open(page: pageId)
+                route.open(page: page.id)
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(highlighted(displayTitle, terms: titleTerms, font: .pkBodyMedium))
                             .font(.pkBody)
-                            .foregroundStyle(isDone ? Color.textTertiary : Color.textPrimary)
+                            .foregroundStyle(page.isDone ? Color.textTertiary : Color.textPrimary)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        if let scheduledStart {
-                            ScheduleLabel(iso: scheduledStart, end: scheduledEnd, isDone: isDone)
+                        if let scheduledStart = page.scheduledStart {
+                            ScheduleLabel(iso: scheduledStart, end: page.scheduledEnd, isDone: page.isDone)
                         }
                     }
                     if let detail {
@@ -373,11 +365,13 @@ private struct ResultRow: View {
             .buttonStyle(PressableRowStyle())
             .accessibilityLabel(displayTitle)
             .accessibilityValue(
-                [detail?.text, isDone ? String(localized: "Completed") : nil]
+                [detail?.text, page.isDone ? String(localized: "Completed") : nil]
                     .compactMap { $0 }
                     .joined(separator: ", "))
         }
         .padding(.leading, 8)
+        .contentShape(Rectangle())
+        .contextMenu { PageActionsMenu(page: page, state: $actions) }
     }
 
     private func highlighted(_ text: String, terms: [String], font: Font) -> AttributedString {

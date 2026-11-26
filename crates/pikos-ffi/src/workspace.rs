@@ -838,10 +838,14 @@ pub struct SearchHit {
     pub status: String,
     pub subtitle: Option<String>,
     pub scheduled_start: Option<String>,
+    pub scheduled_end: Option<String>,
+    pub folder_id: Option<String>,
     pub priority: i64,
     pub tags: Vec<String>,
     /// The start of the body, for a title match with nothing else to show.
     pub content_preview: String,
+    pub is_recurring: bool,
+    pub schedule_locked: bool,
 }
 
 #[derive(Debug, uniffi::Record)]
@@ -876,9 +880,13 @@ impl From<pikos_db::SearchResult> for SearchHit {
             status: r.status,
             subtitle: r.subtitle,
             scheduled_start: r.scheduled_date,
+            scheduled_end: r.scheduled_end,
+            folder_id: r.folder_id,
             priority: i64::from(r.priority),
             tags: r.tags,
             content_preview: r.content_preview,
+            is_recurring: r.is_recurring,
+            schedule_locked: r.schedule_locked,
         }
     }
 }
@@ -3543,8 +3551,12 @@ fn summary_as_hit(page: pikos_db::PageSummary) -> pikos_db::SearchResult {
         match_source: "title".to_string(),
         status: page.status,
         scheduled_date: page.scheduled_start,
+        scheduled_end: page.scheduled_end,
+        folder_id: page.folder_id,
         priority: i32::try_from(page.priority).unwrap_or(0),
         tags: page.tags,
+        is_recurring: page.is_recurring,
+        schedule_locked: page.schedule_locked,
         // The subtitle twice, because the two fields mean different things and
         // a summary only carries one of them: `subtitle` is the page's own, and
         // `content_preview` is the first of its body a result list shows. There

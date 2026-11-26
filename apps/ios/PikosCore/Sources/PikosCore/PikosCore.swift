@@ -7018,12 +7018,16 @@ public struct SearchHit: Equatable, Hashable {
     public var status: String
     public var subtitle: String?
     public var scheduledStart: String?
+    public var scheduledEnd: String?
+    public var folderId: String?
     public var priority: Int64
     public var tags: [String]
     /**
      * The start of the body, for a title match with nothing else to show.
      */
     public var contentPreview: String
+    public var isRecurring: Bool
+    public var scheduleLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7035,10 +7039,10 @@ public struct SearchHit: Equatable, Hashable {
          * Which column matched: `"title"`, `"subtitle"`, `"content"` or `"both"`.
          * Decides the second line, as on the desktop: the subtitle for a subtitle
          * match, the excerpt for a body match, the page's facts otherwise.
-         */matchSource: String, status: String, subtitle: String?, scheduledStart: String?, priority: Int64, tags: [String], 
+         */matchSource: String, status: String, subtitle: String?, scheduledStart: String?, scheduledEnd: String?, folderId: String?, priority: Int64, tags: [String], 
         /**
          * The start of the body, for a title match with nothing else to show.
-         */contentPreview: String) {
+         */contentPreview: String, isRecurring: Bool, scheduleLocked: Bool) {
         self.pageId = pageId
         self.title = title
         self.excerpt = excerpt
@@ -7046,9 +7050,13 @@ public struct SearchHit: Equatable, Hashable {
         self.status = status
         self.subtitle = subtitle
         self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+        self.folderId = folderId
         self.priority = priority
         self.tags = tags
         self.contentPreview = contentPreview
+        self.isRecurring = isRecurring
+        self.scheduleLocked = scheduleLocked
     }
 
     
@@ -7074,9 +7082,13 @@ public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
                 status: FfiConverterString.read(from: &buf), 
                 subtitle: FfiConverterOptionString.read(from: &buf), 
                 scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
                 priority: FfiConverterInt64.read(from: &buf), 
                 tags: FfiConverterSequenceString.read(from: &buf), 
-                contentPreview: FfiConverterString.read(from: &buf)
+                contentPreview: FfiConverterString.read(from: &buf), 
+                isRecurring: FfiConverterBool.read(from: &buf), 
+                scheduleLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -7088,9 +7100,13 @@ public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
         FfiConverterString.write(value.status, into: &buf)
         FfiConverterOptionString.write(value.subtitle, into: &buf)
         FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
         FfiConverterInt64.write(value.priority, into: &buf)
         FfiConverterSequenceString.write(value.tags, into: &buf)
         FfiConverterString.write(value.contentPreview, into: &buf)
+        FfiConverterBool.write(value.isRecurring, into: &buf)
+        FfiConverterBool.write(value.scheduleLocked, into: &buf)
     }
 }
 

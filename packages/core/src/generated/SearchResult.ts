@@ -8,10 +8,17 @@ export type SearchResult = {
   status: "not_started" | "done";
   subtitle?: string | null;
   scheduledDate?: string | null;
+  scheduledEnd?: string | null;
+  folderId?: string | null;
   priority: 0 | 1 | 2 | 3 | 4;
   tags: Array<string>;
   /**
    * First ~80 characters of the body, shown when there's no other metadata to show.
    */
   contentPreview: string;
+  isRecurring: boolean;
+  /**
+   * As `Page::schedule_locked`: a live calendar owns the page's date and title.
+   */
+  scheduleLocked: boolean;
 };
