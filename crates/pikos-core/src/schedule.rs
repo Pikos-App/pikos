@@ -1,10 +1,6 @@
-//! All-day ↔ timed schedule transitions.
-//!
-//! Port of `apps/desktop/src/shared/utils/schedule.ts`. These decide what
-//! happens to an event's *end* when the user picks a new start in a date
-//! picker. A mobile date picker faces exactly the same four transitions, and
-//! disagreeing about them would mean the same edit produces different events
-//! depending on which device made it.
+//! All-day ↔ timed schedule transitions: what happens to an event's end when the user picks
+//! a new start. Every client faces the same four transitions, and disagreeing would make one
+//! edit produce different events depending on the device.
 
 use chrono::Duration;
 
@@ -19,7 +15,7 @@ pub struct ScheduleTransition {
 
 /// Decide the new end when the start moves to `iso`.
 ///
-/// Four transitions, in the order the original tests them:
+/// Four transitions:
 ///
 /// - all-day → timed: collapse to a single occurrence
 /// - timed → all-day: keep the date extent, drop the time
@@ -33,7 +29,6 @@ pub fn compute_schedule_transition(
     let was_all_day = current_start.is_some_and(is_all_day_iso);
     let now_all_day = is_all_day_iso(iso);
 
-    // all-day → timed.
     if was_all_day && !now_all_day {
         return ScheduleTransition {
             start: iso.to_string(),
@@ -41,7 +36,6 @@ pub fn compute_schedule_transition(
         };
     }
 
-    // timed → all-day.
     if current_start.is_some() && !was_all_day && now_all_day {
         if let Some(end) = current_end.filter(|e| is_timed_iso(e)) {
             let date_only = &end[..10.min(end.len())];
@@ -58,7 +52,6 @@ pub fn compute_schedule_transition(
         };
     }
 
-    // timed → timed.
     if !now_all_day {
         if let (Some(start), Some(end)) = (current_start, current_end) {
             if is_timed_iso(start) && is_timed_iso(end) {
@@ -75,8 +68,7 @@ pub fn compute_schedule_transition(
                         };
                     }
                 }
-                // Zero or negative duration keeps the existing end verbatim,
-                // matching the original's fall-through.
+                // Zero or negative duration keeps the existing end verbatim.
                 return ScheduleTransition {
                     start: iso.to_string(),
                     end: Some(end.to_string()),
@@ -85,7 +77,6 @@ pub fn compute_schedule_transition(
         }
     }
 
-    // all-day → all-day.
     ScheduleTransition {
         start: iso.to_string(),
         end: current_end

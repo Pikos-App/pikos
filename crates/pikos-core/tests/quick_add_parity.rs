@@ -1,13 +1,7 @@
-//! The Rust quick-add parser, graded against the TypeScript reference.
+//! The Rust quick-add parser, graded against `packages/core/src/nlp/parser.ts`.
 //!
-//! `parser.json` is the golden output of `packages/core/src/nlp/parser.ts` for
-//! 317 inputs at 7 pinned reference times — 2,219 cases covering tags, folders,
-//! priorities, durations, windows, every cadence spelling, and the whole date
-//! grammar underneath. The TypeScript side stays the reference until the port
-//! replaces it, so a difference here is a defect in the Rust parser until
-//! proven otherwise.
-//!
-//! Regenerate with `pnpm --filter @pikos/core gen:parity`.
+//! The TypeScript side stays the reference, so a difference here is a defect in the Rust
+//! parser until proven otherwise.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -45,8 +39,8 @@ struct ExpectedInput {
     content: Option<String>,
 }
 
-/// Distinguish an absent key from an explicit `null`, which the reference uses
-/// to mean "priority cleared" rather than "priority not mentioned".
+/// Distinguishes an absent key from an explicit `null`, which the reference uses for
+/// "priority cleared".
 fn double_option<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -97,10 +91,7 @@ fn load() -> Corpus {
     serde_json::from_str(&raw).unwrap_or_else(|error| panic!("parse {}: {error}", path.display()))
 }
 
-/// Render a parsed input as a single comparable line. Comparing rendered
-/// strings rather than field by field means a failure message shows the whole
-/// shape at once, which is what you need when a date moved and a duration
-/// moved with it.
+/// Render a parsed input as one line so a failure shows the whole shape at once.
 fn render(input: &ParsedInput) -> String {
     let priority = match &input.priority {
         None => "-".to_string(),
@@ -250,8 +241,7 @@ fn every_quick_add_input_matches_the_reference() {
     let mut with_priority = 0usize;
     let mut failures = Vec::new();
     for case in &corpus.cases {
-        // The reference never fails on these inputs; if that changes, the
-        // corpus is describing something this port does not model.
+        // The reference never fails on these inputs.
         assert!(
             case.result.ok,
             "corpus case {:?} expects an error, which this port does not model",
@@ -283,8 +273,7 @@ fn every_quick_add_input_matches_the_reference() {
         }
     }
 
-    // A comparison that silently skipped everything would pass too, so the
-    // shape of what was actually checked is asserted rather than assumed.
+    // A comparison that silently skipped everything would pass, so assert what was checked.
     assert_eq!(compared, total, "some cases carried no expected value");
     assert!(recurring > 700, "only {recurring} recurring cases compared");
     assert!(finite > 90, "only {finite} finite cases compared");

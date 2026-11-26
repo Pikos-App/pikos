@@ -1,39 +1,23 @@
-//! Calendar layout — the portable half.
+//! Calendar layout, the portable half.
 //!
-//! Ported from `apps/desktop/src/features/calendar/utils/`, but deliberately
-//! only the part that is platform-independent:
-//!
-//! | Ported here | Left in the platform layer |
-//! |---|---|
-//! | overlap clustering, sweep-line column assignment | hour↔pixel mapping, density tables |
-//! | all-day row packing, bar coalescing | collapse-band geometry, `barPositionStyle` |
-//! | continuation flags, midnight crossing | the text-collision heuristic |
-//!
-//! The text-collision heuristic is the interesting exclusion. It decides
-//! whether two blocks' labels would visually clash by comparing their pixel
-//! gap against `CASCADE_MIN_TOP_GAP_PX`, using a `isCompact` flag derived from
-//! pixel height. Those thresholds encode one renderer's font metrics and row
-//! heights. A native calendar has different ones, so inheriting the constants
-//! would be a bug dressed as reuse — iOS should make that call for itself,
-//! against the same *column assignment* computed here.
-//!
-//! Column assignment itself reads one metric: the shortest a block is drawn,
+//! Ported from `apps/desktop/src/features/calendar/utils/`: overlap clustering, column
+//! assignment, all-day row packing, bar coalescing, continuation flags and midnight crossing.
+//! Hour-to-pixel mapping, density tables, collapse-band geometry and the text-collision
+//! heuristic stay in the platform layer. The heuristic's thresholds encode one renderer's font
+//! metrics and row heights, so a native calendar must choose its own against the same column
+//! assignment computed here. Column assignment reads one metric, the shortest a block is drawn,
 //! which the caller passes as minutes (see [`timed::assign_timed_columns`]).
 //!
-//! Likewise absent: the final `blocks.sort(by leftPct)` that `buildDayBlocks`
-//! applies before returning. That orders elements for DOM painting so deeper
-//! cascades overlay their hosts; it is not layout.
+//! The final `blocks.sort(by leftPct)` in `buildDayBlocks` is absent too: it orders DOM
+//! painting, not layout.
 
 pub mod all_day;
 pub mod edits;
 pub mod occurrences;
 pub mod timed;
 
-/// The subset of a page the layout algorithms actually read.
-///
-/// Narrower than `PageSummary` on purpose: layout depends on four fields, so a
-/// four-field input keeps the eventual Swift binding small and makes it obvious
-/// that nothing here inspects titles, tags, or status.
+/// The subset of a page the layout algorithms read. Four fields, so nothing here inspects
+/// titles, tags or status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayoutPage {
     pub id: String,

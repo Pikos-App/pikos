@@ -1,19 +1,11 @@
-//! Search operators — `tag:`, `folder:`, `is:`, `priority:`, `due:` — lifted out
-//! of a query, leaving the free text behind.
+//! Search operators (`tag:`, `folder:`, `is:`, `priority:`, `due:`) lifted out of a query,
+//! leaving the free text.
 //!
-//! Ported from `@pikos/core`'s `nlp/searchQuery.ts` and graded against a corpus
-//! generated from it (`tests/search_parity.rs`). Not part of [`crate::nlp`]
-//! despite living beside it there: that module is the chrono-node port, and
-//! this grammar is five keywords and a colon.
+//! **An operator the grammar does not know stays in the text**: `ratio:1.5` and `priority:9`
+//! are searches for those words, not searches with a broken filter.
 //!
-//! The rule that shapes everything below is that **an operator the grammar does
-//! not know stays in the text**. `ratio:1.5` is a search for "ratio:1.5", not a
-//! search with a broken filter; `priority:9` is a search for "priority:9",
-//! because 9 is not a priority. A parser that swallowed either would answer a
-//! question nobody asked and give no sign it had.
-//!
-//! Building the storage filter from this is the caller's job. It needs to
-//! resolve `folder:` against real folders, and that lives a layer down.
+//! Building the storage filter is the caller's job, since `folder:` resolves against real
+//! folders a layer down.
 
 use chrono::{Duration, NaiveDateTime};
 use fancy_regex::{Captures, Regex};
@@ -21,7 +13,6 @@ use std::sync::OnceLock;
 
 use crate::dates::format_date_only;
 
-/// What `is:done` / `is:open` narrowed to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchStatus {
     Done,
@@ -39,27 +30,23 @@ impl SearchStatus {
     }
 }
 
-/// A query split into the operators it carried and the text around them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ParsedSearchQuery {
-    /// Free text left after every recognised operator was lifted out.
     pub text: String,
-    /// Every `tag:` value, in the order typed — matched conjunctively.
+    /// Matched conjunctively.
     pub tags: Vec<String>,
-    /// Raw `folder:` value; the caller resolves it against real folders.
+    /// Resolved by the caller against real folders.
     pub folder: Option<String>,
     pub status: Option<SearchStatus>,
-    /// From `is:scheduled`.
     pub scheduled: bool,
-    /// 0 (none) … 4 (low). The quick-add parser's scale.
+    /// 0 (none) … 4 (low), the quick-add parser's scale.
     pub priority: Option<i64>,
     /// Inclusive lower bound, `YYYY-MM-DD`.
     pub due_from: Option<String>,
-    /// Inclusive upper bound, `YYYY-MM-DDT23:59:59` — the CLI's `parse_due`
-    /// shape, so a timed page late on the last day is still inside the window.
+    /// Inclusive upper bound, `YYYY-MM-DDT23:59:59`, so a timed page late on the last day is inside.
     pub due_to: Option<String>,
-    /// At least one operator was recognised and stripped. What tells a caller
-    /// to take the structured path rather than plain full-text search.
+    /// At least one operator was recognised and stripped: take the structured path, not plain
+    /// full-text search.
     pub has_operators: bool,
 }
 
@@ -74,8 +61,6 @@ fn operator_re() -> &'static Regex {
     })
 }
 
-/// Priority words and digits share the quick-add parser's scale: 1 = urgent …
-/// 4 = low, 0 = none.
 fn priority_value(word: &str) -> Option<i64> {
     match word {
         "0" | "none" => Some(0),
@@ -97,8 +82,6 @@ fn day_offset(reference: NaiveDateTime, days: i64) -> String {
     format_date_only(&(reference + Duration::days(days)))
 }
 
-/// One `due:` endpoint → the day span it names, or `None` when it names
-/// nothing.
 fn resolve_due_endpoint(token: &str, reference: NaiveDateTime) -> Option<(String, String)> {
     let lower = token.to_lowercase();
     if is_real_date(&lower) {
@@ -121,11 +104,10 @@ fn resolve_due_endpoint(token: &str, reference: NaiveDateTime) -> Option<(String
     }
 }
 
-/// A `due:` value: one endpoint, or an `a..b` range where either side may be
-/// omitted for an open-ended bound.
+/// A `due:` value: one endpoint, or an `a..b` range with either side omittable.
 ///
-/// `None` when any endpoint that *was* named fails to resolve, so the whole
-/// token falls back to free text rather than silently applying half a window.
+/// `None` when a named endpoint fails to resolve, so the whole token falls back to free text
+/// rather than applying half a window.
 fn resolve_due(value: &str, reference: NaiveDateTime) -> Option<(Option<String>, Option<String>)> {
     if value.contains("..") {
         let parts: Vec<&str> = value.split("..").collect();
@@ -156,15 +138,13 @@ fn resolve_due(value: &str, reference: NaiveDateTime) -> Option<(Option<String>,
 
 /// Split a query into its operators plus the free text around them.
 ///
-/// `reference` is what `due:today` is read against — injectable so the whole
-/// thing is testable, and so the corpus can pin it.
+/// `reference` is what `due:today` is read against.
 pub fn parse_search_query(raw: &str, reference: NaiveDateTime) -> ParsedSearchQuery {
     let mut parsed = ParsedSearchQuery::default();
 
-    // Hand-rolled rather than `Regex::replace_all`, because the replacement
-    // both writes to `parsed` and decides — per match — whether to strip the
-    // token at all. Matching JavaScript's global replace exactly: non-
-    // overlapping, left to right, resuming at the end of the previous match.
+    // Hand-rolled because the replacement both writes to `parsed` and decides per match
+    // whether to strip the token. Matches JavaScript's global replace: non-overlapping, left to
+    // right.
     let mut stripped = String::with_capacity(raw.len());
     let mut cursor = 0usize;
     for captures in operator_re().captures_iter(raw) {
@@ -192,14 +172,7 @@ pub fn parse_search_query(raw: &str, reference: NaiveDateTime) -> ParsedSearchQu
         let recognised = apply(&mut parsed, &key, value, reference);
         if recognised {
             parsed.has_operators = true;
-            // Keep the boundary character, so the words either side of a
-            // stripped operator do not run together. Defensive rather than
-            // load-bearing, and the corpus says so: mutating this line away
-            // changes no case, because the whitespace run *after* an operator
-            // is never part of its match and the final normalisation collapses
-            // what is left. It stays because the reference has it, and because
-            // the property it protects is one a future change to the pattern
-            // could quietly take away.
+            // Keep the boundary character so the words either side of a stripped operator do not run together.
             stripped.push_str(lead);
         } else {
             stripped.push_str(whole.as_str());
@@ -211,7 +184,6 @@ pub fn parse_search_query(raw: &str, reference: NaiveDateTime) -> ParsedSearchQu
     parsed
 }
 
-/// One recognised operator applied. `false` leaves the token in the text.
 fn apply(parsed: &mut ParsedSearchQuery, key: &str, value: &str, reference: NaiveDateTime) -> bool {
     match key {
         "due" => match resolve_due(value, reference) {
@@ -222,7 +194,7 @@ fn apply(parsed: &mut ParsedSearchQuery, key: &str, value: &str, reference: Naiv
             }
             None => false,
         },
-        // Last wins, mirroring the quick-add parser's `~folder`.
+        // Last wins, mirroring quick-add's `~folder`.
         "folder" => {
             parsed.folder = Some(value.to_string());
             true

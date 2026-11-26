@@ -1,9 +1,6 @@
-//! Single-page predicates.
-//!
-//! Port of `packages/core/src/utils/page.ts`. Trivial today, but routed through
-//! named predicates for the same reason the TypeScript is: a future
-//! `PageStatus` variant (an "in progress", say) then has one place to update
-//! rather than every list and filter site on two platforms.
+//! Single-page predicates, routed through names so a future `PageStatus` variant (an
+//! "in progress", say) has one place to update rather than every list and filter site on two
+//! platforms.
 
 /// A page's completion state, as stored in `pages.status`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,9 +46,8 @@ mod tests {
 
     #[test]
     fn unknown_status_reads_as_open() {
-        // The TS predicate is `status !== "done"`, so an unrecognised value is
-        // open rather than an error. Worth pinning: a status added on one
-        // platform and not the other must not make pages vanish from lists.
+        // An unrecognised status is open, not an error: a status added on one platform must not
+        // make pages vanish from lists.
         assert!(is_open(PageStatus::from_stored("in_progress")));
         assert!(is_open(PageStatus::from_stored("")));
         assert!(is_done(PageStatus::from_stored("done")));

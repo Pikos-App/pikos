@@ -1,15 +1,5 @@
-//! The focus timer's floor and its two duration formats, graded against the
-//! TypeScript.
-//!
-//! `tests/corpus/focus.json` is `packages/core/src/format/focusDuration.ts` over
-//! durations chosen around every boundary the formatters have — regenerate with
-//! `pnpm --filter @pikos/core gen:parity`.
-//!
-//! Small functions with a lot of edges: the floor, the minute rounding, the
-//! singular/plural switch, the jump from `M:SS` to `H:MM:SS`, and an exact hour
-//! where the trailing minutes are dropped. Each of those is a place where two
-//! implementations can agree on every value anybody tried by hand and differ on
-//! the one the user hits.
+//! The focus timer's floor and its two duration formats, graded against
+//! `packages/core/src/format/focusDuration.ts`.
 
 use std::fs;
 use std::path::PathBuf;

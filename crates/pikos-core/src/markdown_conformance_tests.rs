@@ -1,10 +1,9 @@
 //! Export, run against the table the importer also runs.
 //!
-//! `markdown/tests.rs` pins what this exporter emits; nothing pinned that our own
-//! importer can read it back. `roundtrip.test.ts` looks like it does and does not —
-//! it serializes with `tiptap-markdown`, a third implementation, so the two dialects
-//! that actually meet in a vault export are free to drift apart. The `blocks` column
-//! is what the TS half asserts after importing `markdown`.
+//! The importer must be able to read back what this exporter emits. `roundtrip.test.ts`
+//! does not check that: it serializes with `tiptap-markdown`, a third implementation, so the
+//! two dialects that meet in a vault export could drift apart. The `blocks` column is what the
+//! TS half asserts after importing `markdown`.
 
 use serde::Deserialize;
 

@@ -1,9 +1,7 @@
 //! All-day row packing and bar coalescing.
 //!
-//! Date comparisons here are string comparisons on `YYYY-MM-DD`, matching the
-//! TypeScript original. That is not laziness: lexicographic ordering on a
-//! zero-padded ISO date is exactly calendar ordering, and it sidesteps the
-//! UTC/local midnight ambiguity that parsing would reintroduce.
+//! Dates compare as strings on `YYYY-MM-DD`: lexicographic order on a zero-padded ISO date is
+//! calendar order and avoids the UTC/local midnight ambiguity that parsing reintroduces.
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 
@@ -35,10 +33,8 @@ pub struct AllDayBar {
 }
 
 /// Midnight boundaries strictly between `start` and `end`.
-///
-/// An event ending exactly at midnight touches the boundary without crossing
-/// it and counts zero. Walks one calendar day at a time so a DST transition
-/// cannot shift the count.
+/// An event ending exactly at midnight touches the boundary without crossing it and counts
+/// zero. Walks one calendar day at a time so a DST transition cannot shift the count.
 pub fn crossing_midnights_count(start: &NaiveDateTime, end: &NaiveDateTime) -> u32 {
     if end <= start {
         return 0;
@@ -89,12 +85,9 @@ pub fn build_all_day_items(pages: &[LayoutPage], day: &str) -> Vec<AllDayItem> {
 }
 
 /// Assign each page a row that is stable across `days`.
-///
-/// Rows claim the specific day indices a page occupies, never a `min..max`
-/// range. Recurring virtual occurrences share their head page's id, so a
-/// Mon/Wed/Fri series produces a non-contiguous span; claiming the whole range
-/// would push an unrelated Tuesday event down a row and leave a phantom gap
-/// above it.
+/// Rows claim the specific day indices a page occupies, never a `min..max` range. A Mon/Wed/Fri
+/// series shares one page id, and claiming the whole range would push an unrelated Tuesday
+/// event down a row and leave a phantom gap above it.
 pub fn assign_all_day_rows(pages: &[LayoutPage], days: &[String]) -> Vec<Vec<Option<AllDayItem>>> {
     let items_by_day: Vec<Vec<AllDayItem>> =
         days.iter().map(|d| build_all_day_items(pages, d)).collect();
@@ -119,10 +112,8 @@ pub fn assign_all_day_rows(pages: &[LayoutPage], days: &[String]) -> Vec<Vec<Opt
         }
     }
 
-    // Longest spans first so multi-day bars anchor the top rows and the
-    // single-day stack stays contiguous beneath them (the convention Google
-    // and Apple Calendar both use). Ties break on first day, then createdAt,
-    // then page id — the last purely for determinism.
+    // Longest spans first so multi-day bars anchor the top rows and single-day events stack
+    // beneath them. Ties break on first day, then createdAt, then page id for determinism.
     spans.sort_by(|a, b| {
         b.day_indices
             .len()
@@ -175,12 +166,9 @@ pub fn assign_all_day_rows(pages: &[LayoutPage], days: &[String]) -> Vec<Vec<Opt
 }
 
 /// Cross-week-stable variant of [`assign_all_day_rows`].
-///
-/// Expands the computation to the full span of every all-day page touching the
-/// visible range, so a multi-week event keeps the same row in every week it
-/// appears, then slices back to the visible days. Trailing rows empty across
-/// all visible days are trimmed; interior empty rows are preserved, because
-/// those hold a neighbouring week's anchor row in place.
+/// Expands the computation to the full span of every all-day page touching the visible range,
+/// so a multi-week event keeps the same row in every week, then slices back. Trailing empty
+/// rows are trimmed; interior ones stay because they hold a neighbouring week's anchor row.
 pub fn assign_stable_all_day_rows(
     pages: &[LayoutPage],
     visible_days: &[String],
@@ -207,8 +195,7 @@ pub fn assign_stable_all_day_rows(
         }
     }
 
-    // Fast path: nothing extends past the visible range, so expansion would
-    // produce exactly the local computation.
+    // Fast path: nothing extends past the visible range, so expansion equals the local result.
     if &min_start == visible_start && &max_end == visible_end {
         return assign_all_day_rows(pages, visible_days);
     }
@@ -254,11 +241,10 @@ pub fn assign_stable_all_day_rows(
 
 /// Collapse a row-assigned slot grid into one bar per visible segment.
 ///
-/// A bar extends across a day boundary only for a genuine multi-day segment:
-/// the current day must flag continuation-after *and* the next must be the
-/// same page flagging continuation-before. Recurring virtuals share the head's
-/// page id but are single-day, so a gapless daily series stays as separate
-/// per-day bars rather than coalescing into one bar spanning the whole row.
+/// A bar crosses a day boundary only for a genuine multi-day segment: the current day flags
+/// continuation-after and the next is the same page flagging continuation-before. Recurring
+/// virtuals share the head's page id but are single-day, so a gapless daily series stays as
+/// separate per-day bars.
 pub fn build_all_day_bars(slots_by_day: &[Vec<Option<AllDayItem>>]) -> Vec<AllDayBar> {
     let day_count = slots_by_day.len();
     if day_count == 0 {

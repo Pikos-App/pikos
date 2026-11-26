@@ -1,11 +1,6 @@
-//! The parse pipeline: run every parser over the text, then refine.
-//!
-//! chrono-node's execution model, reproduced rather than reinvented, because
-//! the order-dependent parts are what decide the result. Parsers run
-//! independently and may all claim overlapping spans; the refiners then merge
-//! ("april 18" + "3pm"), drop overlaps (longest wins), push implied dates
-//! forward, and finally filter out the implausible. Change the order and the
-//! same text parses differently.
+//! The parse pipeline: run every parser over the text, then refine. The order is load-bearing:
+//! parsers may claim overlapping spans, then refiners merge ("april 18" + "3pm"), drop overlaps
+//! (longest wins), push implied dates forward, and filter the implausible.
 
 use fancy_regex::{Captures, Regex};
 
@@ -45,9 +40,7 @@ impl MatchData {
         self.groups.get(i).and_then(|g| g.as_deref())
     }
 
-    /// Drop the leading word-boundary group, shifting the rest down — the
-    /// bookkeeping `AbstractParserWithWordBoundaryChecking` does so its
-    /// subclasses can number groups from 1 without knowing about the boundary.
+    /// Drop the leading word-boundary group, so subclasses number groups from 1.
     fn strip_boundary_group(&self) -> Self {
         let header_len = self.group(1).unwrap_or_default().len();
         let whole = self.whole()[header_len..].to_string();

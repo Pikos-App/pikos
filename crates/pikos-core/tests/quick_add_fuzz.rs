@@ -1,21 +1,15 @@
 //! The Rust quick-add parser against randomly composed lines.
 //!
-//! `quick_add_parity.rs` grades the port against 317 inputs scraped from the
-//! test suite. That is what the author thought to test, and a port passing all
-//! of it says nothing about the space around it — which is where a *pipeline*
-//! port goes wrong. Cadence is read before the date, intervals before day
-//! words, "biweekly" before "weekly"; none of those orderings is exercised by
-//! an input that carries one feature at a time.
+//! `quick_add_parity.rs` covers inputs someone thought of. A pipeline port goes wrong in the
+//! orderings (cadence before date, intervals before day words, "biweekly" before "weekly"),
+//! which one-feature inputs never exercise. Lines here are fragments in random order, from
+//! `packages/core/scripts/parser-grammar/fuzz.ts`. A difference is a defect in the Rust parser
+//! until proven otherwise.
 //!
-//! So this grades it against lines composed of fragments in random order, from
-//! `packages/core/scripts/parser-grammar/fuzz.ts`. Same acceptance rule as the
-//! hand-written corpus: a difference is a defect in the Rust parser until
-//! proven otherwise.
+//! The committed corpus is a regression guard: every input that has diverged plus some random
+//! lines. CI generates a fresh sweep each run, seeded with the run number.
 //!
-//! The committed corpus is deliberately small — every input that has ever
-//! diverged, plus enough random lines to keep it varied. It is a *regression
-//! guard*; the searching happens in CI, which generates a fresh 8,000-line
-//! sweep each run with the run number as its seed.
+//! Point `PIKOS_FUZZ_CORPUS` at a larger generated file to search wider by hand:
 //!
 //! Point `PIKOS_FUZZ_CORPUS` at a larger generated file to search wider by
 //! hand:
@@ -58,8 +52,7 @@ struct ExpectedInput {
     priority: Option<Option<String>>,
 }
 
-/// An absent key and an explicit `null` mean different things here: not
-/// mentioned versus cleared.
+/// Absent means not mentioned; `null` means cleared.
 fn double_option<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -249,13 +242,11 @@ fn randomly_composed_lines_match_the_reference() {
 
     let mut compared = 0usize;
     let mut failures: Vec<String> = Vec::new();
-    // Distinct inputs, not distinct cases: the same bug at seven reference
-    // times is one bug, and a failure listing it seven times buries the others.
+    // Distinct inputs, not cases: one bug at seven reference times would bury the others.
     let mut seen_inputs: BTreeMap<String, ()> = BTreeMap::new();
 
     for case in &corpus.cases {
-        // The reference throwing is a finding about the reference, not about
-        // this port, and there is nothing to compare against.
+        // The reference throwing is a finding about the reference; there is nothing to compare.
         assert!(
             case.result.ok,
             "the reference threw on {:?} — that is a bug in it, not here",
@@ -284,10 +275,8 @@ fn randomly_composed_lines_match_the_reference() {
 
     assert_eq!(compared, total, "some cases carried no expected value");
 
-    // A run over tens of thousands of lines can find more divergences than a
-    // panic message can usefully hold. Point `PIKOS_FUZZ_FAILURES` at a file to
-    // get every failing input, one per line, ready to be triaged and folded
-    // into the regression list.
+    // Point `PIKOS_FUZZ_FAILURES` at a file to get every failing input, one per line, since a
+    // panic message cannot hold them all.
     if let Ok(path) = std::env::var("PIKOS_FUZZ_FAILURES") {
         if !path.is_empty() {
             let inputs: Vec<String> = seen_inputs

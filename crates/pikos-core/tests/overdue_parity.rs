@@ -1,25 +1,12 @@
-//! Clearing the overdue backlog, graded against the TypeScript it replaces.
+//! Clearing the overdue backlog, graded against `pages/moveOverdueToToday.ts`.
 //!
-//! `tests/corpus/overdue.json` is the output of
-//! `pages/moveOverdueToToday.ts` over one fixture set at each of the suite's
-//! seven reference times — regenerate with
-//! `pnpm --filter @pikos/core gen:parity`.
+//! Seven references because one fixture is overdue from one, dated today from another and in
+//! the future from a third, so the boundary is crossed in both directions.
 //!
-//! Seven references over ten pages is not repetition. The same fixture is days
-//! overdue from one reference, dated *today* from another and in the future
-//! from a third, so the boundary this is most likely to get wrong in only one
-//! direction is crossed in both.
-//!
-//! One fixture sits astride the EU DST change, and what it grades is the two
-//! implementations agreeing across it — not this one's arithmetic. A JavaScript
-//! `Date` is an absolute instant and can be moved an hour by such a shift;
-//! `NaiveDateTime` carries no zone and cannot. So the case is here to catch the
-//! *reference* diverging, and a mutation from days to seconds on the Rust side
-//! is correctly invisible to it.
-//!
-//! The label is graded too. It is the only place the user is told that
-//! something stayed behind, and two apps disagreeing about how they were told
-//! is how "2 recurring left" becomes a support question.
+//! The fixture astride the EU DST change grades the two implementations agreeing, not this
+//! one's arithmetic: a JavaScript `Date` is an instant and can shift an hour, a
+//! `NaiveDateTime` cannot. The label is graded too, since it is the only place the user is told
+//! something stayed behind.
 
 use std::fs;
 use std::path::PathBuf;
@@ -168,7 +155,6 @@ fn the_plan_matches_the_reference_at_every_hour_it_was_taken() {
     }
 }
 
-/// The corpus is only worth anything if it reaches every arm.
 #[test]
 fn the_corpus_exercises_each_reason_a_page_is_left_behind() {
     let corpus = corpus();
@@ -177,8 +163,7 @@ fn the_corpus_exercises_each_reason_a_page_is_left_behind() {
     assert!(corpus.pages.iter().any(|p| p.scheduled_start.is_none()));
     assert!(corpus.pages.iter().any(|p| p.scheduled_end.is_some()));
 
-    // The same page has to be overdue from one reference and in the future from
-    // another, or the "do not run backwards" arm is never taken.
+    // The same page must be overdue from one reference and in the future from another.
     let rows = rows(&corpus.pages);
     let early = plan_move_overdue_to_today(&rows, "2026-03-15");
     let late = plan_move_overdue_to_today(&rows, "2026-12-31");
@@ -191,8 +176,7 @@ fn the_corpus_exercises_each_reason_a_page_is_left_behind() {
         "a page dated ahead of today is not overdue"
     );
 
-    // And the label's three shapes — clean, mixed, and nothing to move — are
-    // all reachable from this fixture set.
+    // All three label shapes (clean, mixed, nothing to move) must be reachable.
     let labels: Vec<String> = corpus.cases.iter().map(|c| c.label.clone()).collect();
     assert!(
         labels.iter().any(|l| l.contains("recurring")),
