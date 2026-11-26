@@ -13,6 +13,14 @@ export const DEFAULT_EDITOR_FONT_SIZE: EditorFontSize = 14;
 
 export const stepEditorFontSize = stepTextSize;
 
+/** The `--ui-text-scale` a page's whole pane takes, so its title, properties and
+ *  body grow together with the editor text size. Left on the interface's scale,
+ *  the title doubled at 200% while the body stayed at its own size and became
+ *  the smallest text on screen. */
+export function editorTextScale(size: EditorFontSize): number {
+  return size / DEFAULT_EDITOR_FONT_SIZE;
+}
+
 export interface EditorSettingsValue {
   lineWidth: LineWidth;
   setLineWidth: (v: LineWidth) => void;

@@ -520,9 +520,11 @@ button,
    byte-identical to the Tailwind default it replaces, so this is inert until a
    setting moves it.
 
-   The calendar overrides `--ui-text-scale` on its own subtree, which is how one
-   variable serves two independent settings. */
-@theme {
+   The calendar and the editor each override `--ui-text-scale` on their own
+   subtree, which is how one variable serves three independent settings. That
+   needs `inline`: without it a utility reads `var(--text-sm)`, which resolved
+   once at the root, so a subtree's override never reached a `text-sm`. */
+@theme inline {
   /* Below Tailwind's scale. These existed as `text-[10px]` and `text-[11px]`
      literals, which no theme value can reach; named here so they scale too. */
   --text-3xs: calc(10px * var(--ui-text-scale, 1));

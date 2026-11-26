@@ -14,7 +14,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { EDITOR_ATTRIBUTES, LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { MOD_KEY_LABEL } from "@/shared/constants/platform";
-import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
+import { editorTextScale, useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -400,7 +400,10 @@ export function EditorPane() {
   }
 
   return (
-    <div className="group/editor relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
+    <div
+      className="group/editor relative flex flex-1 flex-col overflow-hidden bg-surface-primary"
+      style={{ "--ui-text-scale": editorTextScale(fontSize) } as CSSProperties}
+    >
       {page && (
         <MetadataHeader
           key={page.id}

@@ -726,10 +726,10 @@ function lineCount(row: Locator) {
 }
 
 appTest(
-  "at 200% text the properties row wraps without a stray dot, and empty fields say so",
+  "at editor text 28 the properties row wraps without a stray dot, and empty fields say so",
   { tag: ["@EDIT-30"] },
   async ({ app }) => {
-    await app.evaluate(() => localStorage.setItem("pikos:interfaceTextScale", "2"));
+    await app.evaluate(() => localStorage.setItem("pikos:editorFontSize", "28"));
     await app.reload();
     await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
     await quickAdd(app, "Order the desk frame today at 9am !high #home #desk");
@@ -752,6 +752,55 @@ appTest(
       await openEditorForPage(app, "Loose thought");
       await expect(row.getByRole("button", { name: "Priority: No priority" })).toHaveText("No priority");
       await expect(row.getByRole("button", { name: "Tags: none" })).toHaveText("No tags");
+    });
+  }
+);
+
+function fontPx(target: Locator) {
+  return target.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+}
+
+appTest(
+  "a page's title, properties and body follow the editor text size, not the interface's",
+  { tag: ["@EDIT-31"] },
+  async ({ app }) => {
+    await app.evaluate(() => localStorage.setItem("pikos:interfaceTextScale", "2"));
+    await app.reload();
+    await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+    await quickAdd(app, "Order the desk frame !high");
+    await openEditorForPage(app, "Order the desk frame");
+    await app.keyboard.type("Measure the alcove");
+    const body = app.getByRole("textbox", { name: "Page content" }).getByText("Measure the alcove");
+    const title = app.getByLabel("Page title");
+    const priority = app
+      .getByRole("group", { name: "Page properties" })
+      .getByRole("button", { name: "Priority: High" });
+    const sizes = async () => ({
+      body: await fontPx(body),
+      priority: await fontPx(priority),
+      title: await fontPx(title),
+    });
+    const atDefault = await appTest.step(
+      "EDIT-31 at interface 200% the page keeps the editor's size",
+      async () => {
+        const measured = await sizes();
+        expect(measured.body).toBe(14);
+        expect(measured.title).toBeLessThan(2 * measured.body);
+        expect(measured.priority).toBeLessThanOrEqual(measured.body);
+
+        return measured;
+      }
+    );
+
+    await appTest.step("EDIT-31 at editor text 28 title, properties and body double together", async () => {
+      const stepsFrom14To28 = 6;
+      for (let step = 0; step < stepsFrom14To28; step++) await app.keyboard.press(mod("Mod+="));
+
+      await expect.poll(() => fontPx(body)).toBe(28);
+      const atLargest = await sizes();
+      expect(atLargest.body).toBe(2 * atDefault.body);
+      expect(atLargest.title).toBeCloseTo(2 * atDefault.title, 0);
+      expect(atLargest.priority).toBeCloseTo(2 * atDefault.priority, 0);
     });
   }
 );
