@@ -821,16 +821,16 @@ reconciler does when the _provider_ changes something, and the account-level ope
 the Calendar Sync panel. Origin columns don't fit account ops, so that table is per
 provider.
 
-| Upstream event arrives                                  | Native | Synced                                                                                          | Detached    | CLI | iOS                              | iCloud                                  |
-| ------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- | ----------- | --- | -------------------------------- | --------------------------------------- |
-| Edit (title / time / location)                          | —      | ✅ mirror updates in place ⁶⁹                                                                   | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
-| Rewrite of a series' rule                               | —      | ✅ completed/skip sets survive ⁷¹                                                               | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Cancel of one instance                                  | —      | ✅ EXDATE — the slot empties ⁷²                                                                 | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Delete of the event / series                            | —      | ⚠️ detach if owned, else hard-delete ⁷²                                                         | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
-| A series that ended before the sync window, a week back | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷²                  | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| A series edited "this and following"                    | —      | ✅ Google: ticks and skips from that day on follow the rest ⁷¹ · ⚠️ CalDAV: they stay behind ⁷¹ | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| A copy of one instance at its own time                  | —      | ✅ no override row, so one block ⁴⁴                                                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Description change                                      | —      | ⚠️ silent refresh vs notice ⁷³                                                                  | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
+| Upstream event arrives                                  | Native | Synced                                                                          | Detached    | CLI | iOS                              | iCloud                                  |
+| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------- | ----------- | --- | -------------------------------- | --------------------------------------- |
+| Edit (title / time / location)                          | —      | ✅ mirror updates in place ⁶⁹                                                   | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
+| Rewrite of a series' rule                               | —      | ✅ completed/skip sets survive ⁷¹                                               | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Cancel of one instance                                  | —      | ✅ EXDATE — the slot empties ⁷²                                                 | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Delete of the event / series                            | —      | ⚠️ detach if owned, else hard-delete ⁷²                                         | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
+| A series that ended before the sync window, a week back | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷²  | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A series edited "this and following"                    | —      | ✅ ticks and skips from that day on follow the rest, when it keeps the title ⁷¹ | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A copy of one instance at its own time                  | —      | ✅ no override row, so one block ⁴⁴                                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Description change                                      | —      | ⚠️ silent refresh vs notice ⁷³                                                  | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
 
 ⁶⁸ `pikos mcp` speaks Model Context Protocol on stdio so an agent can drive the workspace:
 search / read / list / create / update pages, set status, complete (one occurrence of a
@@ -849,10 +849,11 @@ when the calendar has detached pages waiting.
 sets keyed by page, so they survive. On a Google master-only delta, stored exdates and override
 rows carry across only while the pattern is unchanged. A pattern change drops them deliberately
 (they key to dates the old rule yielded). An edit "this and following" ends the series and starts
-a new event for the rest. Google names that event after the old one, so each tick or skip on a
-day the rest repeats on moves to it, and one the edit moved to another day stays where it was
-made. CalDAV sends no link between the two, so there every one stays on the ended page and the
-rest starts open.
+a new event for the rest, and neither provider links the two. So the rest is recognised as the
+series in the same calendar under the same title that starts first after the old one ends, and
+each tick or skip past that end, on a day the rest repeats on, moves to it. One the edit moved to
+another day stays where it was made. A rest renamed in the same edit isn't recognised, and its
+ticks stay on the ended page.
 ⁷² The wire shape is identical for "one instance cancelled" and "event deleted"; the recurrence
 ref discriminates (`RECURRENCE-ID` / `recurringEventId` present → EXDATE on the series; absent
 → lifecycle removal). Ownership = completed, `user_modified`, or user content: owned detaches

@@ -102,12 +102,6 @@ pub struct Recurrence {
     pub overrides: Vec<OccurrenceOverride>,
     /// How much of the series' occurrence deltas the two fields above represent.
     pub fidelity: OccurrenceFidelity,
-    /// The `external_id` of the series this one carries on from. Editing a repeating
-    /// event "this and following" ends it the day before and starts a new event for the
-    /// rest, so the occurrences the person already ticked from that day on now belong to
-    /// this one. Google names the new event after the old one; CalDAV sends no link
-    /// between the two, so there it is always `None`.
-    pub continues: Option<String>,
 }
 
 /// A modified instance inside a series bundle.

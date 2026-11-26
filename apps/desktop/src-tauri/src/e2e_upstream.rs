@@ -39,7 +39,8 @@ pub struct UpstreamEvent {
     #[serde(default)]
     overrides: Vec<UpstreamOverride>,
     /// This is the rest of the series titled `title` after a "this and following"
-    /// edit: a new event upstream, named for that one the way Google names it.
+    /// edit: a new event upstream under the same title, with an id of its own and
+    /// nothing naming the series it carries on, as Google and CalDAV both send it.
     #[serde(default)]
     rest_of_split: bool,
 }
@@ -202,12 +203,11 @@ async fn to_upsert(
     ev: UpstreamEvent,
 ) -> AppResult<EventUpsert> {
     let mut existing = linked(pool, account_id, calendar_id, &ev.title).await?;
-    let mut continues = None;
-    if ev.rest_of_split {
-        let (split, _) = existing.take().ok_or_else(|| {
-            AppError::NotFound(format!("no synced series titled {} to split", ev.title))
-        })?;
-        continues = Some(split);
+    if ev.rest_of_split && existing.take().is_none() {
+        return Err(AppError::NotFound(format!(
+            "no synced series titled {} to split",
+            ev.title
+        )));
     }
     let stored = match &existing {
         Some((_, page_id)) => Some(stored_event(pool, page_id).await?),
@@ -219,11 +219,9 @@ async fn to_upsert(
         .start
         .or(carried.start)
         .ok_or_else(|| AppError::Invalid(format!("{} needs a start", ev.title)))?;
-    let external_id = match (existing, &continues) {
-        (Some((id, _)), _) => id,
-        (None, Some(split)) => format!("{split}_R{}", start.replace(['-', ':'], "")),
-        (None, None) => uuid::Uuid::new_v4().to_string(),
-    };
+    let external_id = existing
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let end = ev.end.or(carried.end);
     let timezone = ev.timezone.or(carried.timezone);
     let recurrence = ev.rrule.map(|rrule| Recurrence {
@@ -242,7 +240,6 @@ async fn to_upsert(
             })
             .collect(),
         fidelity: OccurrenceFidelity::Complete,
-        continues,
     });
 
     Ok(EventUpsert {

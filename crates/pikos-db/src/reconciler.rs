@@ -95,13 +95,16 @@ pub async fn reconcile(
 
     // Two-pass. Whole events/series first, so a master delivered in the same
     // batch is in the store before any occurrence delta that references it.
+    let mut written = Vec::new();
     for item in &delta.upserts {
         if let UpsertItem::Event(ev) = item {
-            if apply_event(&mut tx, ctx, ev).await? {
+            if let Some(page_id) = apply_event(&mut tx, ctx, ev).await? {
                 outcome.applied += 1;
+                written.push(page_id);
             }
         }
     }
+    carry_split_series(&mut tx, ctx, &written).await?;
     for item in &delta.upserts {
         if let UpsertItem::Occurrence(occ) = item {
             match apply_occurrence(&mut tx, ctx, occ).await? {
@@ -125,12 +128,12 @@ pub async fn reconcile(
 
 /// Upsert a whole event or series: match by external_id, else re-link by
 /// `ical_uid` in-calendar, else create. No-ops on an unchanged etag. Returns
-/// whether it wrote anything — `false` on the tombstoned or etag-no-op skip.
+/// the page it wrote — `None` on the tombstoned or etag-no-op skip.
 async fn apply_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     ev: &EventUpsert,
-) -> AppResult<bool> {
+) -> AppResult<Option<String>> {
     let mut existing = sqlx::query_as::<_, (String, String, Option<String>, String, bool)>(
         "SELECT ps.id, ps.page_id, ps.etag, ps.sync_state, p.deleted_at IS NOT NULL
          FROM page_sync ps JOIN pages p ON p.id = ps.page_id
@@ -145,7 +148,7 @@ async fn apply_event(
     // User deleted this event locally — its link is tombstoned. Skip the upsert so
     // the next sync can't resurrect it from trash; restoring it reactivates the row.
     if matches!(&existing, Some((_, _, _, state, _)) if state == "tombstoned") {
-        return Ok(false);
+        return Ok(None);
     }
 
     // A detached page the user then trashed (sync severed first, then deleted): keep
@@ -165,9 +168,9 @@ async fn apply_event(
         return match existing {
             Some((page_sync_id, page_id, _, state, _)) if state == "active" => {
                 detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
-                Ok(true)
+                Ok(Some(page_id))
             }
-            _ => Ok(false),
+            _ => Ok(None),
         };
     }
 
@@ -180,7 +183,7 @@ async fn apply_event(
         // Only when already active: a detached row (calendar re-enabled, same etag)
         // must fall through to reactivate its sync_state, or live sync never resumes.
         if state == "active" && ev.core.etag.is_some() && stored_etag == ev.core.etag {
-            return Ok(false);
+            return Ok(None);
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
         sqlx::query(
@@ -233,50 +236,131 @@ async fn apply_event(
         reclaim_calendar_folder(tx, &page_id, &ctx.folder_id).await?;
     }
     write_schedule(tx, &page_id, ev, &now).await?;
-    let continues = ev.recurrence.as_ref().and_then(|r| r.continues.as_deref());
-    if let (true, Some(from)) = (is_new, continues) {
-        carry_resolved_occurrences(tx, ctx, from, &page_id, &ev.schedule.start).await?;
-    }
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
-    Ok(true)
+    Ok(Some(page_id))
 }
 
-/// Move the dates the person ticked or skipped on a series that was split onto the
-/// series that carries on from it. Each is keyed to the page it was made on, so without
-/// this every one from the split on reads as open on the new page, while its done copy
-/// still sits in Completed under the old one.
+/// A synced series as the split check reads it: the day it starts and, when its rule is
+/// bounded by a date, the day it ends, both in the rule's own wall clock.
+struct SeriesSpan {
+    page_id: String,
+    starts: String,
+    ends: Option<String>,
+}
+
+impl SeriesSpan {
+    fn from_row((page_id, rrule, start): (String, String, String)) -> Self {
+        Self {
+            page_id,
+            starts: start.chars().take(10).collect(),
+            ends: until_day(&rrule),
+        }
+    }
+}
+
+/// The day an `UNTIL` bound falls on, as `YYYY-MM-DD`. The reconciler stores it as the
+/// rule's wall clock (`rewrite_until_to_wall_clock`), so its date is the last day the
+/// series can land on. A `COUNT` or an open rule has none.
+fn until_day(rrule: &str) -> Option<String> {
+    let value = rrule.split(';').find_map(|part| part.strip_prefix("UNTIL="))?;
+    let digits = value.get(..8).filter(|d| d.bytes().all(|b| b.is_ascii_digit()))?;
+    Some(format!("{}-{}-{}", &digits[..4], &digits[4..6], &digits[6..]))
+}
+
+/// Editing a repeating event "this and following" ends the series the day before and starts
+/// a new event for the rest, and neither provider links the two: Google gives the rest an id
+/// of its own, CalDAV a UID of its own. The dates the person already ticked or skipped from
+/// that day on stay keyed to the ended page, past its last day where nothing reads them, while
+/// the rest shows the same dates open.
 ///
-/// Only a date on or after `starts` that the new series has an occurrence on moves. One
-/// the edit moved to another day stays with the page it was made on, since the new series
-/// never asks about it.
-async fn carry_resolved_occurrences(
+/// So once a batch's events are in, each series it wrote is checked from both sides. Ended
+/// with dates resolved past its end, it hands them to the series in its calendar under the
+/// same title that starts first after that end. Newly starting, it takes them from the series
+/// under its title that ended last before it starts. Both sides, after the whole batch,
+/// because the two halves can arrive in either order or in different syncs.
+///
+/// Only dates past the old end move, so a same-titled series that ended on its own has
+/// nothing to hand on. Only dates the rest has an occurrence on move, so one the edit put on
+/// another day stays with the page it was made on. A rest renamed in the same edit isn't
+/// recognised, and its dates stay behind as before.
+async fn carry_split_series(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
-    from_external_id: &str,
-    to_page: &str,
-    starts: &str,
+    written: &[String],
 ) -> AppResult<()> {
-    let from_day = &starts[..starts.len().min(10)];
-    let Some(from_page) = sqlx::query_scalar::<_, String>(
-        "SELECT page_id FROM page_sync
-         WHERE account_id = ? AND calendar_id = ? AND external_id = ? AND sync_state = 'active'",
-    )
-    .bind(&ctx.account_id)
-    .bind(&ctx.calendar_id)
-    .bind(from_external_id)
-    .fetch_optional(&mut **tx)
-    .await?
+    for page_id in written {
+        let Some(series) = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT r.page_id, r.rrule, r.scheduled_start FROM page_recurrence_rules r
+             JOIN page_sync ps ON ps.page_id = r.page_id AND ps.sync_state = 'active'
+             JOIN pages p ON p.id = r.page_id AND p.deleted_at IS NULL
+             WHERE r.page_id = ?",
+        )
+        .bind(page_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(SeriesSpan::from_row) else {
+            continue;
+        };
+        let siblings: Vec<SeriesSpan> = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT r.page_id, r.rrule, r.scheduled_start FROM page_recurrence_rules r
+             JOIN page_sync ps ON ps.page_id = r.page_id AND ps.sync_state = 'active'
+             JOIN pages p ON p.id = r.page_id AND p.deleted_at IS NULL
+             WHERE ps.account_id = ? AND ps.calendar_id = ? AND r.page_id <> ?
+               AND p.title = (SELECT title FROM pages WHERE id = ?)",
+        )
+        .bind(&ctx.account_id)
+        .bind(&ctx.calendar_id)
+        .bind(page_id)
+        .bind(page_id)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(SeriesSpan::from_row)
+        .collect();
+
+        if let Some(ends) = &series.ends {
+            let rest = siblings
+                .iter()
+                .filter(|s| s.starts > *ends)
+                .min_by(|a, b| a.starts.cmp(&b.starts));
+            if let Some(rest) = rest {
+                carry_past_end(tx, &series.page_id, ends, &rest.page_id).await?;
+            }
+        }
+        let ended = siblings
+            .iter()
+            .filter_map(|s| Some((s, s.ends.as_ref()?)))
+            .filter(|(_, ends)| **ends < series.starts)
+            .max_by(|a, b| a.1.cmp(b.1));
+        if let Some((ended, ends)) = ended {
+            carry_past_end(tx, &ended.page_id, ends, &series.page_id).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Moves the ticks and skips `from_page` holds for days after `ends` to `to_page`, each one
+/// `to_page` has an occurrence on, and re-derives both pages' next date when any moved.
+async fn carry_past_end(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    from_page: &str,
+    ends: &str,
+    to_page: &str,
+) -> AppResult<()> {
+    let Some(from_day) = chrono::NaiveDate::parse_from_str(ends, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.succ_opt())
+        .map(|d| d.format("%Y-%m-%d").to_string())
     else {
         return Ok(());
     };
-
     let ticked = move_occurring_dates(
         tx,
         "SELECT occurrence_date FROM completed_set
          WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
         "UPDATE completed_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
-        &from_page,
-        from_day,
+        from_page,
+        &from_day,
         to_page,
     )
     .await?;
@@ -285,13 +369,13 @@ async fn carry_resolved_occurrences(
         "SELECT occurrence_date FROM skip_set
          WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
         "UPDATE skip_set SET page_id = ? WHERE page_id = ? AND occurrence_date = ?",
-        &from_page,
-        from_day,
+        from_page,
+        &from_day,
         to_page,
     )
     .await?;
     if ticked || skipped {
-        crate::recurrence_derive::recompute_recurring_schedule(tx, &from_page).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(tx, from_page).await?;
         crate::recurrence_derive::recompute_recurring_schedule(tx, to_page).await?;
     }
     Ok(())
