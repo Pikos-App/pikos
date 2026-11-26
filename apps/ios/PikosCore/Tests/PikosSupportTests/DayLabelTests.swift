@@ -2,12 +2,6 @@ import XCTest
 
 @testable import PikosSupport
 
-/// Naming a day in Upcoming.
-///
-/// Worth testing on the host because the two relative words are the part a
-/// reader notices being wrong, and because "tomorrow" is date arithmetic
-/// wearing a string's clothes — the cases that break it are month ends, leap
-/// days and DST, none of which need a simulator to reach.
 final class DayLabelTests: XCTestCase {
     private let gregorian: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -39,8 +33,6 @@ final class DayLabelTests: XCTestCase {
             DayLabel.relative("2024-03-01", today: "2024-02-29", calendar: gregorian), "Tomorrow")
     }
 
-    /// The day after tomorrow is a date, not a third relative word — past two
-    /// days the words stop meaning anything without counting.
     func testAnythingFurtherOutGetsADate() {
         let label = DayLabel.relative("2026-09-16", today: "2026-09-13", calendar: gregorian)
         XCTAssertNotEqual(label, "Today")
@@ -48,17 +40,14 @@ final class DayLabelTests: XCTestCase {
         XCTAssertTrue(label.contains("16"), "should name the day of the month, got \(label)")
     }
 
-    /// Yesterday is not "Tomorrow". An `abs()` in the wrong place would make it
-    /// so, and Upcoming's window makes that case rare enough to ship.
+    /// An `abs()` in the wrong place would make yesterday "Tomorrow".
     func testTheDayBeforeIsNotTomorrow() {
         let label = DayLabel.relative("2026-09-12", today: "2026-09-13", calendar: gregorian)
         XCTAssertNotEqual(label, "Tomorrow")
         XCTAssertNotEqual(label, "Today")
     }
 
-    /// Midnight is the one instant a spring-forward can delete, which is why
-    /// the parse lands on noon. Lisbon moves at 01:00 and Santiago at 00:00 —
-    /// the second is the one that would return nil or the previous day.
+    /// Santiago springs forward at 00:00, so a midnight parse would return nil or the previous day.
     func testADayThatHasNoMidnightStillHasALabel() {
         var santiago = Calendar(identifier: .gregorian)
         santiago.timeZone = TimeZone(identifier: "America/Santiago") ?? .gmt
@@ -70,7 +59,6 @@ final class DayLabelTests: XCTestCase {
             DayLabel.relative("2026-09-06", today: "2026-09-05", calendar: santiago), "Tomorrow")
     }
 
-    /// Shown as itself rather than hidden behind an invented date.
     func testAnUnreadableDayIsShownRaw() {
         for bad in ["", "2026", "2026-13-01", "2026-09-99", "not a date"] {
             XCTAssertEqual(
@@ -81,18 +69,12 @@ final class DayLabelTests: XCTestCase {
     }
 }
 
-/// `today()` produces the key the shared Rust compares against.
-///
-/// Separate from the labelling tests because the failure mode is different and
-/// worse: a label that reads oddly is cosmetic, but a key in the wrong shape
-/// matches no row and empties the view with nothing logged.
 extension DayLabelTests {
     func testTodayIsAZeroPaddedGregorianKey() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .gmt
 
-        // 2026-01-05, chosen for the single-digit month and day that padding
-        // would otherwise drop.
+        // Single-digit month and day, to catch dropped padding.
         let noon = calendar.date(
             from: DateComponents(
                 calendar: calendar, timeZone: calendar.timeZone,
@@ -100,8 +82,6 @@ extension DayLabelTests {
         XCTAssertEqual(DayLabel.today(calendar, now: noon), "2026-01-05")
     }
 
-    /// A non-Gregorian calendar must not leak into a storage key. Set as the
-    /// device calendar, this one numbers 2026 as 2569.
     func testTodayIgnoresANonGregorianDeviceCalendar() {
         var buddhist = Calendar(identifier: .buddhist)
         buddhist.timeZone = TimeZone(identifier: "Asia/Bangkok") ?? .gmt
@@ -117,10 +97,6 @@ extension DayLabelTests {
             "a Buddhist-calendar device would otherwise write 2569")
     }
 
-    // MARK: - short
-
-    /// The bare form never says "Today", which is the whole reason it exists
-    /// separately: it lists days somebody missed, and none of those is today.
     func testShortIsNeverRelative() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -136,8 +112,7 @@ extension DayLabelTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         let label = DayLabel.short("2026-05-05", calendar: calendar)
-        // Order and separators are the reader's locale's business; the three
-        // parts being present is not.
+        // Order and separators follow the locale; the three parts must be present.
         XCTAssertTrue(label.contains("5"), label)
         XCTAssertTrue(label.lowercased().contains("may"), label)
         XCTAssertTrue(label.lowercased().contains("tue"), label)

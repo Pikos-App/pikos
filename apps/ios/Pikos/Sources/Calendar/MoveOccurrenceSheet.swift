@@ -2,19 +2,11 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// Move one occurrence of a series, leaving the rest of it where it is.
+/// Move one occurrence of a series, leaving the rest where it is.
 ///
-/// The desktop does this by dragging the block. On a phone a drag competes with
-/// scrolling the grid, so the same operation arrives through the long-press menu
-/// and a picker — the gesture is different, the write underneath is identical.
-///
-/// Narrower than `SchedulePageSheet` on purpose, in two ways. There is no "no
-/// date": an occurrence *is* a date, and a series member with none is not a
-/// thing the model can hold — dropping one is what Skip is for. And the choice
-/// between all-day and timed is not offered, because it is not the user's here:
-/// the occurrence inherits its shape from the rule, and an all-day series whose
-/// Tuesday suddenly has a time would be writing a value the reconciler matches
-/// occurrences by.
+/// Narrower than `SchedulePageSheet`: there is no "no date", since an occurrence is a date
+/// (Skip is for dropping one), and no all-day or timed choice, since the occurrence inherits
+/// its shape from the rule and the reconciler matches occurrences by that value.
 struct MoveOccurrenceSheet: View {
     let entry: CalendarEntry
 
@@ -116,13 +108,9 @@ struct MoveOccurrenceSheet: View {
         Task { _ = await store.moveOccurrence(entry, to: target.start, end: target.end) }
     }
 
-    /// Said before the move, not discovered after it.
-    ///
-    /// What happens to the moved occurrence depends on where the series came
-    /// from, and the two outcomes are different enough that a reader who expects
-    /// the wrong one will think something went wrong. A native occurrence leaves
-    /// the series and becomes a page of its own, so later edits to the repeat no
-    /// longer reach it. An imported one stays a member, pinned to its new time.
+    /// Said before the move: a native occurrence leaves the series and becomes its own page, an
+    /// imported one stays a member pinned to its new time, and expecting the wrong one reads as
+    /// a fault.
     private var footnote: String {
         entry.isSyncedOrigin
             ? "The rest of the series stays where it is."

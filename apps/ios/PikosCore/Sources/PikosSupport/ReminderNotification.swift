@@ -3,21 +3,14 @@ import Foundation
 /// What a reminder says and when the OS should show it, from the fields the
 /// workspace hands over.
 ///
-/// Here rather than in the app so it runs under `swift test` on the host: the
-/// interesting cases are the wall-clock-to-components mapping — which must
-/// not pass through a `Date` and back, or a device on a non-Gregorian
-/// calendar writes a year that never arrives — and the wording's boundaries,
-/// "Today", "Tomorrow", a weekday, a date with a year.
 public enum ReminderNotification {
     /// The calendar components a `UNCalendarNotificationTrigger` fires on, from
     /// a `YYYY-MM-DDTHH:MM:SS` wall clock on the device's own zone.
     ///
-    /// Built field by field rather than through a `Date`. The trigger matches
-    /// components against the device's current calendar, which for a phone set
-    /// to the Buddhist or Japanese calendar numbers the year differently; the
-    /// components carry an explicit Gregorian calendar so the match is on the
-    /// digits the workspace wrote. Seconds are kept — the workspace places a
-    /// fire to the second, and dropping them would fire up to a minute early.
+    /// Built field by field, not through a `Date`: the trigger matches against
+    /// the device calendar, which numbers the year differently on a Buddhist or
+    /// Japanese calendar, so the components carry an explicit Gregorian one.
+    /// Seconds are kept, or the fire would come up to a minute early.
     public static func fireComponents(_ wallClock: String, timeZone: TimeZone = .current)
         -> DateComponents?
     {
@@ -49,13 +42,10 @@ public enum ReminderNotification {
 
     /// The notification's body: when the page is.
     ///
-    /// Relative to the day the reminder *fires* rather than to the moment the
-    /// notification was planned — a reminder planned on Monday for a Thursday
-    /// meeting says "Today at 3:00 PM" when it lands on Thursday, because that
-    /// is when it is read. `fireAt` is the same wall-clock string the trigger
-    /// was built from; `scheduledStart` is the page's own start, which for a
-    /// page a calendar owns is in its source zone and is worded as written
-    /// rather than converted, since the words are the event's, not the phone's.
+    /// Relative to the day the reminder fires, not when it was planned: planned
+    /// Monday for Thursday, it says "Today at 3:00 PM" when it lands. `fireAt` is
+    /// the wall clock the trigger was built from. `scheduledStart` is worded as
+    /// written, not converted to the phone's zone, since the words are the event's.
     public static func body(
         scheduledStart: String, fireAt: String, calendar: Calendar = .current
     ) -> String {
@@ -65,8 +55,6 @@ public enum ReminderNotification {
         else { return scheduledStart }
 
         let isAllDay = !scheduledStart.contains("T")
-        // The reader's locale and zone, the Gregorian calendar: how every date
-        // in the app is shown, so a notification reads like the list does.
         let style = Date.FormatStyle(
             locale: calendar.locale ?? .autoupdatingCurrent,
             calendar: gregorian,
@@ -94,15 +82,11 @@ public enum ReminderNotification {
 
     /// The most notifications the phone plans at once.
     ///
-    /// iOS keeps the sixty-four soonest pending requests and drops the rest
-    /// silently. Planning fewer than that leaves room for the ones another
-    /// part of the app might add, and makes the drop — if it ever happens —
-    /// ours to notice rather than the OS's to hide.
+    /// iOS keeps the 64 soonest pending requests and drops the rest silently.
+    /// Planning fewer leaves room for others the app adds and makes any drop ours to notice.
     public static let planningLimit = 60
 
-    /// How far ahead the phone plans. Fourteen days is well past how long a
-    /// phone goes without the app being opened or a background refresh
-    /// landing, and short enough that the sixty-slot budget is rarely the
-    /// binding constraint.
+    /// How far ahead the phone plans: well past how long it goes without the app
+    /// opening or a background refresh, and short of exhausting `planningLimit`.
     public static let horizonDays = 14
 }

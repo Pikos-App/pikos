@@ -1,23 +1,11 @@
 import SQLite3
 import XCTest
 
-/// Shared setup for every UI test: a freshly launched app over an empty
-/// workspace.
+/// Shared setup for every UI test: a freshly launched app over an empty workspace in its own
+/// directory, passed through `WorkspaceLocation.workspaceOverrideKey`. No test inherits what the
+/// last left behind, and CI needs no App Group provisioning.
 ///
-/// The isolation is the point. A UI test that inherits whatever the last one
-/// left behind fails in an order-dependent way, which is the failure people
-/// learn to re-run rather than read. Each test here gets its own directory,
-/// handed to the app through `WorkspaceLocation.workspaceOverrideKey` — the one
-/// seam `XCUIApplication` has, since it can set the environment of the process
-/// it launches but cannot reach inside it.
-///
-/// That also keeps CI out of the provisioning question. Without the override
-/// the app would open the App Group container, and whether a simulator honours
-/// that entitlement on an unsigned build is a question about certificates
-/// rather than about the app.
-/// `@MainActor` because every `XCUIApplication` member is: the whole class,
-/// so a subclass's tests inherit it and neither this file nor theirs has to
-/// annotate a query at a time.
+/// `@MainActor` on the class because every `XCUIApplication` member is, so subclasses inherit it.
 @MainActor
 class PikosUITestCase: XCTestCase {
     private(set) var app: XCUIApplication!
@@ -30,14 +18,10 @@ class PikosUITestCase: XCTestCase {
     /// Added to every launch, before the workspace is first opened.
     class var launchEnvironment: [String: String] { [:] }
 
-    // The async pair rather than `setUpWithError`/`tearDownWithError`: an
-    // override may add main-actor isolation only to an `async` method, and
-    // everything below — the app handle included — is main-actor bound.
+    // The async pair: an override may add main-actor isolation only to an `async` method.
     override func setUp() async throws {
         try await super.setUp()
-        // A failed assertion should stop the test at the point it failed. A UI
-        // test that carries on after the screen is not what it expected reports
-        // the fifth symptom of the first problem.
+        // A failed assertion stops the test where it failed, not at the fifth symptom.
         continueAfterFailure = false
 
         workspaceDirectory = FileManager.default.temporaryDirectory
@@ -55,8 +39,7 @@ class PikosUITestCase: XCTestCase {
     override func tearDown() async throws {
         app = nil
         if let workspaceDirectory {
-            // Best-effort: a simulator that will not give the directory up must
-            // not fail a test that already passed.
+            // Best-effort: a simulator that won't give the directory up must not fail a passing test.
             try? FileManager.default.removeItem(at: workspaceDirectory)
         }
         workspaceDirectory = nil
@@ -65,19 +48,14 @@ class PikosUITestCase: XCTestCase {
 
     // MARK: - Shared steps
 
-    /// Create a page through quick add, the way a person would.
-    ///
-    /// Goes through the real sheet rather than seeding the database, because
-    /// the sheet is half of what these tests are for: a page that appears in
-    /// the list proves the parse, the write and the refresh all happened.
+    /// Create a page through quick add, as a person would: a page appearing in the list proves the
+    /// parse, the write and the refresh all happened.
     func quickAdd(_ line: String) {
         app.buttons["New page"].firstMatch.tap()
 
         let field = app.textViews["What needs doing?"].firstMatch
         let plain = app.textFields["What needs doing?"].firstMatch
-        // The field is `TextField(axis: .vertical)`, which UIKit backs with a
-        // text view on some versions and a text field on others. Asking for
-        // both costs one query and survives the difference.
+        // Either a text view or a text field, depending on the iOS version; one query covers both.
         let input = field.waitForExistence(timeout: 2) ? field : plain
         XCTAssertTrue(
             input.waitForExistence(timeout: Self.timeout), "quick add's field should be there")
@@ -93,11 +71,8 @@ class PikosUITestCase: XCTestCase {
         app.buttons["Add"].firstMatch.tap()
     }
 
-    /// The row for a page, by its title.
-    ///
-    /// `containing` rather than an exact label: the row is one accessibility
-    /// element combining the title with its date and tags, so an exact match
-    /// would break the moment a page gains either.
+    /// The row for a page, by its title. `containing` rather than an exact label: the row is one
+    /// accessibility element combining the title with its date and tags.
     func row(titled title: String) -> XCUIElement {
         app.cells.containing(.staticText, identifier: title).firstMatch
     }

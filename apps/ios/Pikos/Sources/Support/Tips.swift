@@ -1,20 +1,12 @@
 import SwiftUI
 import TipKit
 
-/// The two things a new reader cannot see and would not guess.
+/// The two things a new reader cannot see and would not guess: the swipes on a row, and the
+/// title being a menu. Each is taught in place as one inline, dismissable tip. TipKit shows one
+/// a day at most, so the second waits for the reader's second day.
 ///
-/// The app has no onboarding — nothing to sign up for means nothing to ask —
-/// so what it teaches, it teaches in place. Two gestures carry most of the
-/// list and neither has a visible affordance: the swipes on a row, and the
-/// title being a menu. Each gets one tip, shown once, inline at the top of
-/// the list, dismissable, and never again after that. TipKit shows one a day
-/// at most, so the second waits for the reader's second day rather than
-/// stacking under the first.
-///
-/// Neither tip has a rule beyond "has not been dismissed". A rule such as
-/// "after three pages exist" reads well and means the reader who most needs
-/// the hint — the one with two pages, wondering how to finish one — never
-/// sees it.
+/// Neither has a rule beyond "not dismissed": a rule such as "after three pages exist" hides the
+/// hint from the reader with two pages, who needs it most.
 struct SwipeRowTip: Tip {
     var title: Text {
         Text("Swipe, or hold and drag")
@@ -54,12 +46,8 @@ struct SwitchViewTip: Tip {
 }
 
 enum PikosTips {
-    /// Set TipKit up once, at launch.
-    ///
-    /// Daily rather than immediate, so the two tips arrive one per day
-    /// instead of both on the first screen. Hidden entirely under the UI
-    /// tests, which read the screen by label and must not find a tip card
-    /// sitting where a row was expected.
+    /// Set TipKit up once, at launch. Daily so the tips arrive one per day. Hidden under the UI
+    /// tests, which read the screen by label and must not find a tip card where a row was expected.
     static func configure() {
         let environment = ProcessInfo.processInfo.environment
         #if DEBUG

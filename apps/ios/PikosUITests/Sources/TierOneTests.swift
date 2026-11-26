@@ -1,11 +1,8 @@
 import XCTest
 
-/// The flows that must work, mirroring the desktop's `@tier1` Playwright set.
-///
-/// Chosen so that a failure here means the app is unusable rather than
-/// imperfect: it launched, a page can be made, ticked, found, opened and
-/// scheduled. Anything narrower is a question the Rust tests or `PikosSupport`
-/// answer in milliseconds.
+/// The flows that must work, mirroring the desktop's `@tier1` Playwright set: a failure here
+/// means the app is unusable rather than imperfect. Anything narrower is a question the Rust
+/// tests or `PikosSupport` answer in milliseconds.
 final class TierOneTests: PikosUITestCase {
     // qa: IOS-01
     func testTheAppLaunchesOnTodayWithTheBar() {
@@ -376,8 +373,8 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-12:2
-    /// The desktop's signature move on a phone: lift a page, drop it on an hour of today.
-    /// One press, two outcomes: still opens the menu, moving carries the page (the drag tests below).
+    /// One press, two outcomes: holding still opens the menu, and moving carries the page (see the
+    /// drag tests below).
     func testHoldingARowStillOpensItsMenu() {
         quickAdd("Plan the offsite today")
         let title = app.staticTexts["Plan the offsite"].firstMatch
@@ -540,7 +537,7 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-16
-    /// `PKOS-0150`: a left swipe offers the likeliest day, When and Folder.
+    /// A left swipe offers the likeliest day, When and Folder.
     func testARowSwipesLeftToADayWhenOrAFolder() {
         showView("Inbox")
         quickAdd("Book the car in")
@@ -597,7 +594,6 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.buttons["Undo"].exists, "and nothing was scheduled")
     }
 
-    /// `waitForExistence` has no opposite, and polling `.exists` in a loop races the query.
     private func openRepeat(_ title: String) {
         app.collectionViews.staticTexts[title].firstMatch.press(forDuration: 1.0)
         let repeatItem = app.buttons["Repeat…"].firstMatch
@@ -605,6 +601,7 @@ final class TierOneTests: PikosUITestCase {
         repeatItem.tap()
     }
 
+    /// `waitForExistence` has no opposite, and polling `.exists` in a loop races the query.
     private func waitForDisappearance(of element: XCUIElement) -> Bool {
         let gone = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"), object: element)

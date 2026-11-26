@@ -7,9 +7,8 @@ import SwiftUI
 /// width exactly as an iPad does, with about 400 points of height, so width cannot tell the two
 /// apart and compact height can: it is true of every phone in landscape and of no iPad.
 ///
-/// The iPhone Duo needs no case of its own. Apple documents its outer display with an iPhone's
-/// size classes and its inner display as regular in both, so folded it is a phone, sideways it
-/// is two panes, and unfolded it is the split view. Apple describes folding as resizing the app.
+/// The iPhone Duo needs no case of its own: its outer display has an iPhone's size classes and
+/// its inner one is regular in both, since folding is documented as resizing the app.
 enum ShellLayout {
     case single
     case sideBySide

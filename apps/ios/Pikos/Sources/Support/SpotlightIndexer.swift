@@ -6,23 +6,13 @@ import UniformTypeIdentifiers
 
 /// Pages, findable from the home screen's search.
 ///
-/// A notes app whose notes cannot be found by pulling down on the home screen
-/// is one the phone treats as a stranger: Notes, Reminders, Things and Bear
-/// all index, and a reader who searches for "dentist" and sees every app's
-/// answer but this one's concludes the page is not there. The index holds
-/// what the list row shows — title, subtitle, tags, date — and nothing from
-/// the document body, which stays in the app's own full-text search where
-/// the excerpt can be quoted.
-///
-/// Caught up rather than rebuilt. Every write bumps the store's version, and the index follows a
-/// few seconds later with the pages the workspace's change counter says were written since its
-/// last pass, so the delta is the database's, not a guess about which writes mattered. A full
-/// rebuild was tried first: at 200,000 pages it held the main thread for seconds after every tick.
-/// It still starts over when the counter's epoch changes or a folder is renamed, since every
-/// item names its folder.
-///
-/// Nothing leaves the phone. Core Spotlight's index is on-device, and the
-/// privacy manifest's claims about the binary remain true.
+/// The index holds what the list row shows (title, subtitle, tags, date) and nothing from the
+/// document body, which stays in the app's own full-text search. It is caught up rather than
+/// rebuilt: every write bumps the store's version, and the index follows a few seconds later with
+/// the pages the workspace's change counter says were written since its last pass. At 200,000
+/// pages a full rebuild held the main thread for seconds after every tick. It still starts over
+/// when the counter's epoch changes or a folder is renamed, since every item names its folder.
+/// Core Spotlight's index is on-device, so nothing leaves the phone.
 @MainActor
 final class SpotlightIndexer {
     nonisolated static let domain = "app.pikos.pages"
@@ -71,19 +61,15 @@ final class SpotlightIndexer {
     private static let foldersKey = "pikos.spotlight.folders"
     private nonisolated static let batchSize = 1_000
 
-    /// Forget everything, for "Delete all data".
-    ///
-    /// The one place a stale index would be worse than a missing one: a phone
-    /// wiped of its notes must not keep offering their titles from the home
-    /// screen.
+    /// Forget everything, for "Delete all data": a phone wiped of its notes must not keep offering
+    /// their titles from the home screen.
     static func clear() async {
         for key in [seqKey, epochKey, foldersKey] { UserDefaults.standard.removeObject(forKey: key) }
         try? await CSSearchableIndex.default().deleteSearchableItems(
             withDomainIdentifiers: [domain])
     }
 
-    /// The page a Spotlight result names, or nil for an activity that is not
-    /// one of ours.
+    /// The page a Spotlight result names, or nil for an activity that is not one of ours.
     static func pageId(from activity: NSUserActivity) -> String? {
         guard activity.activityType == CSSearchableItemActionType else { return nil }
         return activity.userInfo?[CSSearchableItemActivityIdentifier] as? String

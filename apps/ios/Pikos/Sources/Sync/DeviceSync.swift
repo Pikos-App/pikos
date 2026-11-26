@@ -6,10 +6,9 @@ import PikosSync
 import UIKit
 import os
 
-/// iCloud sync on this device: whether it's on, what it's doing, and what Settings offers about it.
-/// Whether it's on lives in the workspace, so it survives a relaunch. A build syncs only when its
-/// Info.plist names a container: the staging build does, and the release build will once the
-/// production container is set up for its app id.
+/// iCloud sync on this device: whether it's on, what it's doing, and what Settings offers about
+/// it. Whether it's on lives in the workspace, so it survives a relaunch. A build syncs only when
+/// its Info.plist names a container.
 @MainActor @Observable
 final class DeviceSync {
     static let container: String? = {

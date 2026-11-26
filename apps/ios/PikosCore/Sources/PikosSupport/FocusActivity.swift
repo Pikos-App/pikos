@@ -4,21 +4,15 @@
 
     /// A focus session, as the Dynamic Island and the lock screen see it.
     ///
-    /// Declared here, in the package both processes link, because a Live
-    /// Activity is drawn by the widget extension from a value the app
-    /// requested — and two declarations of the same attributes in two targets
-    /// are two types the system cannot match. Behind `os(iOS)` because the
-    /// package also builds for the Mac that runs its tests: ActivityKit
-    /// *imports* on macOS — `canImport` is true there — and every type in it
-    /// is then marked unavailable, so only the platform test excludes this.
+    /// Declared in the package both processes link: two declarations of the same
+    /// attributes in two targets are two types the system cannot match. Behind
+    /// `os(iOS)` because ActivityKit imports on macOS (`canImport` is true) with
+    /// every type unavailable, so only the platform test excludes this.
     ///
-    /// The state is only the start instant. The island's own timer text counts
-    /// up from it, kept current by the system, so the app never has to push an
-    /// update to keep the number honest — the same reason the in-app clock is
-    /// recomputed from the start rather than incremented.
+    /// The state is only the start instant: the island's timer text counts up
+    /// from it, so the app never pushes an update.
     public struct FocusActivityAttributes: ActivityAttributes {
         public struct ContentState: Codable, Hashable {
-            /// When the session began. The island counts up from here.
             public var startedAt: Date
 
             public init(startedAt: Date) {
@@ -26,12 +20,9 @@
             }
         }
 
-        /// The page being focused on, so a tap on the island opens it.
         public var pageId: String
-        /// Its title at the moment the session started. A rename mid-session
-        /// is not reflected — the island is a glance, not a mirror — and the
-        /// title is the one thing the widget process cannot cheaply read for
-        /// itself without opening the database from an extension.
+        /// Its title when the session started; a rename mid-session is not
+        /// reflected, since the widget process cannot cheaply open the database.
         public var title: String
 
         public init(pageId: String, title: String) {

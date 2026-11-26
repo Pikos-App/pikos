@@ -4,15 +4,11 @@ import Foundation
 ///
 /// The desktop's four modes (`SortMode` in `@pikos/core`), with the same
 /// rules: manual is the hand-arranged `sort_order`; date puts the unscheduled
-/// last and an all-day page dated today at *now*, so it lands between what
-/// has passed and what has not; priority runs urgent to low with "none" last
-/// and dates breaking ties; title is the reader's own collation. Here rather
-/// than in the app so the rules can be tested on the host — the two that go
-/// wrong quietly are the unscheduled sinking and the all-day-today placement,
-/// and neither needs a simulator to check.
+/// last and an all-day page dated today at now; priority runs urgent to low with
+/// "none" last and dates breaking ties; title uses the reader's collation.
 ///
-/// Generic over the page, because the summary type is generated and lives in
-/// a package this one cannot see; the caller hands over the four facts.
+/// Generic over the page because the summary type is generated in a package
+/// this one cannot see; the caller hands over the four facts.
 public enum PageSort {
     public enum Mode: String, CaseIterable, Sendable {
         case manual, date, title, priority
@@ -44,11 +40,10 @@ public enum PageSort {
         }
     }
 
-    /// The pages in the mode's order. Stable, so equal keys keep their
-    /// incoming order — which for manual is the workspace's own.
+    /// The pages in the mode's order. Stable: equal keys keep their incoming order.
     ///
-    /// `now` is a wall clock (`YYYY-MM-DDTHH:MM:SS`), passed in rather than
-    /// read so the all-day-today rule is testable on both sides of a minute.
+    /// `now` is a wall clock (`YYYY-MM-DDTHH:MM:SS`), passed in so tests can
+    /// stand on both sides of a minute.
     public static func order<Page>(
         _ pages: [Page], by mode: Mode, now: String, key: (Page) -> Key
     ) -> [Page] {
@@ -90,10 +85,8 @@ public enum PageSort {
 
     /// A wall clock every stored value can be compared as.
     ///
-    /// Zero-padded ISO compares correctly as text, which is what lets this
-    /// stay string arithmetic. A timed value is already one. An all-day value
-    /// dated today becomes *now*, so it sits between the morning's passed
-    /// meetings and the afternoon's; any other all-day value becomes its
+    /// A timed value is already one. An all-day value dated today becomes now,
+    /// between the passed meetings and the coming ones; any other becomes its
     /// midnight, ahead of everything timed that day.
     static func instant(of iso: String, now: String) -> String {
         guard !iso.contains("T") else { return iso }

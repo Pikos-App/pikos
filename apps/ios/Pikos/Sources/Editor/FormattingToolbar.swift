@@ -3,24 +3,12 @@ import SwiftUI
 
 /// The formatting controls above the keyboard.
 ///
-/// Native, driven in both directions: active states come from the editor's
-/// `selectionChanged` messages, and taps go back through `EditorController`.
-/// The editor reports on focus as well as on movement precisely so this can be
-/// correct the moment the user taps in — a toolbar that only heard about
-/// movement would show the previous page's state.
-///
-/// What is on the bar itself is what a phone reaches for while typing a note:
-/// bold, italic, a bullet list, a checklist, a photo. Everything else —
-/// underline, strikethrough, inline code, headings, numbered lists, quotes,
-/// code blocks — is one tap away under "Aa", the way Notes arranges it. All
-/// fourteen in a row was 616 points of controls on a 390-point screen, with
-/// strikethrough and inline code on the first screen and the checklist off it.
-///
-/// The last control puts the keyboard away. A webview's keyboard has no
-/// "Done" of its own, and a text surface that fills the screen leaves nowhere
-/// else to tap to dismiss it — so without this the only way to see the whole
-/// page again is to scroll the keyboard off interactively, which nobody
-/// discovers by accident.
+/// Active states come from the editor's `selectionChanged` messages, which it reports on focus as
+/// well as movement so the bar is right the moment the user taps in. Taps go back through
+/// `EditorController`. The bar holds what a phone reaches for while typing and the rest is under
+/// "Aa", as in Notes: all fourteen in a row was 616 points on a 390-point screen. The last
+/// control puts the keyboard away, since a webview's keyboard has no "Done" and the text surface
+/// fills the screen.
 struct FormattingToolbar: View {
     let selection: EditorSelection
     let controller: EditorController
@@ -64,12 +52,8 @@ struct FormattingToolbar: View {
         .padding(.horizontal, 4)
     }
 
-    /// The rest of the formatting, with the current state ticked.
-    ///
-    /// A menu rather than a second row: it costs one tap for the rarer
-    /// controls and nothing for the common ones, and it stays readable at
-    /// the accessibility text sizes, where a second row of icons would not
-    /// fit either.
+    /// The rest of the formatting, with the current state ticked. A menu, not a second row, which
+    /// would not fit at the accessibility text sizes either.
     private var moreMenu: some View {
         Menu {
             Section("Text") {
@@ -96,9 +80,7 @@ struct FormattingToolbar: View {
         .accessibilityLabel("More formatting")
     }
 
-    /// Whether something behind the menu is active at the caret, so the
-    /// button can say so without being opened — a heading the bar would
-    /// otherwise show no sign of.
+    /// Whether something behind the menu is active at the caret, so the button shows it unopened.
     private var hasActiveExtra: Bool {
         let extraMarks: [EditorController.Mark] = [.underline, .strike, .code]
         if extraMarks.contains(where: { selection.marks.contains($0.rawValue) }) { return true }

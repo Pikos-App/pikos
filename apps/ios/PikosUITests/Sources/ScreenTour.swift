@@ -3,9 +3,9 @@ import XCTest
 /// Every screen, sheet, dialog, menu and popover, screenshotted for design review.
 ///
 /// Not part of the tier-1 gate: run it on its own with `-only-testing:PikosUITests/ScreenTour`
-/// and export the attachments. Each screenshot is named `section|order|title`, which is what the
-/// PDF script sorts and captions by. A surface the tour cannot reach is recorded in a `missed`
-/// attachment instead of failing the run, so one moved label does not cost the other sixty shots.
+/// and export the attachments. Each screenshot is named `section|order|title`, which the PDF
+/// script sorts and captions by. A surface the tour cannot reach goes in a `missed` attachment
+/// instead of failing the run.
 final class ScreenTour: PikosUITestCase {
     override class var launchEnvironment: [String: String] { ["PIKOS_DEMO": "1"] }
 

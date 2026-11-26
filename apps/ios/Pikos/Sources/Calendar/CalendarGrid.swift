@@ -4,9 +4,7 @@ import SwiftUI
 
 /// The day columns: an all-day band at the top, an hour grid below.
 ///
-/// Takes entries already resolved for the range — real pages and the occurrences projected from
-/// recurrence rules, indistinguishable by the time they get here. Structure comes from the shared
-/// Rust; this turns it into points, drawn the way the desktop draws its week.
+/// Entries arrive resolved for the range: pages and projected occurrences look the same here.
 struct CalendarGrid: View {
     let days: [String]
     let entries: [CalendarEntry]
@@ -31,7 +29,6 @@ struct CalendarGrid: View {
     /// A block given a new time by an edge: the page as it was, and its new start and end.
     let onReschedule: (PageFacts, String, String?) -> Void
 
-    /// The press is the one gesture on the grid with no visible target, so it is felt.
     /// The block a press on empty grid is drawing out, until the finger lifts.
     @State private var stretch: Stretch?
     /// A block whose edge is being drawn, and the minute the finger is at.
@@ -370,8 +367,6 @@ struct CalendarGrid: View {
                     let cascadeStep = CalendarGeometry.cascadeInset(depth: 1, columnWidth: columnWidth)
                     // Beside the block rather than inside it, where its menu and lift took the touch.
                     ForEach([CalendarGeometry.BlockEdge.top, .bottom], id: \.self) { edge in
-                        // Mostly outside the block, so the finger that meant the edge isn't
-                        // taken by the block's own hold.
                         let top = max(
                             0,
                             edge == .top
@@ -526,8 +521,7 @@ struct CalendarGrid: View {
     }
 
     /// A press held on empty grid drops a quarter-hour block there, and the finger then draws it
-    /// out (`PKOS-0149`). Let go without moving off that quarter, it opens quick add on the slot
-    /// with no length, as a plain press always has.
+    /// out. Let go without moving off that quarter, it opens quick add with no length.
     private func create(day: String, from start: CGPoint, to now: CGPoint) {
         let drawn = stretched(day: day, from: start, to: now)
         let pressed = CalendarGeometry.slotMinute(atY: start.y, metrics: metrics, slotMinutes: 15)
@@ -760,7 +754,6 @@ struct CalendarGrid: View {
     }
 }
 
-/// The day and quarter hour a carried block is over.
 /// What the grid's gestures feel like: a thud when a block appears under a held finger or a grip
 /// takes hold, a tick for each quarter hour it is drawn across, and a success on a drop.
 private struct GridFeedback: ViewModifier {
@@ -780,8 +773,8 @@ private struct GridFeedback: ViewModifier {
     }
 }
 
-/// Records the hour at the top of the grid as the person scrolls. iOS 17 has no scroll geometry
-/// to read, so there the grid opens on the hour before now, as it always did.
+/// Records the hour at the top of the grid as the person scrolls. iOS 17 has no scroll
+/// geometry to read, so there the grid opens on the hour before now.
 private struct RemembersTopHour: ViewModifier {
     let hourHeight: CGFloat
     let topInset: CGFloat

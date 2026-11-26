@@ -1,41 +1,25 @@
-// UIKit-only, and gated so it says so.
-//
-// `UIViewRepresentable`, `UIScrollView` and `UIColor` exist only where UIKit
-// does. Without this guard the package cannot build for the host at all, which
-// would mean `swift test --package-path apps/ios/PikosEditorBridge` had to go
-// through a simulator — minutes instead of seconds — to run protocol and
-// scheme-handler tests that touch no webview.
 #if canImport(UIKit)
 
 import SwiftUI
 import WebKit
 
 /// The editor, as a SwiftUI view.
-///
-/// This is the M0 spike's subject: whether a WKWebView can host the Tiptap
-/// editor well enough to be the one non-native surface in an otherwise native
-/// app. Everything here exists to give that question a fair test — the
-/// measurements in `EditorMetrics`, the keyboard and scroll configuration, and
-/// the single-document load.
 public struct EditorWebView: UIViewRepresentable {
     /// Document to show. Changing the page id loads it; changing the JSON alone
-    /// does not, since the editor is the authority on its own content once
-    /// loaded and re-pushing it would fight the user's cursor.
+    /// does not, since re-pushing it would fight the user's cursor.
     public let pageId: String
     public let documentJSON: String
 
     public let assetRoot: URL
 
-    /// Handle for sending commands in. Optional because a read-only editor
-    /// needs none, and passing one that is never used would suggest otherwise.
+    /// Handle for sending commands in; a read-only editor needs none.
     public var controller: EditorController?
     public var colorScheme: ColorScheme = .light
     public var accentColor: String = "#d1603d"
 
     /// Whether the surface takes input. False for a page written by a newer
-    /// schema than this build can save: refusing to save is not enough on its
-    /// own, because a surface that still accepts keystrokes and drops them
-    /// reads as the app losing work rather than protecting it.
+    /// schema than this build can save: a surface that accepts keystrokes and
+    /// drops them reads as the app losing work.
     public var isEditable: Bool = true
 
     /// Fired when the document changes, already debounced in the webview.
@@ -44,16 +28,13 @@ public struct EditorWebView: UIViewRepresentable {
     /// Fired when the selection moves; drives a native formatting toolbar.
     public var onSelectionChanged: (_ marks: [String], _ nodeType: String, _ isEmpty: Bool) -> Void
 
-    /// Fired when a link is tapped. The webview does not navigate — the host
-    /// decides, so a tap inside a note cannot take the user out of the app
-    /// unexpectedly.
+    /// Fired when a link is tapped. The webview never navigates; the host decides.
     public var onLinkTapped: (URL) -> Void
 
     /// Fired when the user asks to insert an image.
     public var onImageRequested: () -> Void
 
     /// Fired once the editor reports ready, with how long the cold load took.
-    /// M0's pass bar is < 300 ms on iPhone 12-class hardware.
     public var onReady: (_ loadDuration: TimeInterval) -> Void
 
     /// How long the keystrokes since the last report took to reach the screen, in milliseconds.
@@ -101,9 +82,6 @@ public struct EditorWebView: UIViewRepresentable {
         )
         configuration.userContentController.add(context.coordinator, name: Self.messageHandlerName)
 
-        // The editor manages its own focus through the bridge, so the webview
-        // must not require a tap to bring the keyboard up when the host calls
-        // focus().
         configuration.allowsInlineMediaPlayback = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -111,20 +89,15 @@ public struct EditorWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .clear
 
-        // The editor is a text surface, not a web page. Bounce and zoom both
-        // read as bugs here, and a nested scroll view inside a SwiftUI
-        // ScrollView is the "scroll-in-scroll" problem M0 is asked to measure —
-        // so the webview scrolls itself and the host must not wrap it.
+        // The webview scrolls itself, so the host must not wrap it in a
+        // ScrollView; bounce reads as a bug on a text surface.
         webView.scrollView.bounces = false
         webView.scrollView.alwaysBounceVertical = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.keyboardDismissMode = .interactive
 
         #if DEBUG
-        // Safari's Web Inspector can attach to the editor on a debug build,
-        // which is the only practical way to diagnose a layout problem inside
-        // the webview on a real device. No availability check: `isInspectable`
-        // arrived in 16.4 and this package's floor is iOS 17.
+        // Lets Safari's Web Inspector attach on a debug build.
         webView.isInspectable = true
         #endif
 
@@ -134,19 +107,14 @@ public struct EditorWebView: UIViewRepresentable {
         controller?.attach(context.coordinator)
 
         context.coordinator.loadStartedAt = Date()
-        // Loaded through the scheme handler rather than loadFileURL so the
-        // document and its images share one origin.
+        // Through the scheme handler, not loadFileURL, so the document and its images share one origin.
         webView.load(URLRequest(url: EditorAssetSchemeHandler.editorURL))
         return webView
     }
 
-    /// Unregister the message handler when the view goes away.
-    ///
-    /// `WKUserContentController` holds its handlers strongly, so the
-    /// coordinator — and through the configuration, the webview — would outlive
-    /// the view without this. Pushing and popping editor screens would then
-    /// accumulate a webview apiece, which on a phone is the kind of leak that
-    /// ends in a jetsam kill rather than a visible bug.
+    /// `WKUserContentController` holds its handlers strongly, so without this the
+    /// coordinator and webview outlive the view, and each pushed editor screen
+    /// leaks a webview until a jetsam kill.
     public static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
         webView.navigationDelegate = nil
@@ -177,17 +145,12 @@ public struct EditorWebView: UIViewRepresentable {
         }
     }
 
-    /// Name the webview posts messages under. Declared once so registration
-    /// and teardown cannot drift — a mismatch there would silently leak.
+    /// Shared by registration and teardown; a mismatch would silently leak.
     static let messageHandlerName = "pikos"
 
-    /// The built editor, copied into the package's resources by
-    /// scripts/build-editor-bundle.sh.
     static func bundleURL() -> URL {
         guard let url = Bundle.module.url(forResource: "editor", withExtension: "html") else {
-            // A clear failure beats a blank screen: the bundle is a build
-            // artifact, and a fresh checkout will not have it until the script
-            // has run once.
+            // A fresh checkout lacks the bundle; fail clearly rather than show a blank screen.
             fatalError(
                 "editor.html is missing from the bundle. Run scripts/build-editor-bundle.sh."
             )
@@ -195,24 +158,19 @@ public struct EditorWebView: UIViewRepresentable {
         return url
     }
 
-    // MARK: - Coordinator
-
     public final class Coordinator: NSObject, EditorMessageSink, WKScriptMessageHandler,
         WKNavigationDelegate
     {
         var parent: EditorWebView
-        /// The webview this coordinator drives. Weak because the webview owns
-        /// its configuration, which owns this through the message handler.
+        /// Weak because the webview owns its configuration, which owns this through the message handler.
         weak var webView: WKWebView?
         var isReady = false
         var loadedPageId: String?
         var appliedTheme: String?
-        /// The editor starts editable, so `nil` here and `true` in the view
-        /// agree without a message; only a locked page costs one.
+        /// The editor starts editable, so `nil` agrees with `true` without a message.
         var appliedEditable: Bool?
         var loadStartedAt: Date?
-        /// Held so `dismantleUIView` can detach it — the view itself is a value
-        /// type and will not be the same instance by then.
+        /// Held so `dismantleUIView` can detach it: the view is a value type.
         var controller: EditorController?
 
         init(_ parent: EditorWebView) {
@@ -220,8 +178,6 @@ public struct EditorWebView: UIViewRepresentable {
             self.controller = parent.controller
         }
 
-        /// `EditorMessageSink`. The controller has no webview of its own, so
-        /// the one attached in `makeUIView` is the one commands go to.
         func deliver(_ message: EditorBridge.Outgoing) {
             guard let webView else { return }
             send(message, on: webView)
@@ -230,9 +186,8 @@ public struct EditorWebView: UIViewRepresentable {
         func send(_ message: EditorBridge.Outgoing, on webView: WKWebView) {
             do {
                 let json = try message.encoded()
-                // Passed as a literal argument rather than interpolated into a
-                // statement, so document content containing quotes or newlines
-                // cannot break out of the expression.
+                // Passed as a literal argument so document content with quotes or
+                // newlines cannot break out of the expression.
                 webView.evaluateJavaScript("window.pikosEditor.receive(\(json))")
             } catch {
                 assertionFailure("could not encode a bridge message: \(error)")
@@ -251,10 +206,8 @@ public struct EditorWebView: UIViewRepresentable {
             do {
                 incoming = try JSONDecoder().decode(EditorBridge.Incoming.self, from: data)
             } catch let failure as EditorBridge.Incoming.DecodingFailure {
-                // A version or type mismatch means the webview and the shell
-                // disagree, which is a build problem rather than a runtime one.
-                // Loud in debug, ignored in release — dropping a message the
-                // host cannot understand is better than acting on a guess.
+                // A mismatch is a build problem: loud in debug, and in release
+                // dropping a message beats acting on a guess.
                 assertionFailure("editor bridge rejected a message: \(failure)")
                 return
             } catch {
@@ -281,9 +234,7 @@ public struct EditorWebView: UIViewRepresentable {
                     send(
                         .setTheme(.init(accent: parent.accentColor, scheme: appliedTheme ?? "light")),
                         on: webView)
-                    // Sent before the document can take a keystroke, so a
-                    // locked page is never editable for the beat between
-                    // ready and the first update pass.
+                    // Sent now so a locked page is never editable before the first update pass.
                     if !parent.isEditable {
                         appliedEditable = false
                         send(.setEditable(.init(editable: false)), on: webView)
@@ -308,9 +259,7 @@ public struct EditorWebView: UIViewRepresentable {
                 parent.onInputTiming(payload.count, payload.medianMs, payload.worstMs)
 
             case .heightChanged:
-                // Only meaningful for a host that sizes the webview inline. This
-                // one lets the webview scroll itself, so the message is ignored
-                // rather than acted on — see the scrollView configuration above.
+                // Only a host that sizes the webview inline needs it; this one lets it scroll itself.
                 break
             }
         }
@@ -320,15 +269,8 @@ public struct EditorWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            // The editor is a local document and must never navigate away from
-            // itself. Exactly one URL is permitted — the editor's own — and
-            // everything else is refused, including a link the user taps, which
-            // is reported to the host instead so the app decides what to do
-            // with it.
-            //
-            // An allowlist rather than a denylist: a page is user content, and
-            // enumerating the ways content could try to navigate is a losing
-            // game.
+            // Allowlist: only the editor's own URL. A tapped link is refused and
+            // reported to the host. Not a denylist, since page content is user-controlled.
             guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
                 return
@@ -348,16 +290,14 @@ public struct EditorWebView: UIViewRepresentable {
 }
 
 extension WKWebView {
-    /// Replace WebKit's form bar, the previous, next and done row it puts over the keyboard, with an
-    /// empty one.
+    /// Replace WebKit's form bar (previous, next, done) with an empty one: a document has no
+    /// fields, so it was a second bar under the host's formatting row.
     ///
-    /// It is for stepping between the fields of a web form, and a document has none, so above the
-    /// editor it was a second bar under the host's own formatting row. WebKit offers no switch for
-    /// it: the view that owns the keyboard is a private content view, so this gives that one
-    /// instance a subclass whose `inputAccessoryView` is an empty view. Empty rather than nil: with
-    /// a hardware keyboard the accessory is the only thing iOS shows, and with none the keyboard
-    /// notifications the host's formatting row waits for never arrive. If a future WebKit renames
-    /// the view, nothing matches and the bar simply comes back.
+    /// WebKit offers no switch, and the view owning the keyboard is a private content view, so
+    /// that instance gets a subclass whose `inputAccessoryView` is an empty view. Empty rather
+    /// than nil: with a hardware keyboard the accessory is all iOS shows, and with none the
+    /// keyboard notifications the formatting row waits for never arrive. If a future WebKit
+    /// renames the view, nothing matches and the bar comes back.
     func hidesFormAccessory() {
         guard
             let content = scrollView.subviews.first(where: {

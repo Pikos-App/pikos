@@ -4,36 +4,26 @@ import PikosSupport
 import SwiftUI
 import WidgetKit
 
-/// What every widget in the bundle shares: how it opens the workspace, how it
-/// draws a page, and how it names a time.
-///
-/// One file rather than a copy per widget, for the reason the app's
-/// `PageRow` is one view: widgets each drawing their own row is how the
-/// ring ends up a different size on the lock screen than on the home screen,
-/// and a reader who has learned one is wrong-footed by the next.
+/// What every widget in the bundle shares: how it opens the workspace, how it draws a page, and
+/// how it names a time. One file so each widget doesn't draw its own row, which is how the ring
+/// ends up a different size on the lock screen than on the home screen.
 
 // MARK: - Opening the workspace
 
 enum WidgetWorkspace {
-    /// The workspace, read-only, or a thrown error naming why not.
-    ///
-    /// `openExisting` never creates a database and never migrates. A widget
-    /// that woke before the app has ever run must show nothing, not leave an
-    /// empty workspace behind for the app to find.
+    /// The workspace, read-only, or a thrown error naming why not. `openExisting` never creates or
+    /// migrates: a widget woken before the app has run must show nothing, not leave an empty
+    /// workspace behind.
     static func open() async throws -> ReadOnlyWorkspace {
         let url = try WorkspaceLocation.databaseURL()
         return try await ReadOnlyWorkspace.openExisting(path: url.path)
     }
 }
 
-/// A completion handler WidgetKit gave us, carried into a `Task`.
-///
-/// `TimelineProvider` hands over plain closures, and under strict concurrency a
-/// plain closure cannot be captured by the `@Sendable` closure a `Task` runs.
-/// The handler is only ever called once, from the task that owns this box, so
-/// the sharing the checker objects to never happens — hence `@unchecked`. A
-/// box rather than an `async` provider because `StaticConfiguration` has no
-/// async variant of this protocol to adopt.
+/// A completion handler WidgetKit gave us, carried into a `Task`. Under strict concurrency a plain
+/// closure can't be captured by the `@Sendable` closure a `Task` runs; the handler is called once,
+/// from the task that owns this box, so the sharing the checker objects to never happens. A box,
+/// not an async provider, because `StaticConfiguration` has no async variant of this protocol.
 struct Completion<Value>: @unchecked Sendable {
     let call: (Value) -> Void
 }
@@ -41,10 +31,8 @@ struct Completion<Value>: @unchecked Sendable {
 // MARK: - Time
 
 enum WidgetClock {
-    /// Now, as the wall-clock string the workspace compares schedules
-    /// against: `2026-09-14T15:04`. Built from Gregorian components like the
-    /// storage key in `DayLabel.today`, for the same reason — this is
-    /// compared to stored strings, not shown.
+    /// Now, as the wall-clock string the workspace compares schedules against (`2026-09-14T15:04`),
+    /// built from Gregorian components like `DayLabel.today` since it is compared, not shown.
     static func now(_ date: Date = Date(), calendar: Calendar = .current) -> String {
         var gregorian = Calendar(identifier: .gregorian)
         gregorian.timeZone = calendar.timeZone
@@ -61,8 +49,8 @@ enum WidgetClock {
         return DayLabel.today(calendar, now: target)
     }
 
-    /// The next hour boundary — when an item can become overdue — for the
-    /// widgets whose content changes with the clock rather than with a write.
+    /// The next hour boundary, when an item can become overdue, for the widgets that change with the
+    /// clock rather than with a write.
     static func nextHour(after date: Date = .now) -> Date {
         Calendar.current.nextDate(
             after: date, matching: DateComponents(minute: 0), matchingPolicy: .nextTime)
@@ -70,11 +58,8 @@ enum WidgetClock {
     }
 }
 
-/// A page's time of day as an instant, or nil for an all-day page.
-///
-/// The stored value is a wall clock, resolved in the reader's own zone by
-/// `StorageTimestamp` — the same reading the app's list makes, so a widget
-/// and the list never disagree by an hour.
+/// A page's time of day as an instant, or nil for an all-day page. Resolved by `StorageTimestamp`
+/// as the app's list does, so a widget and the list never disagree by an hour.
 func timeOfDay(_ page: PageSummary) -> Date? {
     guard let start = page.scheduledStart, start.contains("T") else { return nil }
     return StorageTimestamp.wallClock(start)
@@ -128,14 +113,9 @@ func displayTitle(_ page: PageSummary) -> String {
     page.title.isEmpty ? String(localized: "Untitled") : page.title
 }
 
-/// One page: a ring that finishes it and a title that opens it.
-///
-/// The ring is a real button, so a task can be ticked from the home screen
-/// without the app ever coming to the front — the thing a widget is for. The
-/// title opens its page where there is room to aim; on the small size it
-/// falls through to the widget's own link, since three rows in a two-inch
-/// square are not something a thumb can pick between — but the ring is a
-/// target of its own even there.
+/// One page: a ring that finishes it and a title that opens it. The ring is a real button, so a
+/// task can be ticked without the app coming to the front. The title links to its page where
+/// there is room to aim; on the small size it falls through to the widget's own link.
 struct WidgetPageRow: View {
     let page: PageSummary
     /// Whether the title is its own link to the page.
@@ -151,9 +131,7 @@ struct WidgetPageRow: View {
                 Image(systemName: isDone ? "checkmark.square.fill" : "square")
                     .font(.caption2)
                     .foregroundStyle(isDone ? WidgetInk.secondary : ringColor(priority: page.priority))
-                    // Drawn dimmed while the tap is being written, so the
-                    // moment between the touch and the reload reads as
-                    // "working" rather than "ignored".
+                    // Drawn dimmed while the tap is being written, so the gap reads as working, not ignored.
                     .invalidatableContent()
             }
             .buttonStyle(.plain)
@@ -183,11 +161,8 @@ struct WidgetPageRow: View {
     }
 }
 
-/// The sentence a widget shows instead of rows.
-///
-/// A broken widget and an empty one look identical otherwise, and the usual
-/// cause of the first is an App Group that is not configured — so a failure
-/// is said, not swallowed.
+/// The sentence a widget shows instead of rows: a broken widget and an empty one look identical
+/// otherwise, and the usual cause is an unconfigured App Group, so a failure is said.
 struct WidgetNote: View {
     let text: LocalizedStringKey
 
@@ -198,10 +173,8 @@ struct WidgetNote: View {
     }
 }
 
-/// The time a page is due, as the short day-and-time the app's rows use.
-///
-/// `today` is passed rather than read so a timeline entry rendered after
-/// midnight does not disagree with itself about which day is "Today".
+/// The time a page is due, as the short day-and-time the app's rows use. `today` is passed so an
+/// entry rendered after midnight doesn't disagree with itself about which day is "Today".
 func dueLabel(_ page: PageSummary, today: String) -> String? {
     guard let start = page.scheduledStart, let day = CalendarGeometry.day(of: start) else {
         return nil

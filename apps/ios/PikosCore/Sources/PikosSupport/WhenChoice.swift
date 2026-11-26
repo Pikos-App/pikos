@@ -77,9 +77,8 @@ public enum ScheduleShift {
 public enum TodayGrouping {
     /// Whether a late page belongs under Overdue: only when its day is before today.
     ///
-    /// The workspace calls a timed page late the moment its time passes. Grouping that under
-    /// Overdue put a meeting in progress beside last week's backlog, and Move to today, which
-    /// only moves earlier days, then left most of the section where it was.
+    /// The workspace calls a timed page late the moment its time passes, which
+    /// would put a meeting in progress beside last week's backlog.
     public static func isFromAnEarlierDay(_ scheduledStart: String?, today: String) -> Bool {
         guard let scheduledStart else { return false }
         return String(scheduledStart.prefix(10)) < today

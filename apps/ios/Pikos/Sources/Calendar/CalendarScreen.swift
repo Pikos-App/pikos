@@ -4,10 +4,8 @@ import SwiftUI
 
 /// The week pane.
 ///
-/// Owns one question — which days are on screen — and asks the workspace for everything to draw
-/// on them. Three days by default on a phone, the count the desktop draws at its narrowest; the
-/// title's menu offers one day or seven. A swipe pages, and the header keeps the desktop's
-/// chevrons and Today for anyone who would rather tap.
+/// Owns one question, which days are on screen, and asks the workspace for everything to draw
+/// on them. A swipe pages; the header keeps the desktop's chevrons and Today for tapping.
 struct CalendarScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -15,9 +13,8 @@ struct CalendarScreen: View {
     @Environment(\.shellLayout) private var layout
 
     @State private var entries: [CalendarEntry] = []
-    /// False until the first range has arrived. Only that first wait shows a
-    /// spinner; every later one keeps the grid up while the next range loads,
-    /// so paging through weeks does not flash to a blank between each.
+    /// False until the first range has arrived, so only the first wait shows a spinner and
+    /// paging keeps the grid up.
     @State private var hasLoaded = false
     @State private var now = WallClockDay.instant(from: Date())
     @State private var moving: Moving?
@@ -27,19 +24,14 @@ struct CalendarScreen: View {
     @State private var isJumping = false
     /// Which way the last step went, so the grid slides in from that side.
     @State private var steppedForward = true
-    /// What the week strip's dots are drawn from: the whole week around the
-    /// day on screen, fetched only in day view, where the strip is.
+    /// What the week strip's dots are drawn from, fetched only in day view, where the strip is.
     @State private var weekEntries: [CalendarEntry] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Moves the current-time line without a timer.
-    ///
-    /// A calendar left open is usually a calendar in the background. Re-reading
-    /// the clock on the way back to the foreground covers the case that
-    /// matters — coming back to a line an hour out of date — where a ticking
-    /// timer would spend battery all day to fix a line nobody is looking at.
+    /// Moves the current-time line without a timer: re-reading the clock on foreground return
+    /// fixes the line that matters, where a ticking timer would burn battery all day.
     @Environment(\.scenePhase) private var scenePhase
 
     private var anchor: Date {
@@ -58,10 +50,7 @@ struct CalendarScreen: View {
         }
         return span
     }
-    /// The reader's calendar with their week-start preference applied. Every
-    /// piece of date arithmetic here goes through it — a week that started on
-    /// Sunday in the grid while the setting said Monday was exactly the bug
-    /// `Calendar.current` invites.
+    /// Every date computation goes through it: `Calendar.current` ignores the week-start setting.
     private var calendar: Calendar { settings.calendar }
 
     private var days: [Date] { effectiveSpan.days(anchoredOn: anchor, calendar: calendar) }
@@ -92,14 +81,11 @@ struct CalendarScreen: View {
         // broke a letter to a line and the week strip's dates became ellipses.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .pkQuick, value: dayStrings.first)
-        // The swipe below is a gesture VoiceOver does not pass through; the
-        // chevrons remain, and these put the same two moves on the rotor so
-        // the grid itself can be paged without hunting for them.
+        // VoiceOver doesn't pass the swipe through, so the same two moves go on the rotor.
         .accessibilityAction(named: "Next \(effectiveSpan.label.lowercased())") { step(by: 1) }
         .accessibilityAction(named: "Previous \(effectiveSpan.label.lowercased())") { step(by: -1) }
-        // A horizontal swipe pages the range; a vertical one still scrolls the
-        // hours, because the grid's own scroll view fails a pan that is mostly
-        // sideways and this one ignores a pan that is mostly up-and-down.
+        // A horizontal swipe pages; a vertical one still scrolls the hours, because the grid's
+        // scroll view fails a mostly sideways pan and this one ignores a mostly vertical one.
         .simultaneousGesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { value in
@@ -129,19 +115,13 @@ struct CalendarScreen: View {
             anchor = focus
             route.weekFocus = nil
         }
-        // Keyed on the range *and* on the workspace's version. The range half
-        // means swiping to another week cancels the query for the one being
-        // left rather than racing it. The version half means a page completed
-        // in the editor is not still sitting there undone when the user comes
-        // back — the calendar's data is not `store.pages`, so it has nothing
-        // else to observe.
+        // Keyed on the range and the version: the range cancels the query for the week being
+        // left, and the version refreshes after an editor change, since this isn't `store.pages`.
         .task(id: reloadKey) {
             now = WallClockDay.instant(from: Date())
             entries = await store.calendarRange(
                 from: dayStrings.first ?? "", to: dayStrings.last ?? "")
             hasLoaded = true
-            // The strip's week, after the day it is under: the day is what
-            // the reader is waiting for, the dots are context.
             if let first = stripDayStrings.first, let last = stripDayStrings.last {
                 weekEntries = await store.calendarRange(from: first, to: last)
             } else {
@@ -160,8 +140,7 @@ struct CalendarScreen: View {
         #endif
     }
 
-    /// Over the calendar rather than above it, the way the view switcher drops over the list, so
-    /// opening it does not shove the days down.
+    /// Over the calendar rather than above it, so opening it does not shove the days down.
     private var jumpLayer: some View {
         GeometryReader { geometry in
             ZStack(alignment: .top) {
@@ -250,10 +229,8 @@ struct CalendarScreen: View {
                     }
                 )
                 .contentMargins(.bottom, ShellBar.clearance, for: .scrollContent)
-                // A new identity per range is what lets the grid slide rather
-                // than redraw in place when the user pages. A dissolve under
-                // Reduce Motion: the direction is a nicety, the new day is
-                // the content.
+                // A new identity per range lets the grid slide rather than redraw; a dissolve under
+                // Reduce Motion.
                 .id(dayStrings.first ?? "")
                 .transition(
                     reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
@@ -294,20 +271,14 @@ struct CalendarScreen: View {
     }
 
     /// A long press on empty grid: quick add, already set to that slot.
-    ///
-    /// The desktop's "click a time slot to create a page", as a phone does
-    /// it. The sheet opens with the day and time in its picker and the field
-    /// focused, so the sentence typed names the page and nothing else.
     private func create(on day: String, at minute: Int, minutes: Int?) {
         let iso = CalendarGeometry.wallClock(day: day, minute: minute)
         guard let date = StorageTimestamp.wallClock(iso) else { return }
         route.presentQuickAdd(at: date, minutes: minutes, from: store)
     }
 
-    /// Opening a page from the calendar goes through the same stack the list
-    /// uses. A virtual occurrence opens its head page — editing one occurrence
-    /// on its own would have to materialise a row first, which is a feature and
-    /// not a side effect of tapping.
+    /// Opens through the list's stack. A virtual occurrence opens its head page: editing one
+    /// occurrence alone would have to materialise a row first.
     private func openPage(_ pageId: String) {
         route.open(page: pageId)
     }
@@ -319,11 +290,8 @@ struct CalendarScreen: View {
 
     // MARK: - Acting on one occurrence
 
-    /// The occurrence whose move sheet is open.
-    ///
-    /// A wrapper because `sheet(item:)` needs `Identifiable` and the generated
-    /// records are not. `key` is the identity being borrowed — it is distinct
-    /// per drawn occurrence, which `page_id` deliberately is not.
+    /// A wrapper because `sheet(item:)` needs `Identifiable`. `key` is distinct per drawn
+    /// occurrence, which `page_id` is not.
     private struct Moving: Identifiable {
         let entry: CalendarEntry
         var id: String { entry.key }
@@ -331,7 +299,6 @@ struct CalendarScreen: View {
 
     // MARK: - The scope question
 
-    /// What is being done to an occurrence, when there is a backlog behind it.
     private enum Verb {
         case complete
         case skip
@@ -342,11 +309,8 @@ struct CalendarScreen: View {
         case all
     }
 
-    /// A gesture that landed on a series which has fallen behind.
-    ///
-    /// Held rather than acted on, because the answer is genuinely ambiguous:
-    /// ticking last Monday's standup when three earlier Mondays are also open
-    /// could mean either. The desktop asks the same question.
+    /// A gesture on a series that has fallen behind, held rather than acted on: ticking last
+    /// Monday with three earlier Mondays open is ambiguous. The desktop asks too.
     private struct ScopeQuestion: Identifiable {
         let id = UUID()
         let entry: CalendarEntry
@@ -360,8 +324,7 @@ struct CalendarScreen: View {
             verb == .complete ? "Mark complete" : "Skip occurrence"
         }
 
-        /// The earlier days, named. Three at most: a list of eleven dates in a
-        /// sheet's message is not something anybody reads.
+        /// The earlier days, three at most: eleven dates in a sheet's message go unread.
         var message: String {
             let shown = backlog.prefix(3).map { DayLabel.short($0) }.joined(separator: ", ")
             let rest = backlog.count - min(backlog.count, 3)
@@ -370,9 +333,8 @@ struct CalendarScreen: View {
             return "\(backlog.count) earlier \(days) still open: \(list)."
         }
 
-        // The counts do the work the desktop puts in a helper line under each
-        // choice — an action sheet's buttons are bare labels, with no room for
-        // one.
+        // The counts stand in for the desktop's helper line, which a bare action-sheet label has
+        // no room for.
         var justThisOne: String {
             verb == .complete ? "Complete just this one" : "Skip just this one"
         }
@@ -386,12 +348,8 @@ struct CalendarScreen: View {
         Binding(get: { scopeQuestion != nil }, set: { if !$0 { scopeQuestion = nil } })
     }
 
-    /// Ask first, but only when there is something to ask about.
-    ///
-    /// A series that is not behind — or an occurrence today or later, which has
-    /// no backlog *behind* it — commits straight away. The prompt is a
-    /// disambiguation, not a confirmation, and putting one in front of every
-    /// tick would make the common case two taps for no reason.
+    /// Asks only when there is a backlog. The prompt disambiguates rather than confirms, so a
+    /// plain tick must not need a second tap.
     private func act(_ verb: Verb, on entry: CalendarEntry) async {
         let backlog = await store.backlog(behind: entry)
         if backlog.isEmpty {
@@ -505,9 +463,7 @@ struct CalendarScreen: View {
         .padding(.bottom, 4)
     }
 
-    /// True when today is already on screen, which is when "Today" would do
-    /// nothing. Disabled rather than hidden so the toolbar does not reflow as
-    /// the user pages back and forth.
+    /// True when today is on screen. Disabled rather than hidden so the toolbar doesn't reflow.
     private var showsToday: Bool {
         dayStrings.contains(WallClockDay.string(from: Date()))
     }

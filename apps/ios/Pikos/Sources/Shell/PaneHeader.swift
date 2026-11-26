@@ -59,7 +59,7 @@ struct HeaderIconStyle: ButtonStyle {
     }
 }
 
-/// A press that dims rather than flashes — the desktop's hover, on a finger.
+/// A press that dims rather than flashes: the desktop's hover, on a finger.
 struct PressableRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

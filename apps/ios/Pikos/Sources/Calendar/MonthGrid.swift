@@ -4,9 +4,8 @@ import SwiftUI
 
 /// A month, a week to a row, as the desktop's month view lays it out.
 ///
-/// A phone column is too narrow for the desktop's title chips, so each day shows what it holds
-/// as up to three bars in their folders' colours and a count past that. Tapping a day opens it in
-/// the day view, which is where every path out of the desktop's month lands too.
+/// A phone column is too narrow for the desktop's title chips, so each day shows up to three
+/// bars in its folder's colour and a count past that.
 struct MonthGrid: View {
     /// The padded month, as `YYYY-MM-DD` keys, a whole number of weeks.
     let days: [String]

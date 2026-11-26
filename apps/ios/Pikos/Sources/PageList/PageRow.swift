@@ -39,7 +39,7 @@ struct CompletionToggle: View {
     }
 }
 
-/// One page in the list, without its checkbox — see `CompletionToggle`.
+/// One page in the list, without its checkbox, which is `CompletionToggle`.
 ///
 /// The desktop's row: title and date on one line, the subtitle under it. Folder, repeat and tags
 /// follow only where the heading does not already say them.
@@ -226,7 +226,7 @@ struct ScheduleLabel: View {
         return isAllDay ? day : "\(day), \(time)"
     }
 
-    /// All-day is late from the next day; timed, the moment it passes — the Today view's own rules.
+    /// All-day is late from the next day; timed, the moment it passes. The Today view's own rules.
     private var isOverdue: Bool {
         guard let parsed, !isDone else { return false }
         if isAllDay {

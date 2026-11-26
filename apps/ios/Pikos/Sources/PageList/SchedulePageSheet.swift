@@ -4,16 +4,13 @@ import SwiftUI
 
 /// Put a page on a date, move it, or take the date away: the When sheet.
 ///
-/// Reached from When › Pick a date… after the one-tap days, so it is for the date those do not
-/// cover. A line at the top reads a typed date with quick add's parser, the day pills repeat the
-/// menu's choices, and the month is open rather than behind a compact picker.
+/// Reached from When > Pick a date, for dates the one-tap days don't cover. A typed line reads
+/// a date with quick add's parser. Nothing asks to be confirmed: tapping a day saves and
+/// closes, and the time, end and typed date save when the sheet closes, however it closes. A
+/// date is easy to change back, and the notice carries Undo.
 ///
-/// Nothing here asks to be confirmed. Tapping a day, in the pills or the month, saves it and
-/// closes; the time, the end and a typed date are saved when the sheet closes, however it closes.
-/// A date is easy to change back, and the notice carries Undo.
-///
-/// A repeating page is offered no "No date", and one a calendar owns never reaches here; the
-/// workspace refuses both anyway, because a list row can be a second old by the time a sheet opens.
+/// A repeating page is offered no "No date", and a calendar's page never reaches here; the
+/// workspace refuses both anyway, because a list row can be a second old when a sheet opens.
 struct SchedulePageSheet: View {
     enum Target {
         case page(PageFacts)

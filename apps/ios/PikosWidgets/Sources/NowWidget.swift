@@ -3,15 +3,11 @@ import PikosSupport
 import SwiftUI
 import WidgetKit
 
-/// The day as it stands right now: what's happening, how long until the next thing, and what to do
-/// with the time in between.
-///
-/// Calendar and tasks in one place, which no list widget does: during a meeting it counts down to
-/// the end, in a gap it says how long the gap is and offers the page `NowPlan` picks, with a
-/// button that opens it with the focus timer running. The large size is a lean day calendar:
-/// pages by hour that complete in place, and empty hours that open quick add at that hour.
-///
-/// It keeps Next Up's kind, so a Next Up widget already on a home screen becomes this one.
+/// The day as it stands right now: what's happening, how long until the next thing, and what to
+/// do in between. During a meeting it counts down to the end; in a gap it says how long and
+/// offers the page `NowPlan` picks, with a button that opens it with the focus timer running.
+/// The large size is a lean day calendar. It keeps Next Up's kind, so one already on a home
+/// screen becomes this one.
 struct NowWidget: Widget {
     static let kind = "app.pikos.widget.next"
 

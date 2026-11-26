@@ -2,14 +2,10 @@ import PikosCore
 import PikosSupport
 import SwiftUI
 
-/// How often a page repeats: the desktop's presets by name, one tap each, Custom for the rest,
-/// and when it stops.
-///
-/// Frequency, how many of them between runs, which weekdays, a week of the month, and an end. A
-/// rule that says more, such as "every 15 March" or the fifth Friday, keeps that part as it is
-/// while its interval or end changes, and a new frequency replaces it, as on the desktop. The
-/// workspace decides what can be edited and says so through `PageRepeat`; this screen only draws
-/// the answer.
+/// How often a page repeats: the desktop's presets by name, Custom for the rest, and when it
+/// stops. A rule that says more than these controls hold, such as "every 15 March", keeps that
+/// part while its interval or end changes, and a new frequency replaces it, as on the desktop.
+/// The workspace decides what is editable through `PageRepeat`; this screen only draws the answer.
 struct RepeatSheet: View {
     let page: PageFacts
 
@@ -37,9 +33,8 @@ struct RepeatSheet: View {
                 Group {
                     switch current {
                     case .none:
-                        // Still reading. A form drawn from defaults and then
-                        // rearranged a beat later reads as the app changing its
-                        // mind about the page.
+                        // Still reading: drawing defaults and rearranging a beat later reads as the app changing
+                        // its mind.
                         ProgressView().frame(maxWidth: .infinity)
 
                     case .fixed(let label):
@@ -163,9 +158,6 @@ struct RepeatSheet: View {
                 } header: {
                     Text("On these days").sectionLabelStyle()
                 } footer: {
-                    // Not an error state: an empty set is a valid weekly rule
-                    // meaning "the day it starts on", which is what somebody
-                    // who never opens this section gets.
                     Text(
                         weekdays.isEmpty
                             ? "None chosen, so it repeats on whichever day the page is on."
@@ -406,10 +398,7 @@ struct RepeatSheet: View {
         let rule = Repeat(
             freq: freq,
             interval: UInt32(interval),
-            // Sorted, so the same choice always produces the same rule
-            // string. A set has no order, and an unordered rule would
-            // make every save look like a change to anything diffing
-            // the rrule.
+            // Sorted so the same choice always produces the same rule string: a set has no order.
             weekdays: keepsPattern ? [] : (freq == .weekly ? weekdays.sorted() : (onWeekday ? [anchor.weekday] : [])),
             monthWeek: onWeekday ? anchor.weekOfMonth : nil,
             ends: ends,

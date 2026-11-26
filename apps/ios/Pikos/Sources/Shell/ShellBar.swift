@@ -2,9 +2,8 @@ import SwiftUI
 
 /// The one object at the bottom of the app: which pane fills the screen, search, and capture.
 ///
-/// The desktop's document/calendar pair swaps its right-hand panel; this is that toggle at thumb
-/// height, with the page list standing in for the document because a phone opens a page by
-/// pushing it. Search and capture share the bar so both are in reach from either pane and
+/// The desktop's document/calendar toggle at thumb height, with the page list standing in for
+/// the document because a phone opens a page by pushing it. Search and capture share the bar so
 /// nothing else floats over the content.
 struct ShellBar: View {
     /// Nil when the list and the calendar are both on screen, which leaves search and capture.

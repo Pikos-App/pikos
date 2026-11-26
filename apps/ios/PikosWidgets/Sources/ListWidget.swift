@@ -5,19 +5,12 @@ import SwiftUI
 import WidgetKit
 
 /// One list of pages, chosen in the widget's settings: Today, Upcoming, the Inbox or a folder.
+/// Every row completes and moves to tomorrow in place, and the header adds a page to the list it
+/// shows. It keeps the Today widget's kind, so one already on a home screen becomes this one.
 ///
-/// One widget rather than one per list, because each of the earlier ones showed a little and none
-/// earned a home-screen slot on its own. Every row completes in place and moves to tomorrow in
-/// place, and the header adds a page to the list it shows, so a list can be worked from the home
-/// screen without opening the app.
-///
-/// It keeps the Today widget's kind, so a Today widget already on a home screen becomes this one,
-/// set to Today.
-///
-/// Reads the workspace directly through `ReadOnlyWorkspace` rather than a snapshot the app writes:
-/// a widget that waits on the app to refresh a cache is stale exactly when the app hasn't been
-/// opened, which is when a widget is most useful. Its two writes are taps, not refreshes; see
-/// `CompletePageIntent` for why a write from this process is safe.
+/// It reads the workspace directly through `ReadOnlyWorkspace`, not a snapshot the app writes: a
+/// widget waiting on the app to refresh a cache is stale exactly when the app hasn't been opened.
+/// Its two writes are taps; see `CompletePageIntent` for why a write from this process is safe.
 struct ListWidget: Widget {
     static let kind = "app.pikos.widget.today"
 
@@ -131,8 +124,7 @@ struct ListEntry: TimelineEntry {
     let list: ListChoice
     let pages: [PageSummary]
     let today: String
-    /// Set when the workspace could not be read. Shown rather than swallowed: an empty widget and
-    /// a broken one look identical otherwise, and the usual cause is an App Group not configured.
+    /// Set when the workspace could not be read, so the widget says so; see `WidgetNote`.
     let failure: String?
 
     static let placeholder = ListEntry(

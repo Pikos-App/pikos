@@ -6,18 +6,11 @@ import WidgetKit
 
 /// Shortcuts and Siri.
 ///
-/// ## Why these live in the app target
-///
-/// App Intents declared in the app target run in the app's process — launched
-/// in the background if it is not already running. That is what keeps the
-/// single-writer rule intact: an intent that wrote from an extension process
-/// would be a second writer against a database whose WAL mode permits one, and
-/// the app would block behind it.
-///
-/// Anything that needs to write therefore belongs here rather than in the
-/// widget extension. The widget's `ReadOnlyWorkspace` has no write methods at
-/// all, which is the same rule enforced by the type system rather than by
-/// where a file happens to sit.
+/// App Intents declared in the app target run in the app's process, launched in the background if
+/// needed. That keeps the single-writer rule: an intent that wrote from an extension process
+/// would be a second writer against a WAL database that permits one. Anything that writes
+/// belongs here, and the widget's `ReadOnlyWorkspace` has no write methods, which enforces the
+/// rule by type.
 enum PikosIntentError: Error, CustomLocalizedStringResourceConvertible {
     case workspaceUnavailable
 
@@ -29,11 +22,8 @@ enum PikosIntentError: Error, CustomLocalizedStringResourceConvertible {
     }
 }
 
-/// Open the workspace for a single intent run.
-///
-/// Opened per invocation rather than held: an intent may run in a process that
-/// has just been launched for it and will be suspended again shortly after, so
-/// there is no meaningful lifetime to cache against.
+/// Open the workspace for a single intent run, per invocation: an intent may run in a freshly
+/// launched process that is suspended again shortly after, so there is no lifetime to cache against.
 private func openWorkspace() async throws -> Workspace {
     do {
         let url = try WorkspaceLocation.databaseURL()
@@ -43,17 +33,10 @@ private func openWorkspace() async throws -> Workspace {
     }
 }
 
-/// Open the workspace read-only, for the parts of an intent that only look.
-///
-/// Entity queries are not intent runs: Shortcuts calls `suggestedEntities` to
-/// populate a parameter picker while the user is still assembling a shortcut,
-/// and `entities(for:)` to resolve saved references. Opening a writable handle
-/// for those would put a second writer on a database whose WAL mode permits
-/// one, which is the rule this whole file is arranged around — so the type
-/// enforces it here too rather than the comment above doing it alone.
-///
-/// `openExisting` also refuses to create a database, which matters: a picker
-/// shown before the app has ever run must come back empty, not leave an empty
+/// Open the workspace read-only, for the parts of an intent that only look. Entity queries run
+/// while the user is still assembling a shortcut, and a writable handle there would be a second
+/// writer, so the type enforces the rule. `openExisting` refuses to create a database: a picker
+/// shown before the app has ever run must come back empty, not leave an empty workspace behind.
 /// workspace behind for the app to find.
 private func openForReading() async throws -> ReadOnlyWorkspace {
     do {
@@ -85,15 +68,8 @@ struct CreatePageIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let workspace = try await openWorkspace()
-        // An intent has no sheet to show a folder picker in, so an unanswered
-        // folder parameter falls back to the preference rather than to the
-        // Inbox. This is the path that setting is mostly *for*: in the app the
-        // user can see the picker and change it, and here they cannot.
-        //
-        // The stored id can name a folder that has since been deleted, in
-        // which case the create would fail on the foreign key — so it is
-        // checked first and the Inbox is the fallback, the same resolution the
-        // settings screen describes.
+        // An intent has no picker, so an unanswered folder falls back to the default-folder
+        // preference rather than the Inbox, which is what that setting is mostly for.
         let folderId: String?
         if let chosen = folder?.id {
             folderId = chosen
@@ -103,19 +79,16 @@ struct CreatePageIntent: AppIntent {
         let page = try await workspace.createPage(
             page: NewPage(title: title, folderId: folderId))
 
-        // The widget shows today's pages, and a page created by voice should
-        // appear there without waiting for the next scheduled refresh.
+        // A page created by voice should appear in the widget without waiting for its next refresh.
         WidgetCenter.shared.reloadAllTimelines()
 
         return .result(dialog: "Added \(page.title).")
     }
 }
 
-/// The default folder, if it still exists.
-///
-/// Read through the handle the intent already holds rather than opening a
-/// second one: two handles on the same file is the one-writer rule's near miss,
-/// and this needs nothing the existing handle cannot answer.
+/// The default folder, if it still exists: a deleted one would fail the create on the foreign
+/// key. Read through the handle the intent already holds, since a second handle on the same
+/// file is a near miss of the one-writer rule.
 @MainActor
 private func preferredFolderID(in workspace: Workspace) async -> String? {
     guard let preferred = Preferences.shared.defaultFolderID else { return nil }
@@ -151,7 +124,7 @@ struct SearchPagesIntent: AppIntent {
 // MARK: - Today's list
 
 /// "What's on my list today", read out rather than opened, with the pages handed back for a
-/// shortcut to use. Titles and times only (`PKOS-0152`).
+/// shortcut to use. Titles and times only.
 struct TodayListIntent: AppIntent {
     static let title: LocalizedStringResource = "Today's list"
     static let description = IntentDescription(
@@ -180,12 +153,9 @@ struct OpenTodayIntent: AppIntent {
 
     static let openAppWhenRun = true
 
-    /// The app's router, injected by `AppDependencyManager`.
-    ///
-    /// `openAppWhenRun` brings the app to the front but says nothing about
-    /// where it should land, and an intent has no view to reach `openURL`
-    /// through. Injection is the supported way in: the intent runs in the app's
-    /// process, so it can move the app's own state directly.
+    /// The app's router, injected by `AppDependencyManager`: `openAppWhenRun` doesn't say where the
+    /// app should land, and an intent has no view to reach `openURL` through, but it runs in the
+    /// app's process and can move the router directly.
     @Dependency private var route: Route
 
     @MainActor
@@ -197,8 +167,8 @@ struct OpenTodayIntent: AppIntent {
 
 // MARK: - Entities
 
-/// A page, as Shortcuts, Siri and Apple Intelligence see it: its title, date, folder and whether it's
-/// done, and never its body (`PKOS-0152`).
+/// A page, as Shortcuts, Siri and Apple Intelligence see it: its title, date, folder and whether
+/// it's done, and never its body.
 struct PageEntity: AppEntity, Identifiable {
     let id: String
     @Property(title: "Title") var title: String
@@ -275,10 +245,9 @@ struct PageEntityQuery: EntityStringQuery {
         return found
     }
 
-    /// Shortcuts calls this to fill a parameter picker, which can happen
-    /// before Pikos has ever been opened and so before a database exists. An
-    /// empty picker is the honest answer there; throwing would show the user an
-    /// error for a app they have simply not used yet.
+    /// Shortcuts calls this to fill a parameter picker, possibly before Pikos has ever been opened
+    /// and so before a database exists. An empty picker is the honest answer there; throwing would
+    /// show an error for an app the user has not used yet.
     func suggestedEntities() async throws -> [PageEntity] {
         guard let workspace = try? await openForReading(),
             let pages = try? await workspace.listToday()

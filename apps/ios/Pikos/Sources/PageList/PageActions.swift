@@ -4,13 +4,9 @@ import SwiftUI
 
 /// What a page action needs to know, whichever record the page arrived as.
 ///
-/// A listed page is a `PageSummary`; an open one is a `Page`. Both carry the
-/// same handful of facts the menu and its sheets turn on — which folder, which
-/// priority, whether it repeats, whether a calendar owns it — and neither is a
-/// type this repo declares, so a conformance to share them is a name the next
-/// binding regeneration could collide with. One small value type built from
-/// either is what lets the editor offer the list's menu without a second copy
-/// of it.
+/// A listed page is a `PageSummary` and an open one a `Page`, both generated, so a conformance
+/// to share their facts could collide with a binding regeneration. One value type built from
+/// either lets the editor offer the list's menu without a second copy.
 struct PageFacts: Identifiable, Hashable {
     let id: String
     let title: String
@@ -49,10 +45,8 @@ struct PageFacts: Identifiable, Hashable {
         scheduleLocked = page.scheduleLocked
     }
 
-    /// From a calendar block. The dates are the block's own, which for a
-    /// projected occurrence are that occurrence's rather than the head's —
-    /// right for everything the menu shows, since the schedule sheet is
-    /// withheld from a repeating page anyway.
+    /// From a calendar block. The dates are the block's own, a projected occurrence's rather than
+    /// the head's, which is fine since the schedule sheet is withheld from a repeating page.
     init(_ entry: CalendarEntry) {
         id = entry.pageId
         title = entry.title
@@ -69,11 +63,8 @@ struct PageFacts: Identifiable, Hashable {
     var isDone: Bool { status == "done" }
 }
 
-/// What a page menu has asked the screen to show.
-///
-/// Held by the screen and handed to the menu as a binding, so the sheets are
-/// declared once per screen — SwiftUI wants a `.sheet` on a view that stays
-/// put, and a menu is not one.
+/// What a page menu has asked the screen to show. Held by the screen as a binding so the
+/// sheets are declared once, on a view that stays put, which a menu is not.
 struct PageActionState {
     enum Sheet: Identifiable {
         case schedule(PageFacts)
@@ -109,19 +100,15 @@ struct PageActionState {
 
     init() {}
 
-    /// Bound to the presence of a page rather than a separate flag, so the two
-    /// cannot disagree about whether the alert is up.
+    /// Bound to the page's presence so the two can't disagree about whether the alert is up.
     var isRenaming: Bool {
         get { renaming != nil }
         set { if !newValue { renaming = nil } }
     }
 }
 
-/// The long press menu: the desktop's right-click menu, with the likeliest changes first.
-///
-/// Also the editor's page menu and a calendar block's, so a page offers the same verbs in the same
-/// places wherever it is held. The top row finishes the page or sends it to today or tomorrow, so
-/// the commonest edits are a hold and one tap; everything needing a choice from a list sits below.
+/// The long press menu: the desktop's right-click menu, likeliest changes first. Also the
+/// editor's page menu and a calendar block's, so a page offers the same verbs wherever held.
 ///
 /// What a calendar owns is withheld from its pages. The title, dates and placement of a mirror
 /// belong upstream and the workspace refuses all three, so an entry here would only ever produce
@@ -133,9 +120,8 @@ struct PageActionsMenu: View {
     @Binding var state: PageActionState
     /// Off in the editor, where the title is edited in place.
     var showsRename = true
-    /// Runs after the page has been moved to the trash. The list needs nothing
-    /// here — its refresh removes the row — but an editor showing the page
-    /// has to leave.
+    /// Runs after the page is trashed. The list needs nothing, its refresh removes the row, but
+    /// an editor showing the page has to leave.
     var afterDelete: () -> Void = {}
 
     @Environment(WorkspaceStore.self) private var store
@@ -267,13 +253,10 @@ struct PageActionsMenu: View {
     }
 }
 
-/// The four priorities, paired with the numbers they are stored as and the
-/// colour each one shows in.
-///
-/// Low number first — 1 urgent through 4 low — which runs the opposite way to
-/// the names. The pairing is written out here rather than derived so the
-/// menu's order, the column's meaning and the row's colour cannot drift apart.
-/// The colours follow the desktop's `PRIORITY_COLORS`, through its tokens.
+/// The four priorities, paired with the numbers they are stored as. Low number first (1
+/// urgent through 4 low), opposite to the names. Written out rather than derived so the menu
+/// order, column meaning and row colour can't drift apart. Colours follow the desktop's
+/// `PRIORITY_COLORS` through its tokens.
 enum PagePriority: Int64, CaseIterable, Identifiable {
     case urgent = 1
     case high = 2
@@ -326,19 +309,16 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
         self == .high ? .textDueSoon : color
     }
 
-    /// The priority a stored number names, or nil for none and for anything
-    /// out of range — a value this build does not know is shown as nothing
-    /// rather than as the nearest colour.
+    /// The priority a stored number names, or nil for none and out of range: a value this build
+    /// does not know shows as nothing, not the nearest colour.
     init?(stored: Int64) {
         self.init(rawValue: stored)
     }
 }
 
 extension View {
-    /// Attach the sheets and the rename alert a `PageActionsMenu` can ask for.
-    ///
-    /// Applied once per screen that hosts the menu, on a view that stays put
-    /// while the menu comes and goes.
+    /// Attach the sheets and the rename alert a `PageActionsMenu` can ask for, once per hosting
+    /// screen, on a view that stays put.
     func pageActionSheets(_ state: Binding<PageActionState>) -> some View {
         modifier(PageActionSheets(state: state))
     }
@@ -396,9 +376,6 @@ private struct PageActionSheets: ViewModifier {
                 case .folder(let page): FolderPickerSheet(page: page)
                 }
             }
-            // An alert rather than an inline edit: a row that becomes editable
-            // on tap competes with the tap that opens the page, and a phone has
-            // no hover to disambiguate.
             // Calendar's question: this date is a skip, which undoes, and all of them is the delete.
             .confirmationDialog(
                 deletionTitle, isPresented: $state.isAskingAboutSeries, titleVisibility: .visible,
@@ -417,6 +394,8 @@ private struct PageActionSheets: ViewModifier {
             } message: { _ in
                 Text("It repeats. Skip just this date, or delete it and every date it has left.")
             }
+            // An alert rather than an inline edit: a row that becomes editable on tap competes with
+            // the tap that opens the page, and a phone has no hover to disambiguate.
             .alert("Rename page", isPresented: $state.isRenaming) {
                 TextField("Title", text: $state.renameText)
                 Button("Cancel", role: .cancel) { state.renaming = nil }

@@ -6,8 +6,8 @@ import TipKit
 /// The list pane: the view being shown, the rest of today under it, and every verb a row has.
 /// The day under it is left out wherever the calendar is on screen beside it.
 ///
-/// The title is the switcher, as it is on the desktop when the sidebar is hidden; the sort/select
-/// menu is the header's one tool. Search lives in the bottom bar, in reach from either pane.
+/// The title is the switcher, as on the desktop when the sidebar is hidden. Search lives in
+/// the bottom bar, in reach from either pane.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -311,8 +311,8 @@ struct PageListScreen: View {
                 ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in separatorLeading }
-        // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
-        // nothing is on the other side.
+        // The likeliest day, any other day, and a folder. The checkbox completes, so nothing is on
+        // the other side.
         .swipeActions(edge: .trailing) {
             if !page.scheduleLocked {
                 if !done && !page.isRecurring {
@@ -702,7 +702,6 @@ struct PageListScreen: View {
     }
 }
 
-/// The pages select mode is dating through the When sheet.
 private struct SelectedPages: Identifiable {
     let id = UUID()
     let pages: [PageSummary]

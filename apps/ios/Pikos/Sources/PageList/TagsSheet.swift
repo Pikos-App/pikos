@@ -6,9 +6,7 @@ import SwiftUI
 /// Each add and remove is saved as it happens, and a tag still being typed is kept when the sheet
 /// closes, so there is no Save to miss.
 ///
-/// Offered on a calendar's page too. Tags are user-layer, the lock covers the title and the
-/// schedule and not what somebody files a meeting under, and tagging a mirror marks it owned,
-/// which is the data layer's business rather than this sheet's.
+/// Offered on a calendar's page too, as in `PageActionsMenu`.
 struct TagsSheet: View {
     let page: PageFacts
 

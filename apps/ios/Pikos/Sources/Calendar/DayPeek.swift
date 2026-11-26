@@ -3,16 +3,13 @@ import PikosSupport
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The rest of today, under the list: the desktop's calendar panel, kept on screen at a third of
-/// its size so a page and an hour are always in reach of each other.
+/// The rest of today under the list: the desktop's calendar panel at a third of its size.
 ///
-/// It shows the next few hours from now. Lifting a page grows it to six so there is room to aim,
-/// and dropping on an hour is the desktop's drag-to-schedule with no picker in between. With
-/// nothing left today it shrinks to one line rather than disappearing, so the list never jumps.
-///
-/// Today and Upcoming already are the schedule, so over them it rests out of sight and rises only
-/// while a page is lifted. It stays mounted at no height rather than being added on lift: the
-/// drag session never finds a drop target that appears after the drag began.
+/// It shows the next few hours. Lifting a page grows it to six so there is room to aim, and
+/// dropping on an hour schedules with no picker. With nothing left it shrinks to one line so
+/// the list never jumps. Today and Upcoming already are the schedule, so over them it rests
+/// out of sight and rises only while a page is lifted. It stays mounted at no height because
+/// the drag session never finds a drop target added after the drag began.
 struct DayPeek: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -37,7 +34,8 @@ struct DayPeek: View {
         TimelineView(.everyMinute) { context in
             content(now: context.date)
         }
-        // Fixed hour rows, as on the calendar's grid: past this size the hour labels broke a digit to a line.
+        // Fixed hour rows, as on the calendar's grid: past this size the hour labels broke a digit
+        // to a line.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // On the outermost view: a target inside the timeline, or one that only exists once a page
         // is lifted, is never found by the drag session.
@@ -81,8 +79,6 @@ struct DayPeek: View {
             }
             Color.clear.frame(height: ShellBar.clearance)
         }
-        // A tray set into the page, in the desktop sidebar's tone, so it reads as a separate
-        // surface without a second heading saying what day it is.
         .background {
             if isShown {
                 Self.trayShape

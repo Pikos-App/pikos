@@ -1,21 +1,13 @@
 import Foundation
 
-/// What the first device run needs to see without an instrument attached.
+/// Shows in debug Settings the state nobody can observe from the UI: which
+/// data-protection class the database and its sidecars got, and which App Group
+/// container the widget will read.
 ///
-/// Two of the checks the status doc lists as "needs a Mac" are about state
-/// nobody can observe from the UI: which data-protection class the database
-/// and its sidecars actually got, and whether the App Group container the
-/// widget will read is the one the app wrote. Both are one attribute read
-/// away, and reading them on a debug build costs nothing — so the Settings
-/// screen shows them there, and the check becomes "look at a row" rather
-/// than "attach a debugger with the phone locked".
-///
-/// Debug-only, deliberately. `attributesOfItem(atPath:)` is on the App
-/// Store's list of APIs that need a declared reason, and a release binary
-/// that never calls it needs no declaration.
+/// Debug-only: `attributesOfItem(atPath:)` is an App Store required-reason API,
+/// and a release binary that never calls it needs no declaration.
 #if DEBUG
     public enum Diagnostics {
-        /// One line of the report: a label and its value.
         public struct Row: Identifiable {
             public let label: String
             public let value: String
@@ -56,8 +48,6 @@ import Foundation
             return rows
         }
 
-        /// The class in the words the status doc uses, so the row can be
-        /// compared against it by eye.
         private static func describe(_ protection: FileProtectionType) -> String {
             switch protection {
             case .completeUntilFirstUserAuthentication: return "until first unlock ✓"
