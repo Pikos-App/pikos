@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cleanTitle, formatSchedule, formatTimeAgo } from "./utils";
+import { bodyWithTitleLinks, cleanTitle, formatSchedule, formatTimeAgo } from "./utils";
 
 describe("cleanTitle", () => {
   it("strips markdown links", () => {
@@ -56,6 +56,24 @@ describe("cleanTitle", () => {
   it("strips nested markdown in link display text", () => {
     // Link is stripped first → "**Bold link**", then bold is stripped → "Bold link"
     expect(cleanTitle("[**Bold link**](http://example.com)")).toBe("Bold link");
+  });
+});
+
+describe("bodyWithTitleLinks", () => {
+  it("sets a title's link above the body", () => {
+    expect(bodyWithTitleLinks("[Docs](https://example.com/docs)", "Read before Friday")).toBe(
+      "[Docs](https://example.com/docs)\n\nRead before Friday"
+    );
+  });
+
+  it("gives each link in a title its own paragraph", () => {
+    expect(bodyWithTitleLinks("Compare [A](https://a.test) and [B](https://b.test)", "")).toBe(
+      "[A](https://a.test)\n\n[B](https://b.test)"
+    );
+  });
+
+  it("leaves the body alone when the title has no link", () => {
+    expect(bodyWithTitleLinks("Plain title", "Body")).toBe("Body");
   });
 });
 

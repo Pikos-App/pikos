@@ -1,5 +1,10 @@
 import type { ImportPlan, VaultFile } from "@pikos/core";
-import { parseMarkdownVault } from "@pikos/core";
+import {
+  applyMappings,
+  parseMarkdownVault,
+  prepareCSVRows,
+  suggestColumnMappings,
+} from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, renderHook } from "@testing-library/react";
 import type { JSONContent } from "@tiptap/core";
@@ -102,5 +107,34 @@ describe("a Markdown import's [[links]]", () => {
 
     expect(linksIn("Inbox")).toEqual([{ text: "[[Nobody]] then [[Notes]]", type: "text" }]);
     expect(shortfall?.unlinkedLinks).toBe(2);
+  });
+});
+
+describe("a TickTick task whose title is a link", () => {
+  it("keeps the link's text as the title and its URL as a link in the body", async () => {
+    const csv = [
+      '"List Name","Title","Content"',
+      '"Reading","[Local-first software](https://example.com/local-first)","Read before Friday"',
+    ].join("\n");
+    const { headers, rows } = prepareCSVRows(csv);
+    const { detectedSource, mappings } = suggestColumnMappings(headers, rows);
+    const plan = applyMappings(rows, {
+      columnMappings: mappings,
+      detectedSource,
+      valueMappings: [],
+    });
+
+    const { result } = renderHook(() => useImport());
+    await act(() => result.current.executeImport(plan));
+
+    const page = importBatch.mock.calls[0]![0].pages[0]!;
+    const blocks = (JSON.parse(page.content) as JSONContent).content ?? [];
+    expect(page.title).toBe("Local-first software");
+    const link = blocks[0]?.content?.[0];
+    expect(link?.text).toBe("Local-first software");
+    expect(link?.marks?.[0]?.attrs?.["href"]).toBe("https://example.com/local-first");
+    expect(blocks[blocks.length - 1]?.content).toEqual([
+      { text: "Read before Friday", type: "text" },
+    ]);
   });
 });

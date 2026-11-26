@@ -191,7 +191,7 @@ export type {
   PikosFieldKey,
   ValueMapping,
 } from "./import/types";
-export { cleanTitle, formatSchedule, formatTimeAgo } from "./import/utils";
+export { bodyWithTitleLinks, cleanTitle, formatSchedule, formatTimeAgo } from "./import/utils";
 // ── Preference store seam: synchronous, string-keyed, host-provided ──
 export * from "./kv";
 // ── Layout: breakpoint modes and the page-list row model ──

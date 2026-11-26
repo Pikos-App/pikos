@@ -10,6 +10,7 @@ import type {
 import {
   applyMappings,
   ASSET_DIR,
+  bodyWithTitleLinks,
   cleanTitle,
   detectUniqueValues,
   imageRefCandidates,
@@ -454,7 +455,7 @@ export function useImport() {
       const converted: { doc: JSONContent; page: ImportPage; title: string }[] = [];
       const missingImages: MissingImage[] = [];
       for (const p of plan.pages) {
-        let bodyToConvert = p.body;
+        let bodyToConvert = bodyWithTitleLinks(p.title, p.body);
         const title = cleanTitle(p.title);
 
         if (p.imageRefs.length > 0 && plan.vaultRoot) {
