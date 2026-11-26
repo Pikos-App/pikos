@@ -62,6 +62,8 @@ struct PageRow: View {
     let page: PageSummary
     /// On in the date views, where rows from every folder sit together; off inside a folder.
     var showsFolder = false
+    /// Makes the date a menu of days to send the page to. Nil in select mode, where a tap selects.
+    var dateActions: Binding<PageActionState>? = nil
 
     @Environment(SettingsStore.self) private var settings
     @Environment(WorkspaceStore.self) private var store
@@ -86,7 +88,19 @@ struct PageRow: View {
                     Spacer(minLength: 4)
                 }
                 if let scheduled = page.scheduledStart {
-                    ScheduleLabel(iso: scheduled, end: page.scheduledEnd, isDone: isDone)
+                    let label = ScheduleLabel(iso: scheduled, end: page.scheduledEnd, isDone: isDone)
+                    if let dateActions, !page.scheduleLocked {
+                        Menu {
+                            PageWhenItems(page: PageFacts(page), choices: WhenChoice.allCases, state: dateActions)
+                        } label: {
+                            label.touchTarget()
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "When: \(label.spokenLabel)"))
+                    } else {
+                        label
+                    }
                 }
             }
 
@@ -176,7 +190,11 @@ struct ScheduleLabel: View {
             .foregroundStyle(color)
             .lineLimit(1)
             .fixedSize()
-            .accessibilityLabel(isOverdue ? String(localized: "Overdue, \(formatted)") : formatted)
+            .accessibilityLabel(spokenLabel)
+    }
+
+    var spokenLabel: String {
+        isOverdue ? String(localized: "Overdue, \(formatted)") : formatted
     }
 
     // Main-actor isolated, which is what makes a shared `DateFormatter` safe in a `static let`.

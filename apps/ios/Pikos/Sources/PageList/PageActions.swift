@@ -67,6 +67,9 @@ struct PageFacts: Identifiable, Hashable {
     }
 
     var isDone: Bool { status == "done" }
+
+    /// A repeating page's date belongs to its rule, so it is sent to a day only through the sheet.
+    var canSendToDay: Bool { !scheduleLocked && !isRecurring }
 }
 
 /// What a page menu has asked the screen to show.
@@ -157,9 +160,6 @@ struct PageActionsMenu: View {
 
     @Environment(WorkspaceStore.self) private var store
 
-    /// A repeating page's date belongs to its rule, so it is sent to a day only through the sheet.
-    private var canSendToDay: Bool { !page.scheduleLocked && !page.isRecurring }
-
     private func offers(_ action: PageActionRules.Action) -> Bool {
         PageActionRules.offers(
             action, isRecurring: page.isRecurring, scheduleLocked: page.scheduleLocked,
@@ -173,7 +173,7 @@ struct PageActionsMenu: View {
             } label: {
                 Label(page.isDone ? "Reopen" : "Complete", systemImage: page.isDone ? "arrow.uturn.backward" : "checkmark.circle")
             }
-            if canSendToDay {
+            if page.canSendToDay {
                 ForEach([WhenChoice.today, .tomorrow]) { choice in
                     Button {
                         Task { await store.send(page, to: choice) }
@@ -200,16 +200,7 @@ struct PageActionsMenu: View {
 
         if !page.scheduleLocked {
             Menu {
-                if canSendToDay {
-                    WhenMenuItems(
-                        choices: [.thisWeekend, .nextWeek],
-                        onChoose: { choice in Task { await store.send(page, to: choice) } },
-                        onPickDate: { state.sheet = .schedule(page) },
-                        onClear: offers(.clearDate)
-                            ? { Task { await store.clearDate(pageId: page.id) } } : nil)
-                } else {
-                    WhenMenuItems(choices: [], onChoose: { _ in }, onPickDate: { state.sheet = .schedule(page) })
-                }
+                PageWhenItems(page: page, choices: [.thisWeekend, .nextWeek], state: $state)
             } label: {
                 Label("When", systemImage: "calendar")
             }
@@ -272,6 +263,30 @@ struct PageActionsMenu: View {
     private func move(to folderId: String?) {
         guard page.folderId != folderId else { return }
         Task { await store.movePage(id: page.id, toFolder: folderId) }
+    }
+}
+
+/// Where a page can be sent: the hold menu's When and a list row's date, so both offer the same days.
+struct PageWhenItems: View {
+    let page: PageFacts
+    let choices: [WhenChoice]
+    @Binding var state: PageActionState
+
+    @Environment(WorkspaceStore.self) private var store
+
+    var body: some View {
+        if page.canSendToDay {
+            let offersClear = PageActionRules.offers(
+                .clearDate, isRecurring: page.isRecurring, scheduleLocked: page.scheduleLocked,
+                hasDate: !(page.scheduledStart ?? "").isEmpty)
+            WhenMenuItems(
+                choices: choices,
+                onChoose: { choice in Task { await store.send(page, to: choice) } },
+                onPickDate: { state.sheet = .schedule(page) },
+                onClear: offersClear ? { Task { await store.clearDate(pageId: page.id) } } : nil)
+        } else {
+            WhenMenuItems(choices: [], onChoose: { _ in }, onPickDate: { state.sheet = .schedule(page) })
+        }
     }
 }
 

@@ -270,7 +270,7 @@ struct PageListScreen: View {
                     Task { await store.setStatus(pageId: page.id, done: done) }
                 }
             }
-            PageRow(page: page, showsFolder: store.scope.isDateGrouped)
+            PageRow(page: page, showsFolder: store.scope.isDateGrouped, dateActions: isSelecting ? nil : $actions)
                 .accessibilityAddTraits(isSelecting && isSelected ? .isSelected : [])
         }
         .contentShape(Rectangle())
