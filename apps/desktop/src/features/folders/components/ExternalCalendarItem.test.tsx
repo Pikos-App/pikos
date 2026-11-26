@@ -56,10 +56,26 @@ describe("ExternalCalendarItem", () => {
     fireEvent.click(colorTrigger);
 
     const teal = PALETTE_COLORS.find((c) => c.label === "Teal")!;
-    const tealItem = await screen.findByRole("menuitem", { name: "Teal" });
+    const tealItem = await screen.findByRole("menuitemradio", { name: "Teal" });
     fireEvent.click(tealItem);
 
     expect(onColorChange).toHaveBeenCalledWith(teal.value);
+  });
+
+  it("marks the calendar's current colour, and only that one, in the Color submenu", async () => {
+    const blue = PALETTE_COLORS.find((c) => c.label === "Blue")!;
+    renderItem({ folder: makeFolder({ color: blue.value }) });
+
+    const [row] = screen.getAllByRole("button", { name: "Work Calendar" });
+    fireEvent.contextMenu(row!);
+    const colorTrigger = await screen.findByText("Color");
+    fireEvent.pointerMove(colorTrigger);
+    fireEvent.click(colorTrigger);
+
+    const checked = (await screen.findAllByRole("menuitemradio")).filter(
+      (item) => item.getAttribute("aria-checked") === "true"
+    );
+    expect(checked.map((item) => item.textContent)).toEqual(["Blue"]);
   });
 
   it("offers no rename affordance — no rename input is ever rendered", () => {

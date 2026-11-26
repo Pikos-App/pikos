@@ -694,9 +694,6 @@
   color: var(--muted-foreground);
   display: flex;
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
   height: 28px;
   justify-content: center;
   width: 28px;

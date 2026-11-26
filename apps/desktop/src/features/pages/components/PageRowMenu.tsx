@@ -6,7 +6,22 @@ import {
   rruleEditWouldDegrade,
   writableFolders,
 } from "@pikos/core";
-import { Check } from "lucide-react";
+import {
+  Ban,
+  CalendarDays,
+  Check,
+  CircleCheck,
+  Download,
+  Flag,
+  FolderOpen,
+  Hash,
+  Pencil,
+  Repeat2,
+  RotateCcw,
+  Sun,
+  Sunrise,
+  Trash2,
+} from "lucide-react";
 
 import {
   ContextMenuContent,
@@ -81,19 +96,29 @@ export function PageRowMenu({
     <ContextMenuContent onCloseAutoFocus={onCloseAutoFocus}>
       {offers("complete") && (
         <ContextMenuItem onSelect={onToggleStatus}>
+          {isDone(page) ? <RotateCcw aria-hidden /> : <CircleCheck aria-hidden />}
           {isDone(page) ? "Reopen" : "Complete"}
         </ContextMenuItem>
       )}
       {offers("send-today") && (
-        <ContextMenuItem onSelect={() => onSendToDay("send-today")}>Today</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onSendToDay("send-today")}>
+          <Sun aria-hidden />
+          Today
+        </ContextMenuItem>
       )}
       {offers("send-tomorrow") && (
-        <ContextMenuItem onSelect={() => onSendToDay("send-tomorrow")}>Tomorrow</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onSendToDay("send-tomorrow")}>
+          <Sunrise aria-hidden />
+          Tomorrow
+        </ContextMenuItem>
       )}
       {hasTopRow && <ContextMenuSeparator />}
 
       <ContextMenuSub>
-        <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
+        <ContextMenuSubTrigger className="gap-2">
+          <Flag aria-hidden />
+          Priority
+        </ContextMenuSubTrigger>
         <ContextMenuSubContent>
           {ALL_PRIORITIES.map((p) => (
             <ContextMenuItem
@@ -120,7 +145,10 @@ export function PageRowMenu({
 
       {hasWhen && (
         <ContextMenuSub>
-          <ContextMenuSubTrigger>When</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger className="gap-2">
+            <CalendarDays aria-hidden />
+            When
+          </ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {offers("next-week") && (
               <ContextMenuItem onSelect={() => onSendToDay("next-week")}>Next week</ContextMenuItem>
@@ -137,7 +165,10 @@ export function PageRowMenu({
 
       {offers("move-to-folder") && (
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Move to folder</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger className="gap-2">
+            <FolderOpen aria-hidden />
+            Move to folder
+          </ContextMenuSubTrigger>
           <ContextMenuSubContent>
             <ContextMenuItem
               className={cn(page.folderId === null && "font-medium")}
@@ -165,26 +196,44 @@ export function PageRowMenu({
       )}
 
       {offers("tags") && (
-        <ContextMenuItem onSelect={() => onOpenPicker("tags")}>Tags…</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenPicker("tags")}>
+          <Hash aria-hidden />
+          Tags…
+        </ContextMenuItem>
       )}
       {canEditRepeat && (
-        <ContextMenuItem onSelect={() => onOpenPicker("repeat")}>Repeat…</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenPicker("repeat")}>
+          <Repeat2 aria-hidden />
+          Repeat…
+        </ContextMenuItem>
       )}
 
       {offers("stop-repeating") && (
-        <ContextMenuItem onSelect={onStopRepeating}>Stop repeating</ContextMenuItem>
+        <ContextMenuItem onSelect={onStopRepeating}>
+          <Ban aria-hidden />
+          Stop repeating
+        </ContextMenuItem>
       )}
 
       <ContextMenuSeparator />
 
-      {offers("rename") && <ContextMenuItem onSelect={onRename}>Rename</ContextMenuItem>}
+      {offers("rename") && (
+        <ContextMenuItem onSelect={onRename}>
+          <Pencil aria-hidden />
+          Rename
+        </ContextMenuItem>
+      )}
       {/* Export reads the page and refuses nothing, so it has no place in the shared action
           rules; it sits above Delete to keep the destructive item last. */}
       {isOnePage && (
-        <ContextMenuItem onSelect={() => void exportPage(page)}>Export as Markdown</ContextMenuItem>
+        <ContextMenuItem onSelect={() => void exportPage(page)}>
+          <Download aria-hidden />
+          Export as Markdown
+        </ContextMenuItem>
       )}
       {offers("delete") && (
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
+          <Trash2 aria-hidden className="text-destructive" />
           {isOnePage ? "Delete" : `Delete ${actsOn} pages`}
         </ContextMenuItem>
       )}

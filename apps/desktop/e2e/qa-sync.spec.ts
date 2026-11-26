@@ -347,7 +347,7 @@ appTest(
     await appTest.step("SYNC-18 recolouring from the sidebar shows in the Sync panel", async () => {
       await calendarFolder(app, "Personal").click({ button: "right" });
       await app.getByRole("menuitem", { name: "Color" }).click();
-      await app.getByRole("menuitem", { name: "Lavender" }).click();
+      await app.getByRole("menuitemradio", { name: "Lavender" }).click();
       await same();
     });
 

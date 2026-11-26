@@ -1,17 +1,11 @@
 import type { Folder } from "@pikos/core";
-import { PALETTE_COLORS } from "@pikos/core";
 import { CalendarSync } from "lucide-react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
+
+import { FolderColorSubmenu } from "./FolderColorSubmenu";
+
 // External-calendar folders never inline-rename — the calendar display name is
 // authoritative. SidebarListItem still requires the rename hooks, so pass no-ops.
 const NOOP = () => {};
@@ -71,20 +65,7 @@ export function ExternalCalendarItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Color</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            {PALETTE_COLORS.map(({ label, value }) => (
-              <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
-                <span
-                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: value }}
-                />
-                {label}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        <FolderColorSubmenu current={folder.color} onColorChange={onColorChange} />
       </ContextMenuContent>
     </ContextMenu>
   );

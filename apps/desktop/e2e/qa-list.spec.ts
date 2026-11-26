@@ -292,11 +292,17 @@ appTest(
     await appTest.step("LIST-06 it is recolored from its menu", async () => {
       await folder("Chores").click({ button: "right" });
       await app.getByRole("menuitem", { name: "Color" }).hover();
-      await app.getByRole("menuitem", { name: "Red" }).click();
+      await app.getByRole("menuitemradio", { name: "Red" }).click();
       await expect(folder("Chores").getByTestId("folder-color")).toHaveCSS(
         "background-color",
         "rgb(217, 87, 122)"
       );
+
+      await folder("Chores").click({ button: "right" });
+      await app.getByRole("menuitem", { name: "Color" }).hover();
+      await expect(app.getByRole("menuitemradio", { checked: true })).toHaveAccessibleName("Red");
+      await app.keyboard.press("Escape");
+      await app.keyboard.press("Escape");
     });
 
     await createFolder(app, "Admin");

@@ -108,7 +108,16 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
                     close();
                   }}
                 >
-                  <span className="truncate">{folder.name}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="color-dot h-2 w-2 shrink-0 rounded-full"
+                      data-testid="folder-color"
+                      style={{
+                        backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
+                      }}
+                    />
+                    <span className="truncate">{folder.name}</span>
+                  </span>
                   {isSelected && (
                     <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
                   )}

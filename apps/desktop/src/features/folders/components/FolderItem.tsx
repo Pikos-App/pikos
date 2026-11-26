@@ -2,21 +2,20 @@ import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder } from "@pikos/core";
-import { PALETTE_COLORS } from "@pikos/core";
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { SidebarCount } from "@/shared/components/SidebarCount";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
+
+import { FolderColorSubmenu } from "./FolderColorSubmenu";
 
 export interface FolderItemProps {
   folder: Folder;
@@ -102,23 +101,12 @@ export function FolderItem({
 
       <ContextMenuContent {...contextMenuContentProps}>
         <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
+          <Pencil aria-hidden />
           Rename
         </ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Color</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            {PALETTE_COLORS.map(({ label, value }) => (
-              <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
-                <span
-                  className="color-dot mr-2 h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: value }}
-                />
-                {label}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        <FolderColorSubmenu current={folder.color} onColorChange={onColorChange} />
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
+          <Trash2 aria-hidden className="text-destructive" />
           Delete
         </ContextMenuItem>
       </ContextMenuContent>

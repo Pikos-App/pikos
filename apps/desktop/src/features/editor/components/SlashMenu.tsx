@@ -8,6 +8,20 @@ import type {
   SuggestionOptions,
   SuggestionProps,
 } from "@tiptap/suggestion";
+import {
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
+  Image,
+  List,
+  ListOrdered,
+  ListTodo,
+  type LucideIcon,
+  Minus,
+  Quote,
+  Table,
+} from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import tippy from "tippy.js";
 import type { Instance as TippyInstance } from "tippy.js";
@@ -20,7 +34,7 @@ interface SlashCommand {
   title: string;
   description: string;
   aliases?: string[];
-  icon: string;
+  icon: LucideIcon;
   command: (editor: Editor) => void;
 }
 
@@ -46,77 +60,77 @@ const COMMANDS: SlashCommand[] = [
     aliases: ["h1", "heading1"],
     command: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
     description: "Large section heading",
-    icon: "H1",
+    icon: Heading1,
     title: "Heading 1",
   },
   {
     aliases: ["h2", "heading2"],
     command: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     description: "Medium section heading",
-    icon: "H2",
+    icon: Heading2,
     title: "Heading 2",
   },
   {
     aliases: ["h3", "heading3"],
     command: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
     description: "Small section heading",
-    icon: "H3",
+    icon: Heading3,
     title: "Heading 3",
   },
   {
     aliases: ["ul", "unordered", "list"],
     command: (editor) => editor.chain().focus().toggleBulletList().run(),
     description: "Unordered list of items",
-    icon: "•—",
+    icon: List,
     title: "Bullet list",
   },
   {
     aliases: ["ol", "numbered", "list"],
     command: (editor) => editor.chain().focus().toggleOrderedList().run(),
     description: "Numbered list of items",
-    icon: "1.",
+    icon: ListOrdered,
     title: "Ordered list",
   },
   {
     aliases: ["todo", "check", "checkbox"],
     command: (editor) => editor.chain().focus().toggleTaskList().run(),
     description: "Interactive checkboxes",
-    icon: "☑",
+    icon: ListTodo,
     title: "Task list",
   },
   {
     aliases: ["code", "pre", "codeblock"],
     command: (editor) => editor.chain().focus().toggleCodeBlock().run(),
     description: "Monospaced code block",
-    icon: "</>",
+    icon: Code,
     title: "Code block",
   },
   {
     aliases: ["quote", "bq"],
     command: (editor) => editor.chain().focus().toggleBlockquote().run(),
     description: "Indented quote block",
-    icon: "❝",
+    icon: Quote,
     title: "Blockquote",
   },
   {
     aliases: ["hr", "divider", "separator"],
     command: (editor) => editor.chain().focus().setHorizontalRule().run(),
     description: "Divider between sections",
-    icon: "—",
+    icon: Minus,
     title: "Horizontal Rule",
   },
   {
     aliases: ["grid", "spreadsheet"],
     command: insertTableOnBody,
     description: "Insert a data table",
-    icon: "⊞",
+    icon: Table,
     title: "Table",
   },
   {
     aliases: ["img", "picture", "photo", "upload"],
     command: (editor) => void insertImageFromDialog(editor.view),
     description: "Upload an image from your files",
-    icon: "🖼",
+    icon: Image,
     title: "Image",
   },
 ];
@@ -224,7 +238,9 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
             role="option"
             tabIndex={-1}
           >
-            <span className="slash-menu-item-icon">{item.icon}</span>
+            <span className="slash-menu-item-icon">
+              <item.icon aria-hidden size={16} />
+            </span>
             <span className="slash-menu-item-text">
               <span className="slash-menu-item-title">{item.title}</span>
               <span className="slash-menu-item-description">{item.description}</span>
