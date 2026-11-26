@@ -7,10 +7,8 @@ import Footer from "../components/Footer.astro";
 
   <main class="relative mx-auto max-w-6xl px-8 py-20">
 
-    <!-- Hero -->
     <div class="relative flex flex-col items-center gap-12 lg:flex-row lg:items-center lg:gap-16">
 
-      <!-- Left: copy -->
       <div class="max-w-xl shrink-0">
         <p class="text-base text-neutral-500 dark:text-neutral-400">Most people juggle three apps to stay organized. You shouldn't have to.</p>
 
@@ -53,7 +51,6 @@ import Footer from "../components/Footer.astro";
         </div>
       </div>
 
-      <!-- Right: product screenshot -->
       <div class="w-full min-w-0">
         <button
           id="hero-video-btn"
@@ -69,7 +66,6 @@ import Footer from "../components/Footer.astro";
           <div class="pointer-events-none absolute inset-0 rounded-xl bg-black/0 transition-colors duration-200 md:group-hover:bg-black/5 md:dark:group-hover:bg-white/5"></div>
         </button>
 
-        <!-- Lightbox -->
         <div
           id="lightbox"
           role="dialog"
@@ -97,14 +93,12 @@ import Footer from "../components/Footer.astro";
 
     </div>
 
-    <!-- Concept section -->
     <section class="mt-28 max-w-4xl">
       <p class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Every page is a note, a task, and a calendar event.</p>
       <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
         Not three things bolted together. One thing that does all three.
       </p>
 
-      <!-- Desktop diagram (md+) -->
       <div class="relative mt-12 hidden h-80 md:block">
         <!--
           Section is max-w-4xl: content width = 896px (no extra padding here).
@@ -129,7 +123,6 @@ import Footer from "../components/Footer.astro";
           <circle cx="688" cy="160" r="3.5" fill="currentColor"/>
         </svg>
 
-        <!-- Note (top-left) -->
         <div class="absolute left-0 top-0 h-36 w-52 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
@@ -140,7 +133,6 @@ import Footer from "../components/Footer.astro";
           <p class="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Rich text, headings, checklists, images. A real writing surface.</p>
         </div>
 
-        <!-- Task (bottom-left) -->
         <div class="absolute bottom-0 left-0 h-36 w-52 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="m9 11 3 3L22 4"/>
@@ -150,7 +142,7 @@ import Footer from "../components/Footer.astro";
           <p class="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Status, priority, due dates. Recurring tasks just appear.</p>
         </div>
 
-        <!-- Page (center) — terracotta identity anchor, not amber attention -->
+        <!-- Terracotta, the identity anchor, not amber attention -->
         <div class="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-brand-500 shadow-md dark:bg-brand-400">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-white" aria-hidden="true">
             <rect width="7" height="9" x="3" y="3" rx="1"/>
@@ -161,7 +153,6 @@ import Footer from "../components/Footer.astro";
           <span class="mt-1.5 text-sm font-bold text-white">Page</span>
         </div>
 
-        <!-- Calendar (right) -->
         <div class="absolute right-0 top-1/2 h-36 w-52 -translate-y-1/2 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="M8 2v4"/><path d="M16 2v4"/>
@@ -173,10 +164,8 @@ import Footer from "../components/Footer.astro";
         </div>
       </div>
 
-      <!-- Mobile vertical diagram (< md) -->
       <div class="mt-10 flex flex-col items-center md:hidden">
 
-        <!-- Write -->
         <div class="w-full max-w-xs rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
@@ -187,7 +176,6 @@ import Footer from "../components/Footer.astro";
           <p class="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Rich text, headings, checklists, images. A real writing surface.</p>
         </div>
 
-        <!-- Connector: neutral line → terracotta Page circle → neutral line -->
         <div class="flex flex-col items-center">
           <div class="h-6 w-px border-l border-dashed border-neutral-400/60 dark:border-neutral-600/60"></div>
           <div class="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-brand-500 shadow-sm dark:bg-brand-400">
@@ -202,7 +190,6 @@ import Footer from "../components/Footer.astro";
           <div class="h-6 w-px border-l border-dashed border-neutral-400/60 dark:border-neutral-600/60"></div>
         </div>
 
-        <!-- Task -->
         <div class="w-full max-w-xs rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="m9 11 3 3L22 4"/>
@@ -212,10 +199,8 @@ import Footer from "../components/Footer.astro";
           <p class="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Status, priority, due dates. Recurring tasks just appear.</p>
         </div>
 
-        <!-- Connector: plain line -->
         <div class="h-6 w-px border-l border-dashed border-neutral-400/60 dark:border-neutral-600/60"></div>
 
-        <!-- Schedule -->
         <div class="w-full max-w-xs rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning-400" aria-hidden="true">
             <path d="M8 2v4"/><path d="M16 2v4"/>
@@ -229,7 +214,6 @@ import Footer from "../components/Footer.astro";
       </div>
     </section>
 
-    <!-- Features -->
     <section class="mt-28 max-w-4xl">
       <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">What you can do with it</h2>
       <p class="mt-3 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
@@ -320,7 +304,6 @@ import Footer from "../components/Footer.astro";
       </div>
     </section>
 
-    <!-- Pricing -->
     <section class="mt-28 max-w-4xl">
       <h2 class="text-2xl font-semibold text-neutral-800 dark:text-neutral-100">Free to download. No catch.</h2>
       <p class="mt-2 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
@@ -340,7 +323,6 @@ import Footer from "../components/Footer.astro";
         Backing is optional and changes nothing about the free app. It gets you the iPhone app and the Mac App Store version free when they ship.
       </p>
 
-      <!-- Coming next -->
       <div class="mt-12 space-y-4 text-sm text-neutral-500 dark:text-neutral-400">
         <h3 class="font-medium text-neutral-700 dark:text-neutral-300">Coming next</h3>
         <ul class="space-y-2">
@@ -363,7 +345,6 @@ import Footer from "../components/Footer.astro";
       </div>
     </section>
 
-    <!-- Keyboard-driven callout -->
     <section class="mt-28 max-w-4xl">
       <div class="rounded-xl border border-neutral-200 bg-white px-8 py-8 dark:border-neutral-800 dark:bg-neutral-900">
         <p class="text-lg font-semibold text-neutral-800 dark:text-neutral-100">Keyboard-first</p>

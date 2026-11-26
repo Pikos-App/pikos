@@ -1,12 +1,5 @@
-// Emits the Swift half of the editor bridge from src/protocol.ts.
-//
-// Both sides of the bridge are generated from one declaration so they cannot
-// drift. See the note at the top of src/protocol.ts for why that matters: a
-// mismatched field does not fail to compile, it arrives as nil and the editor
-// quietly stops saving.
-//
-// Output is committed and re-checked in CI, the same arrangement as the UniFFI
-// bindings.
+// Emits the Swift half of the editor bridge from src/protocol.ts. The output is committed and
+// re-checked in CI.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -23,7 +16,7 @@ function packageRoot(): string {
       };
       if (pkg.name === "@pikos/editor-mobile") return dir;
     } catch {
-      // keep walking
+      // No package.json at this level: keep walking up.
     }
     const parent = dirname(dir);
     if (parent === dir) throw new Error("run this from within packages/editor-mobile");
@@ -31,7 +24,6 @@ function packageRoot(): string {
   }
 }
 
-/** Swift type for a declared field type. */
 function swiftType(type: FieldType): string {
   switch (type) {
     case "string":
@@ -45,16 +37,13 @@ function swiftType(type: FieldType): string {
     case "stringArray":
       return "[String]";
     case "json":
-      // Documents cross as their JSON text rather than a decoded structure.
-      // Swift never inspects a ProseMirror document — it stores it and hands it
-      // back — so decoding it would cost a parse per keystroke and risk
-      // re-serialising it differently from how the editor wrote it.
+      // Swift stores a document and hands it back, so decoding it would cost a parse per
+      // keystroke and risk re-serialising it differently from the editor.
       return "String";
   }
 }
 
 function docComment(text: string, indent: string): string {
-  // Wrap at a width that stays readable in Xcode's default editor.
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let line = "";
@@ -79,10 +68,8 @@ function payloadStruct(prefix: string, type: string, spec: MessageSpec): string 
   const name = structName(prefix, type);
   const header = `${docComment(spec.doc, "    ")}\n    public struct ${name}: Codable, Equatable {`;
 
-  // Public, with an explicit public initialiser. Swift synthesises only an
-  // internal memberwise init for a public struct, and these appear as
-  // associated values on a public enum, so callers outside the module could
-  // otherwise decode them but never construct one.
+  // Swift synthesises only an internal memberwise init for a public struct, so the public
+  // init is explicit: callers outside the module must be able to construct these.
   if (fields.length === 0) {
     return `${header}\n        public init() {}\n    }`;
   }

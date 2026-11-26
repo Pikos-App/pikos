@@ -1,27 +1,16 @@
-// The web renderer for the design tokens: turns the data in `tokens.ts` into the
-// three CSS tiers apps/desktop/src/app.css needs — `@theme` primitives, the
-// `:root` / `.dark` semantic blocks, and the Tailwind v4 `@theme inline` bridge.
-//
-// It lives beside the tokens rather than inside scripts/ so it is typed and unit
-// tested; scripts/gen-ui-tokens.mjs is a thin splice-into-app.css wrapper around
-// `renderTokenCss()`, and scripts/check-ui-tokens.sh compares the two.
-//
-// Output is deliberately byte-for-byte what the file already contained, down to
-// the comment banners, so introducing the generator was a no-op on the rendered
-// app. Keep it prettier-clean (printWidth 100) — the repo's prettier gate reads
-// app.css like any other file.
+// The web renderer for the design tokens: `tokens.ts` data in, the token tiers of
+// apps/desktop/src/app.css out. The output must be prettier-clean (printWidth 100),
+// because the prettier gate reads app.css like any other file.
 
 import type { ColorScheme, ColorValue, TokenValue } from "./token-types.ts";
 import { PRIMITIVE_GROUPS, SEMANTIC_GROUPS, TAILWIND_ALIAS_GROUPS } from "./tokens.ts";
 
-/** Opening marker; the generator locates the block by its first line. */
+/** The generator locates the block by this marker's first line. */
 export const TOKEN_CSS_START =
   "/* GENERATED: design tokens — emitted from packages/ui/src/tokens.ts by scripts/gen-ui-tokens.mjs.\n" +
   "   Edit the tokens, then re-run the generator; scripts/check-ui-tokens.sh fails the build on drift. */";
 
 export const TOKEN_CSS_END = "/* GENERATED: end design tokens */";
-
-// ── Value rendering ──────────────────────────────────────────────────────────
 
 function renderColor(value: ColorValue): string {
   switch (value.kind) {
@@ -38,7 +27,6 @@ function renderColor(value: ColorValue): string {
   }
 }
 
-/** Zero renders unitless, matching how the shorthand is conventionally written. */
 const pxOrZero = (n: number): string => (n === 0 ? "0" : `${n}px`);
 
 export function renderValue(value: TokenValue): string {
@@ -65,11 +53,8 @@ export function renderValue(value: TokenValue): string {
   }
 }
 
-// ── Comment banners ──────────────────────────────────────────────────────────
-
 const SECTION_RULE = "═".repeat(79);
 
-/** The full-width box that separates the tiers. */
 function section(title: string, body: readonly string[] = []): string[] {
   return [
     `/* ${SECTION_RULE}`,
@@ -79,11 +64,7 @@ function section(title: string, body: readonly string[] = []): string[] {
   ];
 }
 
-/**
- * A rule-wrapped group label, indented two spaces. A multi-line label wraps onto
- * continuation lines aligned under the first word, with the closing rule on the
- * last one.
- */
+/** Continuation lines align under the first word; the closing rule sits on the last one. */
 function groupBanner(lines: readonly string[], rule: string): string[] {
   const indent = "  ";
   const first = lines[0] ?? "";
@@ -96,8 +77,6 @@ function groupBanner(lines: readonly string[], rule: string): string[] {
   });
   return out;
 }
-
-// ── Blocks ───────────────────────────────────────────────────────────────────
 
 function renderPrimitives(): string[] {
   const out: string[] = [];
@@ -114,8 +93,7 @@ function renderScheme(scheme: ColorScheme): string[] {
   for (const group of SEMANTIC_GROUPS) {
     const comment =
       scheme === "dark" && group.darkComment !== undefined ? group.darkComment : group.comment;
-    // The dark block carries overrides only — a token with no dark value simply
-    // inherits :root, and a group with no overrides at all never appears.
+    // The dark block carries overrides only; the rest inherits :root.
     const tokens =
       scheme === "dark" ? group.tokens.filter((t) => t.dark !== undefined) : group.tokens;
     if (tokens.length === 0) continue;
@@ -124,7 +102,6 @@ function renderScheme(scheme: ColorScheme): string[] {
       out.push(...groupBanner(comment, "───"));
     }
     for (const token of tokens) {
-      // Per-token notes ride the light block; the dark block is values only.
       if (scheme === "light" && token.doc) out.push(`  /* ${token.doc} */`);
       const value = scheme === "dark" ? (token.dark ?? token.value) : token.value;
       out.push(`  --${token.name}: ${renderValue(value)};`);
@@ -143,7 +120,6 @@ function renderTailwindBridge(): string[] {
   return out;
 }
 
-/** The whole token region of app.css, without the surrounding markers. */
 export function renderTokenCss(): string {
   return [
     ...section("PRIMITIVE COLOR SCALES", [
@@ -179,7 +155,6 @@ export function renderTokenCss(): string {
   ].join("\n");
 }
 
-/** The token region with its markers — what the generator splices into app.css. */
 export function renderTokenCssBlock(): string {
   return `${TOKEN_CSS_START}\n\n${renderTokenCss()}\n\n${TOKEN_CSS_END}`;
 }

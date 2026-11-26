@@ -1,10 +1,5 @@
-// The webview half of the editor bridge.
-//
-// Isolates every assumption about the host so the editor itself stays testable
-// in a plain DOM. In a WKWebView the host installs
-// `window.webkit.messageHandlers.pikos`; outside one — a browser, a test — that
-// object is absent, and this falls back to logging rather than throwing, so the
-// editor can be opened and poked at without a native shell.
+// The webview half of the editor bridge. Outside a WKWebView, where the host's message
+// handler is absent, it logs instead of throwing, so the editor runs in a plain DOM.
 
 import type { WebviewToHostPayload, WebviewToHostType } from "./protocol";
 import { envelope } from "./protocol";
@@ -17,7 +12,6 @@ interface WebKitWindow {
   webkit?: { messageHandlers?: Record<string, WebKitMessageHandler | undefined> };
 }
 
-/** Name the host registers its handler under. */
 const HANDLER_NAME = "pikos";
 
 function handler(): WebKitMessageHandler | null {
@@ -26,12 +20,9 @@ function handler(): WebKitMessageHandler | null {
 }
 
 /**
- * Send a message to the host.
- *
- * Fire-and-forget by design. The bridge is one-way per message and the host
- * replies, when it needs to, with a message of its own — a request/response
- * shape would need correlation ids and timeouts to handle a webview that is
- * reloaded mid-flight, and nothing here needs an answer.
+ * Fire-and-forget: the host replies, when it needs to, with a message of its own. A
+ * request/response shape would need correlation ids and timeouts for a webview reloaded
+ * mid-flight.
  */
 export function send<T extends WebviewToHostType>(
   type: T,
@@ -43,23 +34,17 @@ export function send<T extends WebviewToHostType>(
     post.postMessage(message);
     return;
   }
-  // Running outside a WKWebView. Useful during development, and harmless.
   // eslint-disable-next-line no-console
   console.debug("[pikos-bridge] no host; would send", message);
 }
 
-/** True when running inside the native shell. */
 export function hasHost(): boolean {
   return handler() !== null;
 }
 
 /**
- * Debounce a function on a trailing edge.
- *
- * Document changes fire on every keystroke, and each one carries the full
- * document plus its extracted plain text across the bridge. At typing speed
- * that is enough serialisation to be felt, which is the thing the M0 spike is
- * measuring, so the editor coalesces before sending.
+ * Trailing-edge debounce. Each document change carries the full document and its plain text
+ * across the bridge, which is felt at typing speed, so the editor coalesces before sending.
  */
 export function debounce<A extends unknown[]>(
   fn: (...args: A) => void,
@@ -83,9 +68,7 @@ export function debounce<A extends unknown[]>(
     timer = setTimeout(run, ms);
   };
 
-  // Flush exists for the moment the app is backgrounded: iOS can suspend a
-  // process shortly after, and a pending debounce would take the user's last
-  // few keystrokes with it.
+  // Flush on backgrounding: iOS may suspend the process, taking a pending debounce with it.
   wrapped.flush = () => {
     if (timer !== null) {
       clearTimeout(timer);

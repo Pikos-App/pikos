@@ -1,16 +1,7 @@
-// Pikos design tokens — the single source of truth for every color, type step,
-// radius and shadow the product uses.
+// The source of truth for every color, type step, radius and shadow. The token tiers of
+// apps/desktop/src/app.css are generated from here, so edit the tokens, never that file.
 //
-// Three tiers, same as the CSS they generate:
-//   1. PRIMITIVE_GROUPS — the raw scales. Never referenced from a component.
-//   2. SEMANTIC_GROUPS  — what a color *means*, per scheme. This is the tier
-//                         components (and a future native renderer) consume.
-//   3. TAILWIND_ALIAS_GROUPS — the web-only bridge that exposes tier 2 as
-//                         Tailwind utilities.
-//
-// apps/desktop/src/app.css does not own these values any more: the token tiers
-// of that file are emitted from here by scripts/gen-ui-tokens.mjs, and
-// scripts/check-ui-tokens.sh fails the build if the two drift apart.
+// Components consume the semantic tier, never the primitives.
 
 import {
   type ColorScheme,
@@ -32,7 +23,6 @@ import {
   typeStyle,
 } from "./token-types.ts";
 
-/** `--color-<prefix>-<stop>` for each stop, in the order given. */
 function scale(
   prefix: string,
   stops: readonly (readonly [number | string, string])[]
@@ -40,14 +30,9 @@ function scale(
   return stops.map(([stop, value]) => ({ name: `color-${prefix}-${stop}`, value: hex(value) }));
 }
 
-/** `--<name>: var(--<from>)` — an alias that carries no value of its own. */
 function alias(name: string, from: string): TokenDefinition {
   return { name, value: ref(from) };
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tier 1 — primitives
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const PRIMITIVE_GROUPS: readonly TokenGroup[] = [
   {
@@ -189,10 +174,6 @@ export const PRIMITIVE_GROUPS: readonly TokenGroup[] = [
     ],
   },
 ];
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tier 2 — semantic tokens
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const SELECTION_TINT = hex("#2dd4a8");
 
@@ -382,9 +363,6 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
       alias("ring", "border-focus"),
     ],
   },
-  // The chart / sidebar / titlebar runs continue the shadcn block in the light
-  // scheme (no banner, no blank line) but are labelled separately in the dark
-  // one, which overrides only the charts and the titlebar.
   {
     comment: null,
     darkComment: ["Chart colors"],
@@ -423,11 +401,6 @@ export const SEMANTIC_GROUPS: readonly TokenGroup[] = [
   },
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tier 3 — Tailwind bridge (web only)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/** `--color-<name>: var(--<from>)`; `name` defaults to `from` for the common case. */
 const bridge = (...names: readonly string[]) => names.map((from) => ({ from, name: from }));
 
 export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
@@ -530,10 +503,6 @@ export const TAILWIND_ALIAS_GROUPS: readonly TailwindAliasGroup[] = [
   },
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Lookups
-// ═══════════════════════════════════════════════════════════════════════════════
-
 function index(groups: readonly TokenGroup[]): ReadonlyMap<string, TokenDefinition> {
   return new Map(groups.flatMap((g) => g.tokens.map((t) => [t.name, t] as const)));
 }
@@ -541,24 +510,19 @@ function index(groups: readonly TokenGroup[]): ReadonlyMap<string, TokenDefiniti
 export const PRIMITIVES: ReadonlyMap<string, TokenDefinition> = index(PRIMITIVE_GROUPS);
 export const SEMANTIC_TOKENS: ReadonlyMap<string, TokenDefinition> = index(SEMANTIC_GROUPS);
 
-/** Every token in either tier, keyed by name. */
 export const ALL_TOKENS: ReadonlyMap<string, TokenDefinition> = new Map([
   ...PRIMITIVES,
   ...SEMANTIC_TOKENS,
 ]);
 
-/** The value a token takes in `scheme`, falling back to the light value when unthemed. */
+/** Throws on an unknown name. Falls back to the light value when the token has no dark one. */
 export function tokenValue(name: string, scheme: ColorScheme): TokenValue {
   const token = ALL_TOKENS.get(name);
   if (!token) throw new Error(`Unknown design token: ${name}`);
   return scheme === "dark" ? (token.dark ?? token.value) : token.value;
 }
 
-/**
- * The literal `#rrggbb` a token resolves to, following refs. Throws for tokens
- * whose value is not a flat color (a mix, a shadow, a type step) — callers that
- * need one of those want the value node, not a hex.
- */
+/** The `#rrggbb` a token resolves to, following refs. Throws unless the value is a flat color. */
 export function tokenHex(name: string, scheme: ColorScheme): string {
   const seen = new Set<string>();
   let current = name;

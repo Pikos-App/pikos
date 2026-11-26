@@ -20,9 +20,6 @@ describe("message validation", () => {
   });
 
   it("rejects a message from a different protocol version", () => {
-    // The host and the webview are updated independently — an app update can
-    // replace the shell while a webview is live — so a version mismatch has to
-    // be caught rather than assumed away.
     const result = parseHostMessage({ payload: {}, type: "focus", v: PROTOCOL_VERSION + 1 });
     expect(result).toMatchObject({ ok: false });
     if (!result.ok) expect(result.error).toContain("protocol version");
@@ -49,16 +46,13 @@ describe("message validation", () => {
   });
 
   it("rejects non-finite numbers", () => {
-    // NaN and Infinity serialise to null through JSON, so a number-typed field
-    // would arrive as a hole. Rejecting here beats discovering it downstream.
+    // NaN and Infinity serialise to null through JSON.
     const result = parseHostMessage({ payload: { px: NaN }, type: "heightChanged", v: PROTOCOL_VERSION });
     expect(result.ok).toBe(false);
   });
 
   it("rejects a non-integer where an integer is declared", () => {
-    // The protocol version is an integer so Swift compares it as an Int rather
-    // than a Double. A fractional value would mean the sender and receiver
-    // disagree about the type, not just the value.
+    // A fractional version means sender and receiver disagree about the type.
     const result = parseHostMessage({
       payload: { protocolVersion: 1.5 },
       type: "ready",
@@ -92,18 +86,14 @@ describe("envelopes", () => {
 
 describe("protocol declaration", () => {
   it("documents every message", () => {
-    // The declaration is the only description of the bridge that both sides
-    // read. An undocumented message is one the other side's author has to guess
-    // at, and the Swift generator copies these straight into doc comments.
+    // The Swift generator copies these into doc comments.
     for (const spec of [...Object.values(HOST_TO_WEBVIEW), ...Object.values(WEBVIEW_TO_HOST)]) {
       expect(spec.doc.length).toBeGreaterThan(20);
     }
   });
 
   it("uses distinct names across directions", () => {
-    // Overlapping names are legal but make logs ambiguous about which way a
-    // message was travelling, which is exactly what you need when debugging a
-    // bridge you cannot step through.
+    // Overlapping names make logs ambiguous about which way a message travelled.
     const overlap = Object.keys(HOST_TO_WEBVIEW).filter((k) => k in WEBVIEW_TO_HOST);
     expect(overlap).toEqual([]);
   });
@@ -124,8 +114,6 @@ describe("debounce", () => {
   });
 
   it("flushes pending work immediately", () => {
-    // Called when the app is backgrounded: iOS may suspend the process shortly
-    // after, and a pending debounce would take the last keystrokes with it.
     vi.useFakeTimers();
     const fn = vi.fn();
     const d = debounce(fn, 100);

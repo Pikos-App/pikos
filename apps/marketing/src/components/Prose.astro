@@ -1,11 +1,9 @@
 ---
 /**
- * Body copy for a page built on Base.astro.
- *
- * Astro scopes a component's <style> to that component, so a page that writes bare <h2> and <p>
- * inside a `prose` div gets no styling unless the rules sit in the same file. That is why several
- * pages carry an identical style block. This holds it once; new pages use this instead of copying
- * it again. BlogPost.astro keeps its own, because its prose is a slot inside a layout.
+ * Body copy for a page built on Base.astro. Astro scopes a component's <style> to that
+ * component, so bare <h2> and <p> in a page get no prose rules unless they sit in the same
+ * file; this holds them once. BlogPost.astro keeps its own, because its prose is a slot inside
+ * a layout.
  */
 interface Props {
   class?: string;
