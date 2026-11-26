@@ -117,7 +117,7 @@ function main(): void {
     reachedChrono: reached,
   };
 
-  const outPath = resolve(root, "../../docs/ios/parser-grammar.json");
+  const outPath = resolve(root, "scripts/parser-grammar/parser-grammar.json");
   writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n");
 
   process.stdout.write(

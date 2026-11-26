@@ -19,10 +19,8 @@
 //!
 //! ## Scope
 //!
-//! Pure logic only, for now. The database layer (`pikos-db`) is async and needs
-//! an App Group container path decided on the Swift side first; it is the next
-//! layer to land here, and `docs/ios/02-ffi-surface.md` records the shape it
-//! will take.
+//! Pure logic as free functions, and the database through [`Workspace`] and
+//! [`ReadOnlyWorkspace`] in the `workspace` module.
 
 use pikos_core::calendar::all_day::{
     assign_stable_all_day_rows, build_all_day_bars, crossing_midnights_count,

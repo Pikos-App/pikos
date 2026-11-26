@@ -2,9 +2,9 @@
 //
 // The parser hands chrono a string and reads four things back: the matched
 // span, per-field certainty, the resolved start, and a range end. Those four
-// are the whole of what chrono-node does for Pikos — see
-// docs/ios/04-parser-grammar.md — so they are what a replacement has to
-// reproduce.
+// are the whole of what chrono-node does for Pikos, so they are what a
+// replacement has to reproduce (see the crate docs in
+// crates/pikos-core/src/nlp/mod.rs).
 //
 // This records all four for every distinct expression the corpus exercises, at
 // every pinned reference time, by calling chrono directly. Development-grade
@@ -79,7 +79,7 @@ function main(): void {
   }
 
   const grammar = JSON.parse(
-    readFileSync(resolve(root, "../../docs/ios/parser-grammar.json"), "utf8")
+    readFileSync(resolve(root, "scripts/parser-grammar/parser-grammar.json"), "utf8")
   ) as { families: { family: string; distinctForms: string[] }[] };
 
   const expressions = [...new Set(grammar.families.flatMap((f) => f.distinctForms))].sort();
