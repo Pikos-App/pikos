@@ -527,6 +527,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           else handleToggleStatus(page.id, page.status);
         }}
         page={page}
+        showsFolder={isTodayView || isUpcomingView}
       />
     );
   }

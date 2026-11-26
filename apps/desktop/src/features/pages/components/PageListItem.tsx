@@ -44,6 +44,8 @@ interface PageListItemProps {
   onClearDate?: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
+  /** On in the date views, where rows from every folder sit together. */
+  showsFolder?: boolean;
   /** How many pages this row's context menu will act on — the selection it belongs
    *  to, or 1. A menu that reads the same on one page and on five cannot say what a
    *  click is about to do, and Delete is in it. */
@@ -78,6 +80,7 @@ export function PageListItem({
   onStopRepeating,
   onToggleStatus,
   page,
+  showsFolder = false,
 }: PageListItemProps) {
   const prefetch = usePrefetchOnHover(page.id);
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
@@ -94,6 +97,7 @@ export function PageListItem({
   const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
   const canPickDate = pageActions(page).some((a) => a.id === "pick-date" && a.offered);
+  const folder = showsFolder ? folders.find((f) => f.id === page.folderId) : undefined;
 
   const now = useNow();
 
@@ -291,6 +295,14 @@ export function PageListItem({
                       </button>
                     );
                   })()}
+                {folder && (
+                  <span
+                    aria-label={`In ${folder.name}`}
+                    className="h-2 w-2 shrink-0 rounded-sm"
+                    role="img"
+                    style={{ backgroundColor: folder.color ?? "var(--text-tertiary)" }}
+                  />
+                )}
               </div>
             </div>
             {showSubtitle && (

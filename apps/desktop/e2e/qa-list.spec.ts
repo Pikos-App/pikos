@@ -204,6 +204,42 @@ appTest(
 );
 
 appTest(
+  "Today and Upcoming mark each filed page with its folder's colour on the date's line",
+  { tag: ["@LIST-22"] },
+  async ({ app }) => {
+    await createFolder(app, "Bills");
+    await quickAdd(app, "pay rent @today ~Bills");
+    const items = app.locator("[data-page-list-item]");
+    const rent = items.filter({ hasText: "pay rent" });
+    const mark = rent.getByRole("img", { name: "In Bills" });
+
+    await appTest.step("LIST-22 a folder's own list shows no mark", async () => {
+      await expect(rent).toBeVisible();
+      await expect(mark).toHaveCount(0);
+    });
+
+    await app.getByRole("button", { name: /^Today/ }).click();
+    await quickAdd(app, "water the plants @today");
+
+    for (const view of ["Today", "Upcoming"]) {
+      await appTest.step(`LIST-22 ${view} marks the filed page beside its date`, async () => {
+        await app.getByRole("button", { name: new RegExp(`^${view}`) }).click();
+        await expect(mark).toBeVisible();
+        const markBox = await mark.boundingBox();
+        const dateBox = await rent.getByRole("button", { name: /^Date:/ }).boundingBox();
+        if (!markBox || !dateBox) throw new Error("the row's date or mark has no box");
+        const markMiddle = markBox.y + markBox.height / 2;
+        expect(markMiddle).toBeGreaterThan(dateBox.y);
+        expect(markMiddle).toBeLessThan(dateBox.y + dateBox.height);
+        await expect(
+          items.filter({ hasText: "water the plants" }).getByRole("img", { name: /^In / })
+        ).toHaveCount(0);
+      });
+    }
+  }
+);
+
+appTest(
   "Overdue holds only earlier days, and Move to today moves plain pages and names what it leaves",
   { tag: ["@LIST-04"] },
   async ({ app }) => {
