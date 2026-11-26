@@ -1,2 +1,7 @@
+# In a worktree, git points GIT_DIR at .git/worktrees/<name> while a hook runs,
+# and turbo then hashes a different set of files than it does from a shell. Every
+# cached pass misses, and a commit right after a passing verify reruns all of it.
+unset GIT_DIR
+
 pnpm verify
 SOURCE_AUDIT_STAGED=1 pnpm audit:source

@@ -259,8 +259,19 @@ export { STORAGE_READS, watchWrites } from "./storageReads";
 export type { WriteWatcher } from "./storageReads";
 export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
 // ── Calendar sync health, derived from the read model ──
-export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
-export type { AccountConnectionState, SyncDotMeta, SyncDotState } from "./sync/syncStatus";
+export {
+  accountConnectionState,
+  accountsNotSyncing,
+  calendarSyncDot,
+  NOT_SYNCING_AFTER_MS,
+  STALE_AFTER_MS,
+} from "./sync/syncStatus";
+export type {
+  AccountConnectionState,
+  AccountNotSyncing,
+  SyncDotMeta,
+  SyncDotState,
+} from "./sync/syncStatus";
 export * from "./types";
 export { ASSET_DIR, resolveAssetPath } from "./utils/assetPath";
 export {

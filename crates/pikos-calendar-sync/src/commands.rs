@@ -427,6 +427,13 @@ pub async fn resync_account<P: CalendarProvider>(
     };
     if next != account.reconnect_needed {
         set_reconnect_needed_impl(pool, account_id, next).await?;
+        // The background pass stops polling a flagged account, so without this line
+        // the log shows sync simply going quiet.
+        if next {
+            log::info!("calendar_sync_reconnect_needed account={account_id}");
+        } else {
+            log::info!("calendar_sync_reconnected account={account_id}");
+        }
     }
     Ok(results)
 }

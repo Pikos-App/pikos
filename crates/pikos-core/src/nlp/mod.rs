@@ -29,9 +29,11 @@
 //! the text is a whole title and the extents are the ones quick-add cuts).
 //!
 //! Beyond the corpora, `tests/quick_add_fuzz.rs` grades it against lines
-//! composed of fragments in random order. That is where the ordering bugs live,
-//! and it found six classes the hand-written corpora never reached — see
-//! `docs/ios/04-parser-grammar.md`.
+//! composed of fragments in random order. That is where the ordering bugs live:
+//! the hand-written corpora exercise one feature per input, and the parser is a
+//! pipeline whose order is load-bearing. A clean fuzz run is evidence about the
+//! axes the generator varies and nothing else, so a new axis needs a mutation
+//! that proves the fuzzer can see it.
 //!
 //! # Deliberate differences from the reference
 //!

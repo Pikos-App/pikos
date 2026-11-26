@@ -331,6 +331,7 @@ impl Bridge {
                 let events: Option<Vec<upstream::UpstreamEvent>> = arg(&mut args, "events")?;
                 let removals: Option<Vec<String>> = arg(&mut args, "removals")?;
                 let refresh: Option<bool> = arg(&mut args, "refresh")?;
+                let rejected: Option<bool> = arg(&mut args, "rejected")?;
                 return reply(
                     upstream::sync(
                         &pool,
@@ -338,6 +339,7 @@ impl Bridge {
                         events.unwrap_or_default(),
                         removals.unwrap_or_default(),
                         refresh.unwrap_or(false),
+                        rejected.unwrap_or(false),
                     )
                     .await,
                 );

@@ -31,6 +31,8 @@ function actionError(e: unknown, fallback: string): string {
 
 export interface CalendarSyncState {
   accounts: AccountWithCalendars[];
+  /** When the latest background sync pass ended, set with the `accounts` read after it. */
+  lastPassAt: Date | null;
   results: ResultMap;
   loading: boolean;
   busyAccountId: string | null;
@@ -52,6 +54,7 @@ export function useCalendarSync(): CalendarSyncState {
   const { reload, storage } = useWorkspace();
   const { patchFolderColor } = usePages();
   const [accounts, setAccounts] = useState<AccountWithCalendars[]>([]);
+  const [lastPassAt, setLastPassAt] = useState<Date | null>(null);
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
@@ -79,13 +82,23 @@ export function useCalendarSync(): CalendarSyncState {
     setAccounts(await storage.getSyncStatus());
   }
 
+  // Set together, so nothing reads a new pass time against the accounts from before
+  // it: after a sleep that would make every calendar look missed until the read lands.
+  async function refreshAfterPass() {
+    if (!storage) return;
+    const at = new Date();
+    const next = await storage.getSyncStatus();
+    setAccounts(next);
+    setLastPassAt(at);
+  }
+
   // The dot and "synced N ago" read `lastSyncedAt`, which the *backfill* stamps —
   // and enabling a calendar only pokes that backfill, so it lands after this hook's
   // own post-toggle read. Without this the row keeps showing a pre-sync snapshot
   // (stale dot, no timestamp) until some other panel action happens to re-read.
-  const refreshRef = useRef(refresh);
+  const refreshRef = useRef(refreshAfterPass);
   useEffect(() => {
-    refreshRef.current = refresh;
+    refreshRef.current = refreshAfterPass;
   });
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -239,6 +252,7 @@ export function useCalendarSync(): CalendarSyncState {
     disconnect,
     error,
     googleAvailable,
+    lastPassAt,
     loading,
     recolorCalendar,
     reconnect,

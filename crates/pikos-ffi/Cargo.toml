@@ -35,8 +35,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 chrono-tz = "0.10"
 pikos-recurrence = { path = "../pikos-recurrence" }
 # CalDAV account management and manual sync. Brings reqwest+rustls and the
-# keychain into the iOS static library; both were verified to cross-compile to
-# aarch64-apple-ios by the M0 spike (docs/ios/06-platform-audit.md). What it
+# keychain into the iOS static library; both cross-compile to aarch64-apple-ios. What it
 # does NOT bring is the scheduler: `run_sync_loop` is an in-process timer that
 # iOS suspends within seconds of backgrounding, so nothing here polls.
 pikos-calendar-sync = { path = "../pikos-calendar-sync" }

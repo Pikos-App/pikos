@@ -1,0 +1,3 @@
+# A pull that merged may have brought in pull requests merged elsewhere, so clear away the
+# worktrees and branches they leave behind. It never fails the pull.
+node scripts/clean-merged-work.mjs --quiet

@@ -25,8 +25,7 @@ struct AboutSettings: View {
             }
 
             #if DEBUG
-                // The first device run's checklist, answered on screen —
-                // see docs/ios/07-device-checklist.md. Not in a release
+                // The first device run's checklist, answered on screen. Not in a release
                 // build: a container path is nobody's business but the
                 // developer's, and the attribute read behind it would
                 // need a privacy declaration the shipped binary should

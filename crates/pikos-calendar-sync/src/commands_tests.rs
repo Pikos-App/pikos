@@ -707,7 +707,9 @@ impl CalendarProvider for Scripted {
     }
 }
 
+/// Tomorrow, so it stays inside the sync window whenever the tests run.
 fn one_event(href: &str, uid: &str, title: &str) -> UpsertItem {
+    let day = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d");
     UpsertItem::Event(EventUpsert {
         core: EventCore {
             external_id: href.into(),
@@ -719,7 +721,7 @@ fn one_event(href: &str, uid: &str, title: &str) -> UpsertItem {
             attendees: vec![],
         },
         schedule: EventSchedule {
-            start: "2026-06-15T09:00:00".into(),
+            start: format!("{day}T09:00:00"),
             end: ExclusiveEnd::new(None),
             timezone: Some("UTC".into()),
         },

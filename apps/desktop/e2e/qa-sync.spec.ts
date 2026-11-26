@@ -448,6 +448,132 @@ appTest(
 );
 
 appTest(
+  "ticks on a synced series stay done, once each, when it is edited from a date on",
+  { tag: ["@SYNC-36"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    await openCalendarFolder(app, "Personal");
+    const series = rows(app, "Weekly 1:1 (London)");
+    const open = series.filter({ has: app.getByRole("checkbox", { name: "Mark done" }) });
+    const done = series.filter({ has: app.getByRole("checkbox", { name: "Mark not done" }) });
+    const dueIn = async (days: number) =>
+      expect(dateLabel(open)).toHaveAttribute(
+        "aria-label",
+        `Toggle date format: ${await dayLabel(app, days, "list")}`
+      );
+
+    await appTest.step("SYNC-36 tick this week's and next week's", async () => {
+      await open.getByRole("checkbox", { name: "Mark done" }).click();
+      await dueIn(7);
+      await open.getByRole("checkbox", { name: "Mark done" }).click();
+      await dueIn(14);
+    });
+
+    await appTest.step(
+      "SYNC-36 moved half an hour from next week on, it is next due the week after",
+      async () => {
+        const t = (days: number, hm: string) => stamp(app, days, hm);
+        // Google ends the series with this week's and sends the rest as a new event.
+        await upstream(app, "upstream_sync", {
+          calendar: "Personal",
+          events: [
+            {
+              end: await t(0, "17:30"),
+              rrule: `FREQ=WEEKLY;UNTIL=${(await t(0, "17:00")).replace(/[-:]/g, "")}`,
+              start: await t(0, "17:00"),
+              timezone: "Europe/London",
+              title: "Weekly 1:1 (London)",
+            },
+            {
+              end: await t(7, "18:00"),
+              restOfSplit: true,
+              rrule: "FREQ=WEEKLY",
+              start: await t(7, "17:30"),
+              timezone: "Europe/London",
+              title: "Weekly 1:1 (London)",
+            },
+          ],
+        });
+        await openCalendarFolder(app, "Personal");
+        await expect(open).toHaveCount(1);
+        await dueIn(14);
+        await app.getByRole("button", { exact: true, name: "Completed" }).click();
+        await expect(done.filter({ hasText: await dayLabel(app, 7, "list") })).toHaveCount(1);
+      }
+    );
+  }
+);
+
+appTest(
+  "a resumed sync brings no page for a one-off that was over before the window",
+  { tag: ["@SYNC-39:3"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    const t = (days: number, hm: string) => stamp(app, days, hm);
+    // What Google handed back after a re-authorisation: an event from over a year ago that
+    // it reported as changed, beside one still ahead.
+    await upstream(app, "upstream_sync", {
+      calendar: "Personal",
+      events: [
+        {
+          end: await t(-400, "10:00"),
+          start: await t(-400, "09:00"),
+          timezone: "UTC",
+          title: "Planning from last year",
+        },
+        {
+          end: await t(1, "10:00"),
+          start: await t(1, "09:00"),
+          timezone: "UTC",
+          title: "Planning tomorrow",
+        },
+      ],
+    });
+    await openCalendarFolder(app, "Personal");
+    await expect(rows(app, "Planning tomorrow")).toHaveCount(1);
+    await expect(rows(app, "Planning from last year")).toHaveCount(0);
+  }
+);
+
+appTest(
+  "a calendar whose credentials are refused says so over the editor and the calendar",
+  { tag: ["@SYNC-37:5"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    const banner = app.getByRole("region", { name: "Calendar not syncing" });
+    await expect(banner).toHaveCount(0);
+
+    await appTest.step("SYNC-37 a refused poll puts the banner over both panes", async () => {
+      await upstream(app, "upstream_sync", { calendar: "Personal", rejected: true });
+      await expect(banner).toContainText(
+        "Mock Calendar (dev) needs you to sign in again, so its events and reminders may be out of date."
+      );
+      await openFromSearch(app, "Company offsite");
+      await expect(app.getByLabel("Page title")).toHaveText("Company offsite");
+      await expect(banner).toBeVisible();
+      await openCalendarMode(app);
+      await expect(banner).toBeVisible();
+    });
+
+    await appTest.step("SYNC-37 Reconnect opens the account's reconnect dialog", async () => {
+      await banner.getByRole("button", { name: "Reconnect" }).click();
+      const dialog = app.getByRole("dialog", { name: "Reconnect Mock Calendar (dev)" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toHaveCount(0);
+    });
+
+    await appTest.step("SYNC-37 the banner goes once a poll succeeds", async () => {
+      await upstream(app, "upstream_sync", { calendar: "Personal" });
+      await expect(banner).toHaveCount(0);
+    });
+  }
+);
+
+appTest(
   "a synced virtual resolves alone, and a moved instance is removed from Pikos alone",
   { tag: ["@SYNC-20"] },
   async ({ app }) => {
@@ -952,7 +1078,9 @@ appTest(
     const meet = body.getByRole("link", { name: "https://meet.google.com/abc-defg-hij" });
 
     await expect(meet).toBeVisible();
-    await expect(body).toContainText("Join with Google Meet (https://meet.google.com/abc-defg-hij)");
+    await expect(body).toContainText(
+      "Join with Google Meet (https://meet.google.com/abc-defg-hij)"
+    );
     await meet.click();
     await expect(app.getByRole("button", { name: "Open link" })).toBeVisible();
   }

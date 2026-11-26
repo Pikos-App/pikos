@@ -1,4 +1,4 @@
-import type { CalendarSyncResult, SyncCalendar } from "../types";
+import type { AccountWithCalendars, CalendarSyncResult, SyncCalendar } from "../types";
 
 // Four-state calendar health, derived not persisted: the read model only has
 // `enabled` + `lastSyncedAt`, so a resync result (when in hand) sharpens the
@@ -62,4 +62,67 @@ export function accountConnectionState(
 ): AccountConnectionState {
   const rejected = persisted || statuses.some((s) => s === "reconnectNeeded");
   return rejected ? "reconnectNeeded" : "connected";
+}
+
+// A calendar that hasn't synced for this long may be showing events that have since
+// moved or gone, so the app says so where the calendar is, not only in Settings. The
+// scheduler's reminder note uses the same hour (`CALENDAR_OUT_OF_DATE_AFTER`).
+export const NOT_SYNCING_AFTER_MS = 60 * 60 * 1000;
+
+// A pass this long after a calendar's last stamp has had its chance to update it. The
+// stamp lands during the pass and the pass event after every account, so a calendar
+// the pass did reach sits within a few seconds of it.
+const PASS_GRACE_MS = 60 * 1000;
+
+export interface AccountNotSyncing {
+  account: AccountWithCalendars;
+  reason: "reconnectNeeded" | "unreachable";
+  /** The oldest last sync among its enabled calendars, when one ever synced. */
+  lastSyncedAt: string | null;
+}
+
+/**
+ * Accounts whose events may be out of date: one that needs reconnecting, which the
+ * background pass has stopped polling, or one with an enabled calendar a sync pass
+ * failed to update for over an hour.
+ *
+ * `lastPassAt` is when the latest sync pass ended, read together with `accounts`.
+ * Only a pass can show a calendar is unreachable: after the Mac sleeps every
+ * calendar's last sync is hours old until the first pass after waking, and that
+ * pass usually succeeds. An account with no enabled calendar shows no events, so
+ * it has nothing to warn about.
+ */
+export function accountsNotSyncing(
+  accounts: readonly AccountWithCalendars[],
+  lastPassAt: Date | null,
+  now: Date = new Date()
+): AccountNotSyncing[] {
+  const out: AccountNotSyncing[] = [];
+  for (const account of accounts) {
+    const enabled = account.calendars.filter((c) => c.enabled);
+    if (enabled.length === 0) continue;
+    const oldest = oldestSync(enabled);
+    if (account.reconnectNeeded) {
+      out.push({ account, lastSyncedAt: oldest, reason: "reconnectNeeded" });
+      continue;
+    }
+    if (!lastPassAt) continue;
+    const missed = enabled.some((c) => {
+      if (!c.lastSyncedAt) return false;
+      const at = new Date(c.lastSyncedAt).getTime();
+      return at < lastPassAt.getTime() - PASS_GRACE_MS && now.getTime() - at > NOT_SYNCING_AFTER_MS;
+    });
+    if (missed) out.push({ account, lastSyncedAt: oldest, reason: "unreachable" });
+  }
+  return out;
+}
+
+function oldestSync(calendars: readonly SyncCalendar[]): string | null {
+  let oldest: string | null = null;
+  for (const c of calendars) {
+    if (c.lastSyncedAt && (!oldest || new Date(c.lastSyncedAt) < new Date(oldest))) {
+      oldest = c.lastSyncedAt;
+    }
+  }
+  return oldest;
 }

@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Usage: scripts/release-retry.sh
 # Deletes the latest release tag (local + remote), then re-tags HEAD and pushes.
-# Use when build/sign/publish fails in CI. If the fix is a code change, push it
-# and let ci.yml go green first — this script gates on a green CI run for HEAD.
+# Use when build/sign/publish fails in CI. If the fix is a code change, merge it through a
+# pull request and let ci.yml go green first — this script gates on a green CI run for HEAD.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
@@ -38,9 +38,10 @@ git push --no-verify origin --delete "$TAG" 2>/dev/null || true
 # Also delete the draft release on GitHub if gh is available
 gh release delete "$TAG" --yes 2>/dev/null || true
 
-# Re-tag current HEAD and push (single push with tag)
+# Re-tag current HEAD and push the tag alone: main takes changes only through a pull request,
+# so HEAD has to be on it already.
 git tag "$TAG"
-git push --atomic $HOOK_FLAG origin HEAD "$TAG"
+git push $HOOK_FLAG origin "$TAG"
 
 # Wait briefly for the run to register, then grab the URL
 sleep 3

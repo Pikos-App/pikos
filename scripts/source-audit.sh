@@ -108,7 +108,7 @@ else
 fi
 
 # ── 2b. References nobody outside this machine can follow ───────────────────
-# `.agent/`, `.claude/` and `CLAUDE.md` are gitignored, so a decision-record id,
+# `.agent/` and `.claude/` are gitignored, so a decision-record id,
 # a backlog id or a path into them is a dead end for anyone reading the published
 # source. State the fact inline instead; the record is where the reasoning lives,
 # not where a reader of this file can go.

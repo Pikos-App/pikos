@@ -38,6 +38,11 @@ pub struct UpstreamEvent {
     exdates: Vec<String>,
     #[serde(default)]
     overrides: Vec<UpstreamOverride>,
+    /// This is the rest of the series titled `title` after a "this and following"
+    /// edit: a new event upstream under the same title, with an id of its own and
+    /// nothing naming the series it carries on, as Google and CalDAV both send it.
+    #[serde(default)]
+    rest_of_split: bool,
 }
 
 #[derive(Deserialize)]
@@ -57,9 +62,12 @@ pub struct UpstreamCalendar {
 }
 
 /// Hands each calendar the delta a test scripted for it, and every other calendar
-/// an empty incremental one, so a pass touches only what the test named.
+/// an empty incremental one, so a pass touches only what the test named. With
+/// `rejected` it refuses the account's credentials instead, as a revoked Google grant
+/// or a rotated app password does.
 struct Scripted {
     deltas: HashMap<String, SyncDelta>,
+    rejected: bool,
 }
 
 const CURSOR: &str = "e2e-bridge";
@@ -76,6 +84,11 @@ impl CalendarProvider for Scripted {
         calendar: &SyncCalendarRow,
         _since: Option<SyncToken>,
     ) -> AppResult<SyncDelta> {
+        if self.rejected {
+            return Err(AppError::Invalid(
+                "the calendar refused the credentials".into(),
+            ));
+        }
         Ok(self
             .deltas
             .get(&calendar.calendar_id)
@@ -105,13 +118,15 @@ impl CalendarProvider for Scripted {
 }
 
 /// One poll of `calendar`'s account against the scripted upstream. `refresh` runs
-/// the panel's "Refresh from calendar" instead, which drops the cursors first.
+/// the panel's "Refresh from calendar" instead, which drops the cursors first, and
+/// `rejected` has the calendar refuse the account's credentials.
 pub async fn sync(
     pool: &SqlitePool,
     calendar: &str,
     events: Vec<UpstreamEvent>,
     removals: Vec<String>,
     refresh: bool,
+    rejected: bool,
 ) -> AppResult<()> {
     let (account_id, calendar_id) = calendar_by_name(pool, calendar).await?;
     let mut upserts = Vec::with_capacity(events.len());
@@ -135,6 +150,7 @@ pub async fn sync(
     };
     let provider = Scripted {
         deltas: HashMap::from([(calendar_id, delta)]),
+        rejected,
     };
     if refresh {
         refresh_account(pool, &provider, &account_id).await?;
@@ -197,20 +213,26 @@ async fn to_upsert(
     calendar_id: &str,
     ev: UpstreamEvent,
 ) -> AppResult<EventUpsert> {
-    let existing = linked(pool, account_id, calendar_id, &ev.title).await?;
+    let mut existing = linked(pool, account_id, calendar_id, &ev.title).await?;
+    if ev.rest_of_split && existing.take().is_none() {
+        return Err(AppError::NotFound(format!(
+            "no synced series titled {} to split",
+            ev.title
+        )));
+    }
     let stored = match &existing {
         Some((_, page_id)) => Some(stored_event(pool, page_id).await?),
         None => None,
     };
-    let external_id = existing
-        .map(|(id, _)| id)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let carried = stored.unwrap_or_default();
 
     let start = ev
         .start
         .or(carried.start)
         .ok_or_else(|| AppError::Invalid(format!("{} needs a start", ev.title)))?;
+    let external_id = existing
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let end = ev.end.or(carried.end);
     let timezone = ev.timezone.or(carried.timezone);
     let recurrence = ev.rrule.map(|rrule| Recurrence {

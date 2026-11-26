@@ -948,6 +948,64 @@ async fn a_synced_all_day_page_reminds_the_day_before_at_nine_reading_starts_tom
     assert_eq!(banners, [("Offsite", "Starts tomorrow")]);
 }
 
+/// The synced all-day page above, its calendar last synced `synced_hours_ago` before
+/// the tick, and what the tick showed for it.
+async fn synced_reminder_body(synced_hours_ago: i64, reconnect_needed: bool) -> String {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("mirror", "Offsite"))
+        .await
+        .unwrap();
+    insert_test_page_sync(&pool, "mirror", "active")
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s-mirror", "mirror", "2026-05-26", None).await;
+    insert_reminder(&pool, "mirror", pikos_db::DAY_BEFORE_MINUTES).await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    let synced = (now.to_utc() - chrono::Duration::hours(synced_hours_ago))
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    sqlx::query(
+        "INSERT INTO sync_calendar (id, account_id, calendar_id, display_name, enabled,
+            last_synced_at, created_at, updated_at)
+         VALUES ('row', 'test-acct', 'cal', 'Work', 1, ?1, ?1, ?1)",
+    )
+    .bind(&synced)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE sync_account SET reconnect_needed = ? WHERE id = 'test-acct'")
+        .bind(reconnect_needed)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+    settings.overdue_alerts = false;
+
+    let shown = run_tick(&pool, &settings, &mut SchedulerRuntime::default(), now).await;
+    let [(_, body, _)] = shown.as_slice() else {
+        panic!("expected one banner, got {shown:?}");
+    };
+    body.clone()
+}
+
+// qa: NOTIF-15
+#[tokio::test]
+async fn a_reminder_from_a_calendar_that_stopped_syncing_says_it_may_have_changed() {
+    assert_eq!(
+        synced_reminder_body(2, false).await,
+        "Starts tomorrow\nCalendar not syncing, so this may have changed"
+    );
+    assert_eq!(
+        synced_reminder_body(0, true).await,
+        "Starts tomorrow\nCalendar not syncing, so this may have changed"
+    );
+}
+
+#[tokio::test]
+async fn a_reminder_from_a_calendar_synced_within_the_hour_says_nothing_more() {
+    assert_eq!(synced_reminder_body(0, false).await, "Starts tomorrow");
+}
+
 // ─── format helpers ──────────────────────────────────────────────────
 
 #[test]

@@ -511,7 +511,9 @@ appTest(
     await appTest.step("RECUR-14 a weekly rule follows its head to a new weekday", async () => {
       await quickAdd(app, `team lunch every ${await weekdayIn(0)}`);
       await openInEditor(app, listRows(app, "team lunch"));
-      await setBylineDate(app, await pickerDay(app, 1));
+      // The head starts a week out, since a weekday rule typed on that weekday starts next
+      // week, so tomorrow is behind it: in the last week of a month, a month back.
+      await setBylineDate(app, await pickerDay(app, 1), "back");
       await expect(app.getByRole("button", { name: "Scheduled: Tomorrow" })).toBeVisible();
       await expect(
         app.getByRole("button", {

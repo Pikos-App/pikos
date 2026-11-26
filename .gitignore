@@ -55,7 +55,6 @@ recordings/
 
 # Agent workspace (private — not for public repo)
 .agent/
-CLAUDE.md
 
 # OS generated files
 Thumbs.db

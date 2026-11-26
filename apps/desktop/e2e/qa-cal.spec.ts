@@ -11,6 +11,7 @@ import {
   hourLineY,
   mod,
   openCalendarMode,
+  openEditorForPage,
   quickAdd,
   seedSynced,
   stamp,
@@ -798,8 +799,8 @@ appTest(
 );
 
 appTest(
-  "the current-time line sits at the time on the grid and moves with it",
-  { tag: ["@CAL-14:2"] },
+  "the current-time line sits at the time on the grid, and is current back from the editor",
+  { tag: ["@CAL-14:3", "@CAL-31"] },
   async ({ app }) => {
     appTest.setTimeout(100_000);
     const startsAt = await app.evaluate(() => {
@@ -807,6 +808,7 @@ appTest(
       return { hour: now.getHours(), minute: now.getMinutes() };
     });
     appTest.skip(startsAt.hour === 23 && startsAt.minute >= 58, "the line would wrap to tomorrow");
+    await quickAdd(app, "Notes for later");
     await openCalendarMode(app);
     for (const band of [/^Expand 12 AM to/, /^Expand .* to 12 AM$/]) {
       await app.getByRole("button", { name: band }).first().click();
@@ -835,15 +837,25 @@ appTest(
       expect(Math.abs(first - (top + (now - hour) * pitch))).toBeLessThan(3);
     });
 
-    await appTest.step("CAL-14 it moves down as the minutes pass", async () => {
-      await expect.poll(lineY, { intervals: [2_000], timeout: 75_000 }).toBeGreaterThan(first);
-    });
+    await appTest.step(
+      "CAL-31 back from the editor after the minute turns, it is at the new time at once",
+      async () => {
+        const minute = () => app.evaluate(() => new Date().getMinutes());
+        const leftAt = await minute();
+        await openEditorForPage(app, "Notes for later");
+        await expect(calendarOf(app)).toBeHidden();
+        await expect.poll(minute, { intervals: [1_000], timeout: 75_000 }).not.toBe(leftAt);
+
+        await openCalendarMode(app);
+        expect(await lineY()).toBeGreaterThan(first);
+      }
+    );
   }
 );
 
 appTest(
   "the current-time line passes under a block rather than through its title",
-  { tag: ["@CAL-14:2"] },
+  { tag: ["@CAL-14:3"] },
   async ({ app }) => {
     const hour = await app.evaluate(() => new Date().getHours());
     const clock = `${hour % 12 || 12}${hour < 12 ? "am" : "pm"}`;
@@ -1109,7 +1121,10 @@ appTest(
       await expect(calendarOf(app)).toHaveAttribute("aria-busy", "false");
     }
     await app.mouse.move(0, 0);
-    await gutterLabel(app, 20).scrollIntoViewIfNeeded();
+    // The blocks run 8 to 9 PM and the checks read their bottom edge, so 9 PM has to be in
+    // view. Scrolling 8 PM in left it on the window's edge whenever the grid opened earlier
+    // in the day, as it does at the current time, and the edge fell off screen.
+    await gutterLabel(app, 21).scrollIntoViewIfNeeded();
 
     await appTest.step("CAL-26 on the week grid and as an all-day bar it's at full strength", async () => {
       await expect(block).toBeVisible();
