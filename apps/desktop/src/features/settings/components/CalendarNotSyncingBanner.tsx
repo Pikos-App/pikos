@@ -11,15 +11,18 @@ import { useCalendarSync } from "../hooks/useCalendarSync";
 import { ReconnectAccountDialog } from "./ReconnectAccountDialog";
 
 /** Over the editor and the calendar alike, since Settings was the only place that said a
- *  calendar had stopped syncing. Hiding it lasts until the app next opens. */
+ *  calendar had stopped syncing. Hiding it lasts until the app next opens, and covers only
+ *  what it said then, so another account, or the same one failing another way, still shows. */
 export function CalendarNotSyncingBanner() {
   const { accounts, busyAccountId, lastPassAt, reconnect, reconnectGoogle, resync } =
     useCalendarSync();
   const now = useNow();
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
 
-  const found = hidden ? [] : accountsNotSyncing(accounts, lastPassAt, now);
+  const found = accountsNotSyncing(accounts, lastPassAt, now).filter(
+    (f) => !hidden.has(hideKey(f))
+  );
   const reconnecting = accounts.find((a) => a.id === reconnectingId);
 
   return (
@@ -58,7 +61,7 @@ export function CalendarNotSyncingBanner() {
           </ul>
           <Button
             aria-label="Hide until Pikos opens again"
-            onClick={() => setHidden(true)}
+            onClick={() => setHidden(new Set([...hidden, ...found.map(hideKey)]))}
             size="icon-xs"
             variant="ghost"
           >
@@ -79,6 +82,10 @@ export function CalendarNotSyncingBanner() {
       )}
     </>
   );
+}
+
+function hideKey(f: AccountNotSyncing): string {
+  return `${f.account.id}:${f.reason}`;
 }
 
 function message(f: AccountNotSyncing, now: Date): string {

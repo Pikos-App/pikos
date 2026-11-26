@@ -94,6 +94,25 @@ describe("CalendarNotSyncingBanner", () => {
   });
 
   // qa: SYNC-37:3
+  it("still shows another account that stops syncing after one was hidden", () => {
+    const other: AccountWithCalendars = {
+      ...account(false, NOW.toISOString()),
+      displayName: "me@home.example",
+      id: "b",
+    };
+    given({ accounts: [account(true, NOW.toISOString()), other] });
+    const { rerender } = render(<CalendarNotSyncingBanner />);
+    fireEvent.click(screen.getByRole("button", { name: "Hide until Pikos opens again" }));
+    expect(screen.queryByRole("region", { name: "Calendar not syncing" })).toBeNull();
+
+    given({ accounts: [account(true, NOW.toISOString()), { ...other, reconnectNeeded: true }] });
+    rerender(<CalendarNotSyncingBanner />);
+    const banner = screen.getByRole("region", { name: "Calendar not syncing" });
+    expect(banner).toHaveTextContent("me@home.example");
+    expect(banner).not.toHaveTextContent("me@work.example");
+  });
+
+  // qa: SYNC-37:3
   it("hides until the app opens again", () => {
     given({ accounts: [account(true, NOW.toISOString())] });
     const { unmount } = render(<CalendarNotSyncingBanner />);
