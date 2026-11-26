@@ -2,6 +2,7 @@
 
 The parts of how Pikos works that you'd otherwise have to read the source to work out.
 
+- **[documentation.md](./documentation.md)**: where a fact goes, starting from the code.
 - **[functionality-matrix.md](./functionality-matrix.md)**: every user-facing operation
   against the origin of the thing it acts on. Made in Pikos, mirrored live from an external
   calendar, or a mirror whose link got cut. Each cell names the guard behind it, so a "no"
