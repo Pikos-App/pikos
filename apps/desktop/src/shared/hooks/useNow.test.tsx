@@ -1,4 +1,4 @@
-import { act, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
 import { Activity } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,8 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
+  // The clock is one for the app, so a reader left mounted would carry it into the next test.
+  cleanup();
   vi.useRealTimers();
 });
 
@@ -73,6 +75,41 @@ describe("useNow", () => {
       </Activity>
     );
     expect(container).toHaveTextContent("12:20");
+  });
+
+  it("is current within seconds when a timer stalled, as through the Mac's sleep", async () => {
+    // A sleeping Mac pauses timers, so one set for the next minute fires that much late.
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    const { result } = renderHook(() => useNow());
+
+    vi.setSystemTime(new Date("2026-03-31T12:40:00.000"));
+    await act(() => vi.advanceTimersByTime(5_000));
+    expect(result.current.getMinutes()).toBe(40);
+  });
+
+  it("runs one timer however many read it", () => {
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    render(
+      <>
+        <Clock />
+        <Clock />
+        <Clock />
+      </>
+    );
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("moves every reader to the same minute", async () => {
+    vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
+    const { container } = render(
+      <>
+        <Clock />
+        <Clock />
+      </>
+    );
+
+    await act(() => vi.advanceTimersByTime(30_000));
+    expect(container).toHaveTextContent("12:112:1");
   });
 
   it("doesn't render a fresh mount twice within the minute", () => {
