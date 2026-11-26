@@ -39,6 +39,22 @@ struct CompletionToggle: View {
     }
 }
 
+/// Select mode's circle, drawn in the checkbox's slot at a fixed size. The system's edit-mode circle
+/// grew with the text size in a gutter of its own, so it drifted off the checkbox and pushed the
+/// title along. Hidden from VoiceOver: the row carries the selected state, and a reorder handle is
+/// named after the row's first element.
+struct SelectionMark: View {
+    let isSelected: Bool
+
+    var body: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 21))
+            .foregroundStyle(isSelected ? Color.interactiveFill : Color.borderPrimary)
+            .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
+    }
+}
+
 /// One page in the list, without its checkbox — see `CompletionToggle`.
 ///
 /// The desktop's row: title and date on one line, one quiet line of detail under it.

@@ -207,8 +207,8 @@ struct PageListScreen: View {
     }
 
     private var list: some View {
-        // Nil unless selecting: a row in a List carrying any selection binding selects instead of opening.
-        List(selection: isSelecting ? $selection : nil) {
+        // No selection binding: select mode's circle is the row's own, so edit mode only adds handles.
+        List {
             // Only while the tip is live: an invalidated TipView still leaves an empty row behind.
             if !isSelecting && isSwipeTipAvailable {
                 TipView(swipeTip)
@@ -260,26 +260,28 @@ struct PageListScreen: View {
     private func row(_ page: PageSummary) -> some View {
         let done = page.status == "done"
         let facts = PageFacts(page)
-        let separatorLeading: CGFloat = isSelecting ? 0 : 44
+        let isSelected = selection.contains(page.id)
         // The checkbox sits beside the link, not inside it: a Button in a link's label loses its tap.
         return HStack(alignment: .top, spacing: 0) {
-            if !isSelecting {
+            if isSelecting {
+                SelectionMark(isSelected: isSelected)
+            } else {
                 CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
                     Task { await store.setStatus(pageId: page.id, done: done) }
                 }
             }
             PageRow(page: page, showsFolder: store.scope.isDateGrouped)
-                .padding(.leading, isSelecting ? 4 : 0)
+                .accessibilityAddTraits(isSelecting && isSelected ? .isSelected : [])
         }
         .contentShape(Rectangle())
         .modifier(OpensPage(id: page.id, isEnabled: !isSelecting))
-        .tag(page.id)
+        .modifier(SelectsOnTap(isEnabled: isSelecting) { toggleSelection(page.id) })
         .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 16))
         .listRowBackground(
             drag.page?.id == page.id || (layout == .split && route.openPageId == page.id)
                 ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in separatorLeading }
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
         // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
         // nothing is on the other side. Delete comes last and a full swipe never reaches it
         // (`PKOS-0204`), so a calendar's page, with nothing else here, takes no full swipe.
@@ -358,7 +360,6 @@ struct PageListScreen: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.surfacePrimary)
         .listRowSeparator(.hidden)
-        .selectionDisabled()
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityAddTraits(.isHeader)
     }
@@ -660,6 +661,10 @@ struct PageListScreen: View {
         selection = []
     }
 
+    private func toggleSelection(_ id: String) {
+        selection.formSymmetricDifference([id])
+    }
+
     private func schedule(to day: String?) {
         let pages = orderedSelection
         Task {
@@ -701,6 +706,21 @@ private struct OpensPage: ViewModifier {
             content.background {
                 NavigationLink(value: Route.Destination.page(id)) { EmptyView() }.opacity(0)
             }
+        }
+    }
+}
+
+/// In select mode a tap anywhere on a row selects it. Absent otherwise: even a simultaneous tap kept
+/// a row in the three panels from opening its page.
+private struct SelectsOnTap: ViewModifier {
+    let isEnabled: Bool
+    let onToggle: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.onTapGesture(perform: onToggle)
+        } else {
+            content
         }
     }
 }

@@ -26,6 +26,35 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 5), "a page to select brings it back")
     }
 
+    // qa: IOS-79
+    /// At a larger text size, where the system's own select circle took a wider gutter than the checkbox.
+    func testSelectingPutsTheSelectionCircleInTheCheckboxsPlace() {
+        app.terminate()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"]
+        app.launch()
+        showView("Inbox")
+        quickAdd("Alpha errand")
+        assertRowExists("Alpha errand")
+        let row = row(titled: "Alpha errand")
+        let title = app.staticTexts["Alpha errand"].firstMatch
+        let checkbox = app.buttons["Mark as done"].firstMatch
+        // Within the row: the header changes height in select mode, which moves the whole list.
+        let checkboxCentre = CGPoint(x: checkbox.frame.midX - row.frame.minX, y: checkbox.frame.midY - row.frame.minY)
+
+        app.buttons["Select"].firstMatch.tap()
+        let circle = app.images["circle"].firstMatch
+        XCTAssertTrue(circle.waitForExistence(timeout: Self.timeout), "select mode draws the row's own circle")
+        XCTAssertEqual(circle.frame.midX - row.frame.minX, checkboxCentre.x, accuracy: 1, "where the checkbox was")
+        XCTAssertEqual(circle.frame.midY - row.frame.minY, checkboxCentre.y, accuracy: 1)
+
+        circle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5), "the checkbox's place selects the page")
+        XCTAssertTrue(title.isSelected, "and the row says so")
+
+        title.tap()
+        XCTAssertTrue(app.staticTexts["Select pages"].waitForExistence(timeout: 5), "a tap on the row takes it back")
+    }
+
     // qa: IOS-21
     func testScrollingTheCalendarDownShrinksTheBarAndTappingBringsItBack() {
         app.buttons["Calendar"].firstMatch.tap()
