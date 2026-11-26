@@ -175,6 +175,20 @@ appTest(
       await expect(app.getByLabel("glaze order", { exact: true })).toBeVisible();
     });
 
+    await appTest.step("SRCH-08 Pick a date… moves the page to the day picked", async () => {
+      await search(app, "glaze");
+      await result(app, "glaze order").click({ button: "right" });
+      await app.getByRole("menuitem", { name: "When" }).click();
+      await app.getByRole("menuitem", { name: "Pick a date…" }).click();
+      await app
+        .getByRole("dialog", { name: "Schedule picker" })
+        .getByRole("button", { name: "Today" })
+        .click();
+      await expect(paletteOf(app)).not.toBeVisible();
+      await app.getByRole("button", { name: /^Today/ }).click();
+      await expect(app.getByLabel("glaze order", { exact: true })).toBeVisible();
+    });
+
     await appTest.step("SRCH-08 Move to folder files the page there", async () => {
       await search(app, "glaze");
       await result(app, "glaze order").click({ button: "right" });

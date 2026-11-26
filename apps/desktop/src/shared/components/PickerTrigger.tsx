@@ -9,6 +9,8 @@ import { PopoverAnchor, PopoverTrigger } from "@/components/ui/popover";
 export interface AnchoredOpen {
   anchor: HTMLElement;
   onClose: () => void;
+  /** Called once a choice is written, for a caller whose anchor doesn't outlive the change. */
+  onPicked?: () => void;
 }
 
 /** The picker's own chip, or with `anchored` an invisible anchor at the caller's element. */

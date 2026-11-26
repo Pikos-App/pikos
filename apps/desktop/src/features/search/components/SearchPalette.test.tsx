@@ -2,7 +2,7 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 // The palette has two query paths that must stay distinguishable: a plain query
 // is one FTS5 search, an operator query is a structured listPages filter. These
 // specs pin which path answers which query, and what the completed toggle says.
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { addDays, format } from "date-fns";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -562,6 +562,24 @@ describe("SearchPalette — moving a result", () => {
       expect((await pageNamed("alpha report")).scheduledStart).toBe(`${tomorrow}T09:30:00`)
     );
     expect(screen.queryByPlaceholderText(/Search pages/)).toBeNull();
+  });
+
+  it("moves a found page to a day picked from its right-click menu, keeping its time", async () => {
+    await setup([{ scheduledStart: "2026-01-05T09:30:00", title: "alpha report" }]);
+    type("alpha");
+
+    fireEvent.contextMenu(await findRow("alpha report"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "When" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Pick a date…" }));
+    const picker = await screen.findByRole("dialog", { name: "Schedule picker" });
+    fireEvent.click(within(picker).getByRole("button", { name: "Tomorrow" }));
+
+    const tomorrow = format(addDays(new Date(), 1), "yyyy-MM-dd");
+    await waitFor(async () =>
+      expect((await pageNamed("alpha report")).scheduledStart).toBe(`${tomorrow}T09:30:00`)
+    );
+    expect(screen.queryByPlaceholderText(/Search pages/)).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Schedule picker" })).toBeNull();
   });
 
   it("files a found page in a folder from its right-click menu", async () => {

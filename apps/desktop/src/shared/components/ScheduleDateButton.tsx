@@ -55,10 +55,12 @@ export function ScheduleDateButton({
     monthNav.reset(date);
     const next = scheduleOnDay({ end: page.scheduledEnd, start }, date);
     void scheduleOnce(page.id, next.start, next.end);
+    anchored?.onPicked?.();
   }
 
   function clear() {
     void clearSchedule(page.id);
+    anchored?.onPicked?.();
     handleOpenChange(false);
   }
 
