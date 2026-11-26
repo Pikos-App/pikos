@@ -8,7 +8,7 @@ use pikos_db::error::AppError;
 pub enum CaldavError {
     /// 401/403 — wrong username or app password. User-actionable at connect time;
     /// "reconnect needed" once an account already exists.
-    #[error("CalDAV authentication failed — check the username and app password")]
+    #[error("The server refused the sign-in. Check the username and app password.")]
     Unauthorized,
 
     /// Transport-level failure (DNS, TLS, connection, timeout, read).
@@ -64,6 +64,12 @@ mod tests {
             mapped(CaldavError::NotCaldav("x".into())),
             AppError::Invalid(_)
         ));
+    }
+
+    #[test]
+    fn a_refused_password_reads_without_an_em_dash() {
+        let message = CaldavError::Unauthorized.to_string();
+        assert!(!message.contains('—'), "{message}");
     }
 
     #[test]

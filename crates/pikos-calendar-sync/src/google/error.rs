@@ -13,7 +13,7 @@ pub enum GoogleError {
 
     /// The refresh token no longer works — the user revoked access in their
     /// Google account, or the grant expired. Only re-authorizing fixes it.
-    #[error("Google access was revoked — reconnect the account")]
+    #[error("Google access was revoked. Connect the account again.")]
     Revoked,
 
     /// The user closed the browser, denied consent, or never finished.
@@ -22,7 +22,7 @@ pub enum GoogleError {
 
     /// Google's granular consent screen lets a user approve part of the request;
     /// approving less than sync needs yields tokens that can't read the calendar.
-    #[error("Google Calendar access wasn't fully granted — reconnect and allow both permissions")]
+    #[error("Pikos needs both Google Calendar permissions to sync. Connect again and allow both.")]
     ScopesWithheld,
 
     /// No `primary` entry in `calendarList`. Its id is the account's *identity* —
@@ -30,7 +30,7 @@ pub enum GoogleError {
     /// constant would let a second primary-less account claim the first's row and
     /// overwrite its keychain blob: a silent cross-account merge.
     #[error(
-        "Google didn't return a primary calendar, so Pikos can't tell this account apart from another — nothing was connected"
+        "Google didn't send this account's main calendar, so Pikos can't tell it apart from another. Nothing was connected."
     )]
     NoPrimaryCalendar,
 
@@ -46,7 +46,7 @@ pub enum GoogleError {
 
     /// Quota or per-user rate limit. Transient by definition — the cursor is kept
     /// and the next scheduled poll retries.
-    #[error("Google rate limit reached — backing off")]
+    #[error("Google is limiting requests for now. Pikos will try again shortly.")]
     RateLimited,
 
     /// Reached Google but it answered with a status sync doesn't handle.
@@ -110,6 +110,18 @@ mod tests {
             mapped(GoogleError::NoPrimaryCalendar),
             AppError::Invalid(_)
         ));
+    }
+
+    #[test]
+    fn messages_a_person_reads_use_no_em_dash() {
+        for e in [
+            GoogleError::Revoked,
+            GoogleError::ScopesWithheld,
+            GoogleError::NoPrimaryCalendar,
+            GoogleError::RateLimited,
+        ] {
+            assert!(!e.to_string().contains('—'), "{e}");
+        }
     }
 
     #[test]

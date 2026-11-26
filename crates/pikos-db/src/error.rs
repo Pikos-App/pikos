@@ -38,7 +38,9 @@ pub enum AppError {
     #[error("serde: {0}")]
     Serde(#[from] serde_json::Error),
 
-    #[error("invalid: {0}")]
+    /// Something the person can act on, such as a refused password or a move that can't land,
+    /// so the text is written for them and goes out without a kind prefix.
+    #[error("{0}")]
     Invalid(String),
 
     #[error("network: {0}")]

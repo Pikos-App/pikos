@@ -700,7 +700,7 @@ async fn a_wrong_fastmail_password_fails_and_keeps_nothing() {
 
     assert!(
         err.to_string()
-            .contains("check the username and app password"),
+            .contains("Check the username and app password"),
         "{err}"
     );
     assert_eq!(

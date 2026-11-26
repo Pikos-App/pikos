@@ -33,7 +33,8 @@ async fn the_redirect_hands_back_the_code_and_state() {
 
     let response = get(port, "/?code=auth-code&state=csrf-state").await;
     assert!(response.starts_with("HTTP/1.1 200 OK"));
-    assert!(response.contains("connected"));
+    assert!(!response.contains("is connected"), "{response}");
+    assert!(response.contains("Return to Pikos"), "{response}");
 
     let callback = waiting.await.unwrap().unwrap();
     assert_eq!(callback.code, "auth-code");

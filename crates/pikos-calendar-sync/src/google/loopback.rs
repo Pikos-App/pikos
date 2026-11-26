@@ -71,7 +71,7 @@ impl Loopback {
 
             let outcome = classify(&request_line);
             let (status, body) = match &outcome {
-                Outcome::Redirect(Ok(_)) => ("200 OK", page(CONNECTED)),
+                Outcome::Redirect(Ok(_)) => ("200 OK", page(RETURN_TO_PIKOS)),
                 Outcome::Redirect(Err(_)) => ("200 OK", page(NOT_CONNECTED)),
                 Outcome::Unrelated => ("404 Not Found", String::new()),
             };
@@ -161,7 +161,9 @@ fn page(message: &str) -> String {
     )
 }
 
-const CONNECTED: &str = "Google Calendar is connected. You can close this tab.";
+/// Shown before Pikos has exchanged the code and checked the permissions granted, either of
+/// which can still refuse the account, so it can't say the account is connected.
+const RETURN_TO_PIKOS: &str = "Return to Pikos to finish connecting. You can close this tab.";
 const NOT_CONNECTED: &str = "Pikos wasn’t connected. You can close this tab and try again.";
 
 #[cfg(test)]

@@ -9,6 +9,17 @@ fn serializes_with_kind_and_message() {
 }
 
 #[test]
+fn an_invalid_message_reaches_the_person_without_a_kind_prefix() {
+    let err = AppError::Invalid("Google access was revoked. Connect the account again.".into());
+    let v = serde_json::to_value(&err).unwrap();
+    assert_eq!(v["kind"], "Invalid");
+    assert_eq!(
+        v["message"],
+        "Google access was revoked. Connect the account again."
+    );
+}
+
+#[test]
 fn serializes_db_kind() {
     let err = AppError::Db(sqlx::Error::RowNotFound);
     let v = serde_json::to_value(&err).unwrap();
