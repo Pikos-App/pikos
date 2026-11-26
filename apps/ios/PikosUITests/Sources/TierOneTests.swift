@@ -491,6 +491,38 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(waitForDisappearance(of: page), "and it leaves the Inbox")
     }
 
+    // qa: IOS-83
+    func testAPageCarriedOntoTodayInTheSwitcherMovesToToday() throws {
+        showView("Inbox")
+        quickAdd("Post the parcel")
+        let page = app.staticTexts["Post the parcel"].firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: Self.timeout))
+
+        let switcher = app.buttons["Switch view"].firstMatch
+        switcher.tap()
+        let trash = app.buttons["Trash"].firstMatch
+        XCTAssertTrue(trash.waitForExistence(timeout: Self.timeout))
+        // The bar has a Today of its own; the menu's is the one inside the drawer.
+        let today = app.buttons.matching(NSPredicate(format: "label == 'Today' OR label BEGINSWITH 'Today, '"))
+            .allElementsBoundByIndex.first { $0.frame.minX < trash.frame.maxX && $0.frame.minY < trash.frame.minY }
+        let todayFrame = try XCTUnwrap(today?.frame, "the menu lists Today")
+        let todayPoint = CGPoint(x: todayFrame.midX, y: todayFrame.midY)
+        app.buttons["Close menu"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(waitForDisappearance(of: trash), "the menu closes before the drag")
+
+        TouchPath(stops: [
+            .init(point: CGPoint(x: page.frame.midX, y: page.frame.midY), hold: 1.2),
+            .init(point: CGPoint(x: switcher.frame.midX, y: switcher.frame.midY), hold: 1.6),
+            .init(point: todayPoint, hold: 0.8),
+        ]).perform()
+
+        XCTAssertTrue(
+            app.staticTexts["“Post the parcel” moved to Today"].waitForExistence(timeout: 5),
+            "the drop sends the page to today and says so")
+        showView("Today")
+        XCTAssertTrue(page.waitForExistence(timeout: Self.timeout), "and it shows on Today")
+    }
+
     // qa: IOS-70
     func testTheMenuButtonOpensADrawerThatHoldsSettingsAndClosesFromTheStrip() {
         let menu = app.buttons["Switch view"].firstMatch

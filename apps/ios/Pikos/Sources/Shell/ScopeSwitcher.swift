@@ -46,9 +46,10 @@ struct ScopeSwitcher: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 row(.today, title: "Today", systemImage: "sun.max", count: counts.today)
+                    .modifier(TakesDroppedPage(target: .today))
                 row(.upcoming, title: "Upcoming", systemImage: "calendar", count: counts.upcoming)
                 row(.inbox, title: "Inbox", systemImage: "tray", count: counts.inbox)
-                    .modifier(TakesDroppedPage(folderId: nil))
+                    .modifier(TakesDroppedPage(target: .folder(nil)))
 
                 sectionLabel("Folders") {
                     Button {
@@ -80,7 +81,7 @@ struct ScopeSwitcher: View {
                 }
                 ForEach(ownFolders, id: \.id) { folder in
                     folderRow(folder)
-                        .modifier(TakesDroppedPage(folderId: folder.id))
+                        .modifier(TakesDroppedPage(target: .folder(folder.id)))
                 }
                 if !isNamingFolder {
                     Button {
@@ -256,10 +257,31 @@ struct ScopeSwitcher: View {
     }
 }
 
-/// A row a lifted page can be dropped on, which files the page there. A calendar's folder takes
-/// none: the workspace refuses a page filed into one.
+/// Where a page dropped on a switcher row goes.
+private enum PageDropTarget {
+    /// Filed into the folder, or the Inbox for nil. A calendar's folder is never one: the
+    /// workspace refuses a page filed into one.
+    case folder(String?)
+    /// Sent to today as the swipe's Today sends it, keeping its time and length.
+    case today
+
+    /// A page already there, one a calendar owns, or a repeating page sent to a day, whose date
+    /// belongs to its rule, has nowhere to go.
+    func accepts(_ page: PageFacts) -> Bool {
+        guard !page.scheduleLocked else { return false }
+
+        switch self {
+        case .folder(let folderId):
+            return page.folderId != folderId
+        case .today:
+            return !page.isRecurring
+        }
+    }
+}
+
+/// A row a lifted page can be dropped on.
 private struct TakesDroppedPage: ViewModifier {
-    let folderId: String?
+    let target: PageDropTarget
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -274,25 +296,33 @@ private struct TakesDroppedPage: ViewModifier {
                     .fill(isTargeted ? Color.surfaceHover : Color.clear))
             .onDrop(
                 of: [.text],
-                delegate: FolderDropDelegate(drag: drag, folderId: folderId, isTargeted: $isTargeted) { page in
+                delegate: PageDropDelegate(drag: drag, target: target, isTargeted: $isTargeted) { page in
                     drops += 1
                     route.isSwitcherPresented = false
-                    Task { await store.file(page, toFolder: folderId) }
+                    Task { await deliver(page) }
                 })
             .sensoryFeedback(.success, trigger: drops)
     }
+
+    private func deliver(_ page: PageFacts) async {
+        switch target {
+        case .folder(let folderId):
+            await store.file(page, toFolder: folderId)
+        case .today:
+            await store.send(page, to: .today)
+        }
+    }
 }
 
-private struct FolderDropDelegate: DropDelegate {
+private struct PageDropDelegate: DropDelegate {
     let drag: PageDragSession
-    let folderId: String?
+    let target: PageDropTarget
     @Binding var isTargeted: Bool
     let onDrop: @MainActor (PageFacts) -> Void
 
-    /// A page already in this folder, or one a calendar owns, has nowhere to go.
     private var accepts: Bool {
         guard let page = drag.page else { return false }
-        return page.folderId != folderId && !page.scheduleLocked
+        return target.accepts(page)
     }
 
     func validateDrop(info: DropInfo) -> Bool {
