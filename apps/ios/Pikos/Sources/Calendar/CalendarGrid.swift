@@ -586,7 +586,7 @@ struct CalendarGrid: View {
     /// A one-off page can be carried to another hour; a repeating one moves through its menu, and a
     /// calendar's page belongs to the calendar.
     private func canLift(_ entry: CalendarEntry) -> Bool {
-        !entry.isRecurring && !entry.scheduleLocked && !entry.isVirtual && entry.status != "done"
+        !entry.isRecurring && !entry.scheduleLocked && !entry.isVirtual
     }
 
     /// A press held on empty grid drops a quarter-hour block there, and the finger then draws it
@@ -906,7 +906,7 @@ private struct LiftableBlock: ViewModifier {
             content.onDrag {
                 drag.itemProvider(for: page)
             } preview: {
-                PageDragPreview(title: page.title)
+                PageDragPreview(title: page.title, isDone: page.isDone)
             }
         } else {
             content

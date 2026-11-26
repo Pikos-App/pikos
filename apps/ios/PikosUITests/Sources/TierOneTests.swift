@@ -868,7 +868,7 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertTrue(swim.isHittable, "still in the evening after picking a day")
     }
 
-    // qa: IOS-16
+    // qa: IOS-16:2
     /// `PKOS-0150`: a left swipe offers the likeliest day, When and Folder.
     func testARowSwipesLeftToADayWhenOrAFolder() {
         showView("Inbox")
@@ -880,6 +880,22 @@ final class TierOneTests: PikosUITestCase {
         app.buttons["Folder"].firstMatch.tap()
         XCTAssertTrue(
             app.navigationBars["Move to folder"].waitForExistence(timeout: 5), "and the folder, in a sheet")
+    }
+
+    // qa: IOS-16:2
+    func testAFinishedRowSwipesLeftToADayAsAnOpenOneDoes() {
+        showView("Inbox")
+        quickAdd("Renew the passport")
+        assertRowExists("Renew the passport")
+        app.buttons["Mark as done"].firstMatch.tap()
+        let completed = app.buttons["Completed (1)"]
+        XCTAssertTrue(completed.waitForExistence(timeout: Self.timeout))
+        completed.tap()
+        assertRowExists("Renew the passport")
+
+        row(titled: "Renew the passport").swipeLeft()
+
+        XCTAssertTrue(app.buttons["When"].waitForExistence(timeout: 5), "a finished page still moves to a day")
     }
 
     // qa: IOS-80

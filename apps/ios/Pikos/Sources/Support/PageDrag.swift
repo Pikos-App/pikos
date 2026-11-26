@@ -131,10 +131,11 @@ struct PageDragWatch: DropDelegate {
 /// The small card that follows the finger.
 struct PageDragPreview: View {
     let title: String
+    let isDone: Bool
 
     var body: some View {
         HStack(spacing: 10) {
-            TaskCheckboxMark(isDone: false, size: 16)
+            TaskCheckboxMark(isDone: isDone, size: 16)
             Text(title.isEmpty ? String(localized: "Untitled") : title)
                 .font(.pkBodyMedium)
                 .foregroundStyle(.textPrimary)

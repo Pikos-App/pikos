@@ -287,7 +287,7 @@ struct PageListScreen: View {
         // (`PKOS-0204`), so a calendar's page, with nothing else here, takes no full swipe.
         .swipeActions(edge: .trailing, allowsFullSwipe: !page.scheduleLocked) {
             if !page.scheduleLocked {
-                if !done && !page.isRecurring {
+                if !page.isRecurring {
                     let day = Self.swipeDay(for: page.scheduledStart)
                     Button {
                         Task { await store.send(facts, to: day) }
@@ -321,7 +321,7 @@ struct PageListScreen: View {
 
     /// A repeating page's date belongs to its rule and a calendar's page to the calendar.
     private func canDragToSchedule(_ page: PageSummary) -> Bool {
-        page.status != "done" && !page.isRecurring && !page.scheduleLocked
+        !page.isRecurring && !page.scheduleLocked
     }
 
     private func sectionHeader(_ title: String, section: WorkspaceStore.Section) -> some View {
@@ -737,7 +737,7 @@ private struct SchedulableRow: ViewModifier {
             content.onDrag {
                 drag.itemProvider(for: page)
             } preview: {
-                PageDragPreview(title: page.title)
+                PageDragPreview(title: page.title, isDone: page.isDone)
             }
         } else {
             content
