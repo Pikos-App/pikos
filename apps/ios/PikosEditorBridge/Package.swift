@@ -1,19 +1,11 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-// PikosEditorBridge — the native half of the editor webview.
-//
-// Contains the WKWebView host, the custom scheme handler that serves the
-// editor and its assets, and the generated wire protocol. The editor itself is
-// a single HTML file built by `pnpm --filter @pikos/editor-mobile build` and
-// copied in by scripts/build-editor-bundle.sh; it is a build artifact, so it is
-// gitignored rather than committed.
+// The editor is a single HTML file built by `pnpm --filter @pikos/editor-mobile build` and
+// copied in by scripts/build-editor-bundle.sh; it is gitignored, not committed.
 let package = Package(
     name: "PikosEditorBridge",
-    // macOS is not a shipping target — `EditorWebView` is `#if canImport(UIKit)`
-    // and simply is not there. It is declared so `swift test` can run the
-    // protocol, controller and scheme-handler tests on the host in seconds
-    // rather than through a simulator; those touch no webview.
+    // macOS is not shipped; it is declared so `swift test` runs the tests that touch no webview on the host.
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "PikosEditorBridge", targets: ["PikosEditorBridge"])

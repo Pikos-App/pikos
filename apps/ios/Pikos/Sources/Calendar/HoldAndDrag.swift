@@ -2,14 +2,8 @@ import SwiftUI
 import UIKit
 
 /// A hold that, once it takes, follows the finger until it lifts: points are in the view's own
-/// space, the first where the hold began.
-///
-/// UIKit's long press rather than SwiftUI's: a SwiftUI gesture that reports while the finger
-/// moves makes the scroll view behind the grid wait on it, so every scroll started on empty grid
-/// stuttered or stalled. The recognizer loses to the scroll when the finger moves first and wins
-/// when it stays still, which is the whole distinction, and costs a scroll nothing until it wins.
-/// `HoldAndDrag` where it exists. Before iOS 18 a hold reports only where it began, as it is let
-/// go, which still opens quick add on the slot, just without drawing out a length.
+/// space, the first where the hold began. Before iOS 18 a hold reports only where it began, as
+/// it is let go, which still opens quick add on the slot, just without drawing out a length.
 struct HoldToDraw: ViewModifier {
     var minimumDuration: TimeInterval = 0.5
     let onChange: (_ start: CGPoint, _ now: CGPoint) -> Void
@@ -33,6 +27,10 @@ struct HoldToDraw: ViewModifier {
     }
 }
 
+/// UIKit's long press rather than SwiftUI's: a SwiftUI gesture that reports while the finger
+/// moves makes the scroll view behind the grid wait on it, so every scroll started on empty
+/// grid stalled. The recognizer loses to the scroll when the finger moves first and wins when
+/// it stays still.
 @available(iOS 18.0, *)
 struct HoldAndDrag: UIGestureRecognizerRepresentable {
     var minimumDuration: TimeInterval = 0.5

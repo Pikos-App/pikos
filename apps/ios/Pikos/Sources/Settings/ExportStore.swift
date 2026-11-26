@@ -3,17 +3,11 @@ import Observation
 import PikosCore
 import PikosSupport
 
-/// Producing a file to hand to the share sheet.
+/// Produces a file for the share sheet.
 ///
-/// Its own store rather than more surface on `WorkspaceStore` for the same
-/// reason `CalendarSyncStore` is: the failure modes differ in kind. A page list
-/// fails when the database does. This fails when a disk is full or a workspace
-/// is very large, and it produces something — a file on disk — that has to be
-/// cleaned up afterwards whether or not anybody shared it.
-///
-/// Everything is written into the app's temporary directory. iOS empties that
-/// itself when space is short, which is the right lifetime for a file whose only
-/// job is to survive until the share sheet is done with it.
+/// Its own store because its failures differ in kind from the page list's: a full disk or a
+/// very large workspace, plus a file to clean up whether or not it was shared. Files live in
+/// the temporary directory, which iOS empties itself when space is short.
 @MainActor
 @Observable
 public final class ExportStore {
@@ -35,8 +29,6 @@ public final class ExportStore {
             }
         }
 
-        /// Said before the tap, because the four are not interchangeable and the
-        /// difference only shows up once the file is somewhere else.
         public var detail: String {
             switch self {
             case .markdown:
@@ -69,11 +61,8 @@ public final class ExportStore {
         self.workspace = workspace
     }
 
-    // MARK: - The workspace as a file
-
-    /// Bytes on disk: the database, its sidecars and the images beside it.
-    /// Nil until `refreshDataFacts()` has run, or if the container cannot be
-    /// reached.
+    /// Bytes on disk: the database, its sidecars and the images. Nil until `refreshDataFacts()`
+    /// has run, or if the container cannot be reached.
     public private(set) var workspaceSize: Int64?
 
     /// When the newest backup in the Files app was taken.
@@ -81,9 +70,7 @@ public final class ExportStore {
 
     public private(set) var isBackingUp = false
 
-    /// Re-read the size and the last backup date. Cheap — a handful of file
-    /// attributes — so the settings screen calls it on every appearance and
-    /// the number is never a launch old.
+    /// Cheap, so the settings screen calls it on every appearance.
     public func refreshDataFacts() {
         if let database = try? WorkspaceLocation.databaseURL() {
             workspaceSize = WorkspaceFiles.size(
@@ -92,22 +79,10 @@ public final class ExportStore {
         lastBackup = (try? Self.backupsDirectory()).flatMap { WorkspaceFiles.latestBackup(in: $0) }
     }
 
-    /// Copy the workspace into the Files app.
-    ///
-    /// A folder per backup under `Documents/Backups`, holding the database
-    /// and the images. `Documents` is the one directory the Files app can
-    /// show (`UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`
-    /// in the Info.plist), and the live database is deliberately *not* there:
-    /// a SQLite file in a folder a person can open, copy and delete from
-    /// while the app has it open is a corrupted workspace waiting to happen.
-    /// So what lands in Files is always a copy, taken through `VACUUM INTO`
-    /// for a consistent snapshot, and the images are copied beside it so the
-    /// folder is the whole workspace and not most of it.
-    ///
-    /// Distinct from the `.backup` export above, which produces a file for
-    /// the share sheet and cleans it up afterwards. This one stays, which is
-    /// the point: it is the copy a person can see, and the answer to "where
-    /// is my data" that a phone otherwise cannot give.
+    /// Copies the workspace into Files: a folder per backup under `Documents/Backups`, holding a
+    /// `VACUUM INTO` snapshot and the images beside it. `Documents` is the one directory Files can
+    /// show, and the live database stays out of it because a SQLite file a person can copy or
+    /// delete while the app has it open risks corruption. Unlike `.backup`, the copy stays.
     public func backUpToFiles() async {
         guard let workspace = workspace(), !isBackingUp else { return }
         isBackingUp = true
@@ -130,7 +105,6 @@ public final class ExportStore {
         }
     }
 
-    /// `Documents/Backups`, created on first use.
     private static func backupsDirectory() throws -> URL {
         let documents = try FileManager.default.url(
             for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -178,9 +152,8 @@ public final class ExportStore {
 
         case .backup:
             let url = root.appendingPathComponent("pikos-backup-\(stamp).sqlite")
-            // The workspace writes this one itself: it is a `VACUUM INTO`, not
-            // bytes handed across the boundary, because a multi-megabyte
-            // database has no business being a Swift `String`.
+            // `VACUUM INTO`, not bytes across the boundary: a multi-megabyte database shouldn't be a
+            // Swift `String`.
             try await workspace.backupDatabase(destination: url.path)
             return url
 
@@ -198,14 +171,9 @@ public final class ExportStore {
         }
     }
 
-    /// A directory as a single `.zip`.
-    ///
-    /// A share sheet handed a folder offers to save it and little else; zipped,
-    /// it can go into Files, a message, or another app. `NSFileCoordinator`'s
-    /// `.forUploading` option is what produces the archive — it is the only
-    /// zip on the platform that needs no third-party code, and it writes to a
-    /// temporary file the coordinator owns, which is why the result is moved
-    /// somewhere this store controls before the block returns.
+    /// A directory as a single `.zip`, which a share sheet can send anywhere. `.forUploading` is
+    /// the only zip needing no third-party code, and its archive is a temporary file the
+    /// coordinator owns, so it is moved before the block returns.
     private static func zip(_ directory: URL) throws -> URL {
         var coordinatorError: NSError?
         var copyError: Error?
@@ -233,11 +201,8 @@ public final class ExportStore {
         return result
     }
 
-    /// `2026-09-13T22-04-11`, matching the desktop's export filenames.
-    ///
-    /// Colons are legal in a filename on iOS and displayed as slashes by Files,
-    /// which is its own kind of wrong, so the time uses hyphens — the same
-    /// substitution the desktop makes.
+    /// `2026-09-13T22-04-11`, matching the desktop's export filenames. The time uses hyphens
+    /// because Files displays a colon as a slash.
     private static func stamp() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

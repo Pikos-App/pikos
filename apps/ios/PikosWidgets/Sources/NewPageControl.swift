@@ -7,8 +7,6 @@ import WidgetKit
 /// It opens the app on quick add, already holding the words chosen in the control's settings,
 /// such as `#home` or `today`, so one control can be "a page for home" and another "a task for
 /// today". The path in is the `pikos://quick-add` link the widgets and the desktop already use.
-///
-/// iOS 18, where controls arrived. The bundle adds it under `#available`.
 @available(iOS 18.0, *)
 struct NewPageControl: ControlWidget {
     static let kind = "app.pikos.control.newpage"

@@ -4,21 +4,14 @@ import SwiftUI
 
 /// Create, rename, recolour and delete folders.
 ///
-/// Its own sheet rather than actions buried in the view switcher, because those
-/// are two different jobs: the switcher answers "show me that", and this
-/// answers "change what exists". Mixing them puts a destructive action one
-/// mis-tap from a navigational one.
-///
-/// Folders a calendar owns appear and are *mostly* inert. Hiding them would be
-/// worse — the user can see them in the switcher, and a manager that silently
-/// omits some of what they see reads as a bug. The exception is colour: the
-/// name, the placement and the existence of such a folder belong to the
-/// calendar, but what colour it is in this app does not.
+/// Its own sheet, not actions in the view switcher: that answers "show me that" and this
+/// answers "change what exists", and mixing them puts a destructive action one mis-tap from a
+/// navigational one. A calendar's folders appear and are mostly inert: hiding them would read
+/// as a bug, but only the colour is ours, since the name, placement and existence belong to
+/// the calendar.
 struct FolderManagerSheet: View {
     @Environment(WorkspaceStore.self) private var store
-    /// Only for the account headings. Connected calendars are that store's
-    /// subject, and a second copy of the question here would be a second answer
-    /// to keep in step.
+    /// Only for the account headings; connected calendars are that store's subject.
     @Environment(CalendarSyncStore.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
@@ -131,9 +124,8 @@ struct FolderManagerSheet: View {
         }
         .contextMenu { menu(for: folder) }
         .swipeActions(edge: .trailing) {
-            // No swipe action at all on a calendar's folder, rather than one
-            // that fails: the workspace refuses the delete, and an action whose
-            // only outcome is an error message should not be offered.
+            // No swipe action on a calendar's folder rather than one that fails: the workspace
+            // refuses the delete.
             if !folder.isExternalCalendar {
                 Button(role: .destructive) {
                     Task { await store.trashFolder(id: folder.id) }
@@ -149,11 +141,8 @@ struct FolderManagerSheet: View {
         }
     }
 
-    /// The colour dot, which is also the colour control.
-    ///
-    /// A menu on the dot rather than a row in a detail screen: recolouring is a
-    /// glance-and-tap, and burying it a level down would make the one thing a
-    /// person does to a folder list the slowest thing in it.
+    /// The colour dot, which is also the colour control: a menu on the dot, not a detail screen,
+    /// since recolouring is a glance-and-tap.
     private func swatch(_ folder: Folder) -> some View {
         Menu {
             // A palette of real swatches, each still named for VoiceOver and for anyone who
@@ -213,12 +202,8 @@ struct FolderManagerSheet: View {
         store.folders.filter { !$0.isExternalCalendar }
     }
 
-    /// One heading per calendar account, and no heading at all when there is
-    /// only one.
-    ///
-    /// With a single account the heading names something the reader already
-    /// knows; with two it is the only thing telling apart two calendars that
-    /// are both called "Work".
+    /// One heading per calendar account, none when there is only one: with two, it is the only
+    /// thing telling apart two calendars both called "Work".
     private struct CalendarGroup: Identifiable {
         let id: String
         let title: String

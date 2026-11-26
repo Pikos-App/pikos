@@ -4,29 +4,18 @@ import SwiftUI
 
 /// Connected calendars, and the operations the phone can perform on them.
 ///
-/// Its own store rather than more surface on `WorkspaceStore`, because the
-/// failure modes are different in kind. A page list fails when the database
-/// does, which is rare and serious. This fails when a server is down, a
-/// password has been rotated, or the phone is on a train — routine, transient,
-/// and each needing a different sentence. Mixing them would mean one
-/// `errorMessage` saying "could not read or write" over all of it.
-///
-/// Nothing here polls. The desktop's scheduler is an in-process timer and iOS
-/// suspends that within seconds of backgrounding, so a sync happens at the
-/// moments the process is known to be running — a return to the foreground,
-/// the OS's background refresh — and when somebody asks (`syncAll`,
-/// `syncIfStale`). The UI says so rather than implying a five-minute poll.
+/// Its own store: a page list fails when the database does, this fails when a server is down,
+/// a password rotated or the phone offline, each needing its own sentence. Nothing polls: iOS
+/// suspends an in-process timer within seconds, so a sync runs on foreground return, the OS
+/// background refresh, or request.
 @MainActor
 @Observable
 public final class CalendarSyncStore {
     public private(set) var accounts: [SyncAccountWithCalendars] = []
     public private(set) var isLoading = true
 
-    /// The last thing that went wrong, and whether trying again is worth it.
-    ///
-    /// Carried as a pair rather than a string because "retry" is advice, and
-    /// advice that is wrong the first time is not taken the second. A network
-    /// failure is worth retrying unchanged; a rejected password is not.
+    /// The last thing that went wrong, and whether retrying is worth it: a network failure is
+    /// worth retrying unchanged, a rejected password is not.
     public struct Problem: Identifiable {
         public let id = UUID()
         public let message: String
@@ -35,21 +24,13 @@ public final class CalendarSyncStore {
 
     public var problem: Problem?
 
-    /// Which account is mid-operation, so its row can show a spinner and the
-    /// others stay usable. A single global flag would freeze the whole screen
-    /// for one account's slow server.
+    /// Which account is mid-operation, so only its row shows a spinner.
     public private(set) var busyAccountID: String?
 
     private let workspace: @MainActor () -> Workspace?
 
-    /// Takes the workspace as a closure rather than a value: `WorkspaceStore`
-    /// opens it asynchronously, so at construction time there is nothing to
-    /// hold yet, and capturing `nil` once would leave this permanently unable
-    /// to do anything.
-    ///
-    /// `@MainActor` on the closure because what it reads is main-actor state.
-    /// Everything here is already on that actor, so it costs nothing and makes
-    /// the isolation explicit rather than inferred.
+    /// Takes the workspace as a closure: `WorkspaceStore` opens it asynchronously, so capturing
+    /// `nil` once would leave this unable to do anything.
     public init(workspace: @escaping @MainActor () -> Workspace?) {
         self.workspace = workspace
     }
@@ -65,12 +46,9 @@ public final class CalendarSyncStore {
         isLoading = false
     }
 
-    /// Connect a CalDAV server. Returns whether it worked, so the sheet knows
-    /// whether to close.
-    ///
-    /// Slow on purpose: discovery runs before anything is stored, so a wrong
-    /// URL or password fails here rather than leaving a half-connected account
-    /// behind.
+    /// Connect a CalDAV server; returns whether it worked, so the sheet knows whether to close.
+    /// Discovery runs before anything is stored, so a wrong URL or password leaves no
+    /// half-connected account.
     public func connect(
         baseURL: String, username: String, password: String, displayName: String
     ) async -> Bool {
@@ -91,11 +69,8 @@ public final class CalendarSyncStore {
         }
     }
 
-    /// Swap a password that stopped working.
-    ///
-    /// Takes the password alone: the server and username are already stored,
-    /// and re-collecting them would let a typo create a second account instead
-    /// of repairing this one.
+    /// Swap a password that stopped working. Takes the password alone, so a typo can't create a
+    /// second account instead of repairing this one.
     public func reconnect(accountID: String, password: String) async -> Bool {
         guard let workspace = workspace() else { return false }
         busyAccountID = accountID
@@ -162,19 +137,10 @@ public final class CalendarSyncStore {
         }
     }
 
-    /// Sync every connected account that is in a state to be synced.
-    ///
-    /// The phone's substitute for the desktop's five-minute poll, which an
-    /// in-process timer cannot be here. Called from the two moments the
-    /// process is known to be running: coming back to the foreground, and the
-    /// background refresh the OS grants on its own schedule. `quiet` because
-    /// an automatic sync's failure is not the user's problem right now — a
-    /// train tunnel at 3 a.m. should not queue an alert for the morning; the
-    /// next manual sync will say what is wrong if it still is.
-    ///
-    /// An account flagged for reconnection is skipped rather than tried: its
-    /// password is already known to be rejected, and the scheduler on the
-    /// desktop skips it for the same reason.
+    /// Sync every connected account that can be synced, at the two moments the process is known
+    /// to run: foreground return and the OS background refresh. `quiet` because an automatic
+    /// failure isn't the user's problem right now. An account flagged for reconnection is
+    /// skipped: its password is already rejected.
     public func syncAll(quiet: Bool) async {
         guard let workspace = workspace() else { return }
         let accounts: [SyncAccountWithCalendars]
@@ -198,13 +164,11 @@ public final class CalendarSyncStore {
         await load()
     }
 
-    /// When the last automatic pass ran, so returning to the foreground does
-    /// not sync on every app switch.
+    /// When the last automatic pass ran, so an app switch doesn't sync every time.
     public private(set) var lastAutomaticSyncAt: Date?
 
-    /// How long a calendar may go unrefreshed before a return to the
-    /// foreground triggers a sync — a little longer than the desktop's poll,
-    /// because every one of these costs a network round trip on a battery.
+    /// How long before a foreground return syncs. Longer than the desktop's poll because each
+    /// costs a network round trip on battery.
     public static let staleAfter: TimeInterval = 15 * 60
 
     /// Sync on return to the foreground, if it has been a while.
@@ -221,9 +185,8 @@ public final class CalendarSyncStore {
 
     public var isBusy: Bool { busyAccountID != nil }
 
-    /// A sync can come back reporting per-calendar trouble without throwing —
-    /// the call succeeded, the calendars did not. Saying nothing there is how a
-    /// "Sync" button appears to work while nothing is being synced.
+    /// A sync can report per-calendar trouble without throwing. Saying nothing there makes
+    /// "Sync" look like it works.
     private func reportIfAnythingWentWrong(_ results: [CalendarSyncResult]) {
         if results.contains(where: { $0.status == "reconnectNeeded" }) {
             problem = Problem(
@@ -236,13 +199,10 @@ public final class CalendarSyncStore {
         }
     }
 
-    /// Turn a thrown error into something worth reading.
-    ///
-    /// `Network` is the case worth separating: it is the only failure here that
-    /// is both routine and worth retrying unchanged, and the message the data
-    /// layer produces for it names a URL rather than the problem.
+    /// `Network` is separated: the only failure both routine and worth retrying unchanged, and
+    /// the data layer's message for it names a URL rather than the problem.
     private func record(_ error: Error) {
-        // Capitalised, as UniFFI spells it — see the note in `WorkspaceStore`.
+        // Capitalised, as UniFFI spells it.
         if let error = error as? WorkspaceError, case .Network = error {
             problem = Problem(
                 message: String(localized: "Could not reach the server. Check the address and your connection."),

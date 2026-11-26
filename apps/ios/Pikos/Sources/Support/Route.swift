@@ -11,20 +11,12 @@ import SwiftUI
 @MainActor
 @Observable
 final class Route {
-    /// One router for the process.
-    ///
-    /// Shared rather than created per view because App Intents reach it through
-    /// `AppDependencyManager`, which is registered before any view exists — and
-    /// reading a `@State` wrapper outside a view body to register it would be
-    /// undefined.
-    ///
-    /// `nonisolated` because the dependency manager's factory closure is
-    /// `@Sendable` and not on any actor, and under strict concurrency a
-    /// main-actor static cannot be read from there. The reference itself is
-    /// safe to hand out from anywhere — it is immutable, and every member on
-    /// it is still main-actor isolated, so a caller off the main actor can hold
-    /// the router but not move it. The initialiser is `nonisolated` for the
-    /// same reason: it touches nothing but stored-property defaults.
+    /// One router for the process, shared because App Intents reach it through
+    /// `AppDependencyManager`, registered before any view exists. `nonisolated` because the
+    /// manager's factory is `@Sendable`, and under strict concurrency a main-actor static can't be
+    /// read there. The reference is immutable and every member stays main-actor isolated, so a caller
+    /// off the main actor can hold the router but not move it. The initialiser is `nonisolated` for
+    /// the same reason.
     nonisolated static let shared = Route()
 
     nonisolated init() {}
@@ -42,8 +34,8 @@ final class Route {
 
     var pane: Pane = .list
 
-    /// One stack for the whole app. Held here rather than by a screen so a deep
-    /// link, a widget tap or an App Intent can push from outside it.
+    /// One stack for the whole app, held here so a deep link, widget tap or App Intent can push
+    /// from outside it.
     var path: [Destination] = []
 
     var isQuickAddPresented = false
@@ -214,12 +206,8 @@ final class Route {
         pendingScope = .today
     }
 
-    /// A scope an entry point asked for before the store was ready.
-    ///
-    /// App Intents and deep links can arrive while the app is still launching,
-    /// before the workspace has opened. Recording the request and applying it
-    /// once the store exists beats dropping it — the alternative is a widget
-    /// tap that sometimes works.
+    /// A scope an entry point asked for before the store was ready, as an intent or link can
+    /// during launch. Recorded and applied once the store exists, rather than dropped.
     var pendingScope: WorkspaceStore.Scope?
 
     /// Apply anything an entry point asked for before the store was ready.
@@ -229,11 +217,8 @@ final class Route {
         self.pendingScope = nil
     }
 
-    /// Act on a deep link.
-    ///
-    /// Unrecognised links are ignored rather than surfaced. They arrive from
-    /// outside the app — a stale notification, a link someone typed — and there
-    /// is nothing useful to tell the user about one.
+    /// Act on a deep link. Unrecognised links are ignored: they arrive from outside (a stale
+    /// notification, a typed link) and there is nothing useful to tell the user.
     func handle(_ url: URL, store: WorkspaceStore) {
         guard let link = parseDeepLink(url: url.absoluteString) else { return }
         isSwitcherPresented = false
@@ -243,7 +228,7 @@ final class Route {
         case .view(let viewId):
             pane = .list
             path = []
-            // Exhaustive: an if/else here is how `pikos://upcoming` once silently did nothing.
+            // Exhaustive, so a new view id can't be silently ignored.
             let scope: WorkspaceStore.Scope =
                 switch viewId {
                 case .today: .today

@@ -25,15 +25,10 @@ final class ReminderNotificationTests: XCTestCase {
         XCTAssertEqual(components?.timeZone, london)
     }
 
-    /// The trap the components exist to avoid: a device on the Buddhist
-    /// calendar would resolve "2026" as a year 543 years away. Because the
-    /// components carry their own calendar and zone, the digits name one
-    /// instant with no device setting taking part.
-    ///
-    /// Read through `DateComponents.date`, which resolves against the calendar
-    /// inside the components — the same one `UNCalendarNotificationTrigger`
-    /// matches on. `Calendar.date(from:)` is not the same question: it answers
-    /// with the calendar it is called on and ignores the one it is handed.
+    /// A device on the Buddhist calendar would resolve "2026" as a year 543 years
+    /// away. Read through `DateComponents.date`, which resolves against the
+    /// components' own calendar like `UNCalendarNotificationTrigger`;
+    /// `Calendar.date(from:)` ignores the calendar it is handed.
     func testComponentsNameOneInstantWithNoDeviceCalendarInvolved() throws {
         let components = try XCTUnwrap(
             ReminderNotification.fireComponents("2026-05-27T13:30:00", timeZone: london))
@@ -59,7 +54,6 @@ final class ReminderNotificationTests: XCTestCase {
                 scheduledStart: "2026-05-28T09:00:00", fireAt: "2026-05-27T09:00:00",
                 calendar: calendar),
             "Tomorrow at 9:00am")
-        // Two to six days out is a weekday name; further is a date.
         XCTAssertEqual(
             ReminderNotification.body(
                 scheduledStart: "2026-05-30T09:00:00", fireAt: "2026-05-27T09:00:00",

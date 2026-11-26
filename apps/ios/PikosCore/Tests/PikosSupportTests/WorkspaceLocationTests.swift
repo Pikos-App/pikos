@@ -2,39 +2,25 @@ import XCTest
 
 @testable import PikosSupport
 
-/// Where the workspace lives, and the one seam that can move it.
-///
-/// `databaseURL()` normally reaches the App Group container, which a host test
-/// has no entitlement for — so what is testable here is the override path and
-/// the properties that hold regardless of which branch answered.
+/// A host test has no App Group entitlement, so only the override path and the
+/// properties that hold on either branch are testable here.
 final class WorkspaceLocationTests: XCTestCase {
-    /// The key is part of the contract between the app and its UI tests, which
-    /// set it through `XCUIApplication.launchEnvironment` and cannot ask the
-    /// app what it is called. A rename here is a rename there.
+    /// UI tests set the key through `XCUIApplication.launchEnvironment` and can't
+    /// ask the app what it is called.
     func testTheOverrideKeyIsTheOneTheTestsSet() {
         XCTAssertEqual(WorkspaceLocation.workspaceOverrideKey, "PIKOS_WORKSPACE_DIRECTORY")
     }
 
-    /// The App Group identifier has to match every target's entitlements, and
-    /// changing it after release strands every existing user's notes in a
-    /// container nothing opens. Pinned so that is a deliberate edit.
+    /// Pinned so that changing it, which strands existing users' notes, is deliberate.
     func testTheAppGroupIdentifierIsPinned() {
         XCTAssertEqual(WorkspaceLocation.appGroupIdentifier, "group.app.pikos")
     }
 
-    /// The filename is what the `-wal` and `-shm` sidecars hang off, and what
-    /// `applyProtectionClass` walks. A change here has to be matched there.
     func testTheDatabaseIsNamedConsistently() {
         XCTAssertEqual(WorkspaceLocation.databaseName, "pikos.sqlite")
     }
 
     #if DEBUG
-        /// The override answers, creates the directory it was given, and puts
-        /// the database inside it.
-        ///
-        /// Creating rather than assuming is what makes a UI test's `setUp`
-        /// simple: hand over a path under the temporary directory and the app
-        /// deals with the rest.
         func testTheOverrideRedirectsAndCreatesTheDirectory() throws {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("pikos-location-tests", isDirectory: true)
@@ -57,18 +43,14 @@ final class WorkspaceLocationTests: XCTestCase {
                 "the directory is created, so a caller need not")
         }
 
-        /// An empty value is not an override.
-        ///
-        /// A launch environment that sets the key to "" is easy to produce by
-        /// accident — an unset shell variable interpolated into a script — and
+        /// An unset shell variable interpolated into a script yields "", and
         /// treating it as a path would put the database at the filesystem root.
         func testAnEmptyOverrideIsIgnored() {
             setenv(WorkspaceLocation.workspaceOverrideKey, "", 1)
             defer { unsetenv(WorkspaceLocation.workspaceOverrideKey) }
 
-            // Falls through to the App Group, which a host test has no
-            // entitlement for — so the assertion is that it did *not* quietly
-            // answer with "/pikos.sqlite".
+            // Falls through to the App Group, which throws here; the point is that it
+            // did not answer with "/pikos.sqlite".
             let url = try? WorkspaceLocation.databaseURL()
             XCTAssertNotEqual(url?.path, "/\(WorkspaceLocation.databaseName)")
         }

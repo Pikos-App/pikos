@@ -8,43 +8,30 @@ import WebKit
 ///   `pikos-asset://app/index.html`   the editor document
 ///   `pikos-asset://asset/<path>`     an image from the workspace
 ///
-/// Both go through this scheme rather than the editor loading from `file://`,
-/// because that would put the document and its images on different origins.
-/// WKWebView treats `file://` as uniquely restricted, and bridging between the
-/// two means granting directory-wide read access — handing the webview more of
-/// the filesystem than it should ever see. One scheme keeps the webview's reach
-/// to exactly what this class chooses to answer.
+/// Not `file://`, which would put the document and its images on different
+/// origins and need directory-wide read access to bridge them. One scheme keeps
+/// the webview's reach to what this class answers.
 ///
-/// The callbacks run on the main thread, which is also the thread that must
-/// stay responsive for typing. Reads are dispatched off it for that reason, and
-/// the editor bundle is inlined into a single document so a cold load is one
-/// round trip rather than several.
+/// Callbacks run on the main thread, so reads are dispatched off it to keep typing responsive.
 public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     public static let scheme = "pikos-asset"
 
-    /// Host component that serves the editor document.
     static let appHost = "app"
-    /// Host component that serves workspace images.
     static let assetHost = "asset"
 
-    /// URL the editor itself is loaded from.
     public static let editorURL = URL(string: "\(scheme)://\(appHost)/index.html")!
 
-    /// Directory that asset paths resolve within. Anything outside it is
-    /// refused — see `resolve(_:)`.
+    /// Asset paths resolve within this directory; see `resolve(_:)`.
     private let assetRoot: URL
-    /// The built editor document.
     private let editorBundle: URL
     private let queue = DispatchQueue(label: "app.pikos.editor.assets", qos: .userInitiated)
 
     /// Tasks WebKit has started and not yet stopped.
     ///
-    /// Delivering a response to a stopped task is not a no-op — WKWebView
-    /// raises `NSInternalInconsistencyException` and the app dies. It happens
-    /// whenever a load is cancelled while a read is in flight, which here means
-    /// scrolling a long page fast enough that images go out of view before
-    /// their data arrives. Only ever touched on the main thread, which is where
-    /// both callbacks and the delivery hop run.
+    /// Delivering a response to a stopped task raises
+    /// `NSInternalInconsistencyException` and kills the app, which happens when
+    /// a load is cancelled mid-read, such as fast scrolling past images. Only
+    /// touched on the main thread.
     private var live: Set<ObjectIdentifier> = []
 
     public init(assetRoot: URL, editorBundle: URL) {
@@ -55,26 +42,19 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
 
     /// Map a request URL onto a file, or `nil` when it escapes the asset root.
     ///
-    /// Path traversal is the obvious attack here — a document is user content,
-    /// and an image path inside it could be anything, including `../../`
-    /// sequences aimed at the app container. Resolving symlinks and then
-    /// requiring the result to still sit under the root defeats that without
-    /// trying to enumerate bad inputs.
+    /// An image path in a document is user content and could be `../../` aimed at
+    /// the app container. Resolving symlinks and requiring the result to sit
+    /// under the root defeats that without enumerating bad inputs.
     func resolve(_ url: URL) -> URL? {
         switch url.host {
         case Self.appHost:
-            // Exactly one document is served here. Serving by name rather than
-            // by path means no request to the app host can reach the filesystem.
+            // One document, served by name, so no request here reaches the filesystem.
             return url.path == "/index.html" ? editorBundle : nil
 
         case Self.assetHost:
-            // `URL.path` is already percent-decoded. Decoding it a second time
-            // was both wrong and dangerous: wrong because a file legitimately
-            // named `50%.png` arrives as `50%.png` and a second pass mangles
-            // it, and dangerous because `%252e%252e` would survive the first
-            // decode as `%2e%2e` and become `..` on the second. The root check
-            // below catches that today, but a filter that depends on a second
-            // filter to be correct is one edit away from not being.
+            // `URL.path` is already percent-decoded. Decoding again mangles a file
+            // named `50%.png` and lets `%252e%252e` become `..`; the root check
+            // would catch that, but one filter shouldn't depend on another.
             let relative = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard !relative.isEmpty else { return nil }
 
@@ -128,19 +108,12 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     public func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
-        // The read already in flight cannot be cancelled, but its result must
-        // not be delivered: WebKit throws on a stopped task rather than
-        // ignoring the call. Forgetting the task here is what makes the check
-        // in `finish` say no.
+        // The in-flight read can't be cancelled, so forgetting the task makes `finish` refuse delivery.
         forget(ObjectIdentifier(urlSchemeTask))
     }
 
-    // MARK: - Task bookkeeping
-    //
-    // Three one-line methods rather than inline set operations, so the rule
-    // lives in one place and a test can drive exactly the decision the
-    // callbacks make — a `WKURLSchemeTask` cannot be constructed in a unit
-    // test, so testing through the callbacks is not an option.
+    // Separate methods because a `WKURLSchemeTask` can't be built in a unit test,
+    // so tests drive the callbacks' decision through these.
 
     func begin(_ token: ObjectIdentifier) {
         live.insert(token)
@@ -156,11 +129,8 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
         live.remove(token) != nil
     }
 
-    /// Content types for what a page can legitimately contain.
-    ///
-    /// An explicit list rather than a lookup: anything not on it is served as
-    /// binary, so an unexpected file cannot be coaxed into executing as script
-    /// inside the editor's origin.
+    /// An explicit list, not a lookup: anything else is served as binary so an
+    /// unexpected file cannot execute as script in the editor's origin.
     static func mimeType(for pathExtension: String) -> String {
         switch pathExtension.lowercased() {
         case "png": return "image/png"

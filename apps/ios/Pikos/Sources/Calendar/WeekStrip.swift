@@ -1,15 +1,8 @@
 import SwiftUI
 
-/// Seven days across the top of the day view, one tap each.
-///
-/// The day view's answer to "what about Thursday": a swipe reaches the next day, but a tap on the
-/// strip reaches any day of the week without paging through the ones between. Under each day sit
-/// the month view's bars in folder colours, so the strip is a one-row month that says what kind of
-/// day Thursday is and not only that something is on it.
-///
-/// The strip follows the reader's week, Sunday-first or Monday-first from the setting the grid
-/// uses, and re-anchors to whichever week the selected day is in. The selected day is a filled
-/// circle and today is the accent colour; today selected is a filled accent circle.
+/// Seven days across the top of the day view, one tap each, so any day of the week is
+/// reachable without paging. The month view's bars sit under each day. It follows the
+/// reader's week-start setting and re-anchors to the selected day's week.
 struct WeekStrip: View {
     /// The week, as `YYYY-MM-DD` keys in display order.
     let days: [String]
@@ -79,8 +72,6 @@ struct WeekStrip: View {
         .accessibilityLabel(Self.accessibleLabel(day, count: colors.count, isToday: isToday))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
-
-    // MARK: - Labels
 
     private static func dayNumber(_ day: String) -> String {
         let number = day.suffix(2)
