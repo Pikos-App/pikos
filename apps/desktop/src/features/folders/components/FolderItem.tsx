@@ -50,7 +50,6 @@ export function FolderItem({
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
 
-  // Highlight when a page (not a folder) is dragged over this item.
   const [isPageOver, setIsPageOver] = useState(false);
   useDndMonitor({
     onDragCancel() {

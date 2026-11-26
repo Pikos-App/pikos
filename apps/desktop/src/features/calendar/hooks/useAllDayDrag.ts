@@ -14,7 +14,6 @@ import type { GhostContent } from "./useDragGhost";
 interface AllDayDragRefState {
   pageId: string;
   folderColor: string | undefined;
-  /** Set when dragging a virtual rrule occurrence — keys the override. */
   originalDate?: string;
 }
 
@@ -31,7 +30,6 @@ export interface UseAllDayDragOptions {
   metrics: CalendarMetrics;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   dayColumnsRef: React.RefObject<HTMLDivElement | null>;
-  /** Ghost imperative API (from useDragGhost). */
   setGhostContent: (next: GhostContent | null) => void;
   positionGhost: (dayIndex: number, top: number, height: number) => void;
   showGhost: () => void;
@@ -61,14 +59,9 @@ export interface UseAllDayDragResult {
 }
 
 /**
- * Drags an existing all-day chip across days (column hover) or into the timed
- * grid (reschedule to a timed time). Also handles the left/right edge-resize
- * that extends or shrinks a multi-day span.
- *
- * The chip drag and the edge resize share the all-day page list (which the
- * caller derives, applying the edge-resize preview as an override before
- * passing it to AllDaySection), so colocating both gestures keeps the
- * preview/commit flow in one place.
+ * Drags an existing all-day chip across days or into the timed grid, and edge-resizes a
+ * multi-day span. Both gestures share the all-day list the caller derives (with the resize
+ * preview applied as an override), so the preview/commit flow lives in one place.
  */
 export function useAllDayDrag({
   dayColumnsRef,
@@ -116,7 +109,6 @@ export function useAllDayDrag({
     originalDate?: string;
   }) {
     const page = pages.find((p) => p.id === pageId);
-    // Synced events own a locked schedule — never draggable.
     if (page?.scheduleLocked) return;
 
     disableSelect("dragging-grab");
@@ -125,8 +117,7 @@ export function useAllDayDrag({
     allDayHoverColumnRef.current = null;
     setAllDayDraggingPageId(pageId);
 
-    // Render the ghost DOM once up-front. Position updates during the drag
-    // go through positionGhost() — ref-based, no React re-render per frame.
+    // Position updates go through positionGhost(), not React state, so no re-render per frame.
     setGhostContent({
       folderColor,
       height: metrics.compactBlockHeight,
@@ -152,7 +143,6 @@ export function useAllDayDrag({
         Math.min(dayCount - 1, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
       );
 
-      // Cursor is in the all-day/header zone — track horizontal column, hide timed ghost.
       if (ev.clientY < scrollRect.top) {
         if (allDayGhostPositionRef.current !== null) {
           allDayGhostPositionRef.current = null;
@@ -166,7 +156,6 @@ export function useAllDayDrag({
         return;
       }
 
-      // Cursor is in the timed grid — clear all-day hover, show timed ghost.
       if (allDayHoverColumnRef.current !== null) {
         allDayHoverColumnRef.current = null;
         setAllDayDragHoverIndex(null);
@@ -207,24 +196,18 @@ export function useAllDayDrag({
       if (!state) return;
 
       const scrollEl = scrollRef.current;
-      // Dropped in the all-day zone → reschedule as all-day on the hovered
-      // column.
       if (scrollEl && ev.clientY < scrollEl.getBoundingClientRect().top) {
         if (hoverColumn === null) return;
         const targetDay = days[hoverColumn];
         if (!targetDay) return;
         const startStr = format(targetDay, "yyyy-MM-dd");
-        // Preserve a multi-day span: a 4-day event dragged stays 4 days
-        // long. Virtuals share the head's id so the lookup still works for
-        // span computation, even though the rescheduling materialises an
-        // override.
+        // Keep a multi-day span's length. Virtuals share the head's id, so the lookup still works.
         const page = pages.find((p) => p.id === state.pageId);
         const endStr = shiftAllDayEnd(page?.scheduledStart, page?.scheduledEnd, targetDay);
         onReschedule(state.pageId, startStr, endStr, state.originalDate);
         return;
       }
 
-      // Dropped in the timed grid.
       if (!ghostPos) return;
       const targetDay = days[ghostPos.dayIndex];
       if (!targetDay) return;
@@ -237,7 +220,6 @@ export function useAllDayDrag({
       );
     }
 
-    /** Platform-cancelled gesture — unwind without rescheduling. */
     function onCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();
@@ -263,12 +245,9 @@ export function useAllDayDrag({
   }
 
   /**
-   * All-day edge resize — drags the left/right edge of a multi-day chip to
-   * extend/shrink the span. Clamps the grabbed edge to visible days; cross-
-   * week reach is via the popover's date picker. The non-grabbed ("anchor")
-   * edge is the opposite end of the span at gesture start; during the drag,
-   * start = min(grabbed, anchor), end = max, so crossing over the anchor
-   * flips the semantics without losing the range.
+   * Edge resize of a multi-day chip. The grabbed edge clamps to visible days (cross-week reach
+   * is the popover's date picker); crossing the opposite edge flips which end moves without
+   * losing the range.
    */
   function handleAllDayEdgeResizeStart({
     edge,
@@ -283,7 +262,6 @@ export function useAllDayDrag({
   }) {
     const page = pages.find((p) => p.id === pageId);
     if (!page?.scheduledStart) return;
-    // Synced events own a locked schedule — never resizable.
     if (page.scheduleLocked) return;
     const startStr = page.scheduledStart;
     const endStr = page.scheduledEnd ?? page.scheduledStart;
@@ -321,7 +299,6 @@ export function useAllDayDrag({
       onReschedule(final.pageId, final.startDate, endArg, originalDate);
     }
 
-    /** Platform-cancelled gesture — drop the preview, keep the stored span. */
     function onCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();

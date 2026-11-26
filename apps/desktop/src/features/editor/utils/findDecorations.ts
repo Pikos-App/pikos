@@ -21,7 +21,6 @@ export interface FindParams {
 
 export const WHOLE_DOC: PosRange = { from: 0, to: Number.POSITIVE_INFINITY };
 
-/** Positions decorated either side of the viewport, so a short scroll needs no redraw. */
 const VIEWPORT_MARGIN = 2_000;
 
 export const findPluginKey = new PluginKey("findContentPopover");
@@ -32,7 +31,6 @@ let cached: { doc: PmNode | null; query: string; starts: number[] } = {
   starts: [],
 };
 
-/** Match positions for this document and query, worked out once per change to either. */
 export function docMatches(doc: PmNode, query: string): number[] {
   const isCached = cached.doc === doc && cached.query === query;
   if (!isCached) cached = { doc, query, starts: findDocMatches(doc, query) };
@@ -40,7 +38,6 @@ export function docMatches(doc: PmNode, query: string): number[] {
   return cached.starts;
 }
 
-/** The positions on screen in `scroller`, or null when the editor can't map them. */
 export function viewportRange(view: EditorView, scroller: HTMLElement | null): PosRange | null {
   if (!scroller) return null;
 

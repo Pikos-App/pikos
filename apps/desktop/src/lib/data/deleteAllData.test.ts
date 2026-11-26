@@ -7,19 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteAllData } from "./deleteAllData";
 
-// ─── Mocks ────────────────────────────────────────────────────────────────
-//
-// deleteAllData drives three boundaries: the storage adapter (credential
-// release + wipe), the plugin-store (to neutralize the exit-save that would
-// otherwise resurrect the old workspace), and the platform relaunch. We stand
-// in for all three and assert the order of effects — the store must be cleared
-// so the relaunched app boots first-run and reseeds the tutorial.
-
 const invoke = vi.fn<(cmd: string) => Promise<unknown>>();
 const relaunch = vi.fn<() => Promise<void>>();
 
-/** Storage double routing both calls through `invoke` so the existing
- *  command-name assertions and ordering checks read unchanged. */
 const storage = {
   releaseSyncCredentials: () => invoke("release_sync_credentials").then(() => undefined),
   wipeAllData: () => invoke("wipe_app_data").then(() => undefined),
@@ -81,13 +71,9 @@ describe("deleteAllData", () => {
     await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
-    // The store clear must happen so the plugin's exit-save can't write the old
-    // workspace back — that's what forces the first-run tutorial reseed.
     expect(storeClear).toHaveBeenCalledTimes(1);
     expect(storeSave).toHaveBeenCalledTimes(1);
-    // Order: release credentials → wipe → clear+save store → relaunch. The
-    // release runs first because the account ids it keys on live in the DB the
-    // wipe is about to delete.
+    // Release runs first: the account ids it keys on live in the DB the wipe deletes.
     expect(order).toEqual([
       "invoke:release_sync_credentials",
       "invoke:wipe_app_data",
@@ -132,9 +118,8 @@ describe("deleteAllData", () => {
   });
 
   it("falls back to emptying the workspaces key when clear() is denied", async () => {
-    // Regression: store:allow-clear was once missing from capabilities, so
-    // clear() threw and the old workspace was resurrected on exit-save. The
-    // fallback must still empty the store so the relaunch reseeds.
+    // clear() throws without store:allow-clear in capabilities; the fallback must still empty the
+    // store so the relaunch reseeds.
     storeClear.mockRejectedValue(new Error("store.clear not allowed"));
 
     await deleteAllData(storage);
@@ -145,9 +130,8 @@ describe("deleteAllData", () => {
   });
 });
 
-// The reseed-on-delete-all flow depends on store.clear() being permitted at
-// runtime. Capabilities are Tauri config, not exercised by the mocked tests
-// above, so guard against config drift removing the grant.
+// Capabilities are Tauri config the mocked tests don't exercise; guard against config drift
+// removing the grant.
 describe("capabilities", () => {
   it("grants store:allow-clear (required by deleteAllData)", () => {
     const here = dirname(fileURLToPath(import.meta.url));

@@ -1,14 +1,9 @@
-// The Tauri implementation of PlatformAdapter — the single file in the app
-// that may reach for @tauri-apps/plugin-opener, -dialog, -fs, -process, the
-// window/webview handles, or the shell-side commands. Everything else takes
-// the interface from @/shared/platform.
+// The only file that may reach for the Tauri plugins, window handles or shell-side commands;
+// everything else takes the interface from @/shared/platform.
 //
-// The plugin modules are imported lazily inside each method rather than at the
-// top of the file. Two reasons: the dialog/fs/process plugins are only ever
-// needed by paths the user has to reach first (import, delete-all-data), so
-// they stay out of the entry chunk; and a plugin that is absent in a non-Tauri
-// build fails at the call, not at module load, which keeps a browser preview
-// booting instead of blanking.
+// Plugin modules are imported lazily inside each method: the dialog/fs/process plugins stay out
+// of the entry chunk, and a plugin absent in a non-Tauri build fails at the call, not at module
+// load, which keeps a browser preview booting.
 
 import type {
   NativeFileDrop,
@@ -51,8 +46,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     await relaunch();
   }
 
-  /** Swallows the failure into `null`: an OS that can't answer and a shell
-   *  that isn't there are the same "unknown" from the settings panel's side. */
+  /** Swallows the failure into `null`: an OS that can't answer and a missing shell are both "unknown". */
   async checkNotificationPermission(): Promise<boolean | null> {
     try {
       return await invoke<boolean>("check_notification_permission");
@@ -105,8 +99,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     return entries.map((e) => ({ isDirectory: e.isDirectory, name: e.name }));
   }
 
-  /** Known once `ensureAssetsDir` has run, which opening a workspace does before it
-   *  loads a page. */
+  /** Known once `ensureAssetsDir` has run, which opening a workspace does before loading a page. */
   private assetsDir: string | null = null;
 
   async ensureAssetsDir(): Promise<void> {

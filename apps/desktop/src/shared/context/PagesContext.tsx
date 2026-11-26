@@ -1,19 +1,5 @@
-// PagesContext — the single data surface for pages, folders, tags and
-// recurrence rules. This file declares that surface (PagesContextValue, the
-// contract every consumer reads) and composes it; the work is split across
-// modules beside it, one per job:
-//
-//   usePagesStore       the collections, their latest-state refs, the loader
-//   usePageWriteQueue   debounce, per-page write serialisation, rollback
-//                       snapshots, pageErrors, and the one optimistic() shape
-//   usePageWrites       page CRUD + bulk status
-//   useFolderWrites     folder CRUD + ordering
-//   useScheduleWrites   the one-off schedule block (and the anchor move)
-//   useRecurringWrites  rules, completion, uncomplete, skips, virtual moves
-//
-// Workspace lifecycle (init, reload, resetAndSeed) lives in WorkspaceContext;
-// the store registers a data-loader so Workspace can dispatch reloads.
-// Import batch flow lives in ImportContext.
+// The data surface for pages, folders, tags and recurrence rules: declares the contract every
+// consumer reads (PagesContextValue) and composes it from the hooks beside it, one per job.
 
 import type {
   CompletedPagesFilter,
@@ -55,134 +41,94 @@ const log = createLogger("PagesContext");
 
 export interface PagesContextValue {
   folders: Folder[];
-  /** Every tag in use and its page count, counted by the database. */
   tags: Tag[];
-  /** All recurrence rules (one per recurring page). */
   recurrenceRules: PageRecurrenceRule[];
-  /** Load full page with content — use when opening the editor. */
   getPage: (id: string) => Promise<Page | null>;
   /** The full page once every write of it from this window has landed, so a read after an
    *  outside change never sees the database without a save of ours that is still on its way. */
   getPageAfterWrites: (id: string) => Promise<Page | null>;
   createPage: (opts: NewPageFields) => Promise<Page>;
-  /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
-  /** Save that a page was just opened, leaving the page list alone; see `recentOpens`. */
   recordPageOpened: (id: string) => void;
   flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
-  /** Resolve the "calendar description changed" notice — see the adapter method. */
   clearPendingDescription: (id: string) => Promise<void>;
-  /** Soft-delete: sets deleted_at. Page is hidden everywhere but recoverable via restorePage. */
   softDeletePage: (id: string) => Promise<void>;
-  /** Restore a soft-deleted page — clears deleted_at and re-adds to pages list. */
   restorePage: (id: string) => Promise<void>;
   createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
   updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
-  /** In-place folder colour patch, no DB write — the colour is already persisted
-   *  (external-calendar recolor writes via the sync adapter). Avoids a full
-   *  workspace reload just to repaint one sidebar swatch. */
+  /** No DB write: the colour is already persisted (external-calendar recolor writes via the sync
+   *  adapter), so this avoids a full workspace reload to repaint one swatch. */
   patchFolderColor: (folderId: string, color: string) => void;
   deleteFolder: (id: string) => Promise<void>;
-  /** Soft-delete folder + all its pages. Recoverable via restoreFolder. */
   softDeleteFolder: (id: string) => Promise<void>;
-  /** Restore a soft-deleted folder and all its pages. */
   restoreFolder: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
-  /** Move pages, in the order given, between two neighbours in their folder's manual order. */
   movePages: (ids: string[], place: Placement) => Promise<void>;
   /**
-   * Bulk complete/uncomplete in ONE transaction (multi-select Cmd+A → Space).
-   * Optimistic; rolls back and surfaces a per-page error on failure. One atomic
-   * write instead of N concurrent updatePage calls that race the WAL pool and
-   * drop some completions. Non-recurring pages only — recurring completion goes
-   * through completeRecurringPage (clone + advance).
+   * Bulk complete/uncomplete in one transaction. Optimistic; rolls back and surfaces a per-page
+   * error on failure. One write instead of N concurrent updatePage calls, which race the WAL pool
+   * and drop some completions. Non-recurring pages only: recurring completion goes through
+   * completeRecurringPage.
    */
   setPagesStatus: (ids: string[], status: PageStatus, completedAt: string | null) => Promise<void>;
   reorderFolders: (orderedIds: string[]) => Promise<void>;
-  /** Create or update the one-off schedule block for a page. */
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
-  /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
   createRecurrence: (data: NewRecurrenceRule) => Promise<PageRecurrenceRule>;
   updateRecurrence: (ruleId: string, updates: RecurrenceRuleUpdate) => Promise<PageRecurrenceRule>;
-  /** Cascades to materialised page_schedules overrides. */
   deleteRecurrence: (ruleId: string) => Promise<void>;
-  /** The given rules' override rows, regardless of moved position (for rrule
-   *  occurrence-exclusion, incl. a cross-week move). */
+  /** The given rules' override rows, regardless of moved position. */
   listOverridesForRules: (ruleIds: string[]) => Promise<import("@pikos/core").PageSchedule[]>;
-  /** Batched raw rrule expansion for a range via the Rust engine (rule EXDATEs
-   * applied; completed/skip union stays client-side). */
   expandRecurrenceRange: (
     rules: PageRecurrenceRule[],
     rangeStart: string,
     rangeEnd: string
   ) => Promise<import("@pikos/core").RawRuleExpansion[]>;
-  /** Materialise a virtual rrule occurrence as an independent real page. */
   rescheduleVirtualOccurrence: (
     ruleId: string,
     originalDate: string,
     start: string,
     end?: string
   ) => Promise<void>;
-  /** Bumped when an override row changes without any page or rule changing with
-   *  it — the calendar's override fetch is keyed on the visible range and the
-   *  rule set, so an in-place move is otherwise invisible to it until a nav. */
+  /** Bumped when an override row changes with no page or rule changing: the calendar's override
+   *  fetch is keyed on range and rule set, so an in-place move is otherwise invisible to it. */
   overridesVersion: number;
   /**
-   * Complete the head's own occurrence: clone as done, advance the head to the
-   * next open one. `head` overrides the state lookup so a sequential run can
-   * chain off the previous call's recomputed head — `pages` state lags a loop.
-   * Null when the re-entrancy guard swallowed the call.
+   * Complete the head's own occurrence. `head` overrides the state lookup so a sequential run can
+   * chain off the previous call's recomputed head. Null when the re-entrancy guard swallowed the
+   * call.
    */
   completeRecurringPage: (
     pageId: string,
     head?: PageSummary
   ) => Promise<CompleteRecurringResult | null>;
-  /** Complete one rendered occurrence of a synced-origin series (virtual or moved
-   *  block), keyed on its original date. Null when the guard swallowed the call. */
+  /** Complete one rendered occurrence of a synced-origin series, keyed on its original date. Null
+   *  when the guard swallowed the call. */
   completeSyncedOccurrence: (input: {
     pageId: string;
     occurrenceDate: string;
     scheduledStart: string;
     scheduledEnd?: string;
   }) => Promise<CompleteRecurringResult | null>;
-  /** Complete every open occurrence from the head up to, but not including, today
-   *  — the gap dialog's "all to today". */
   completeRecurringToToday: (pageId: string, opts?: GapRunOptions) => Promise<void>;
-  /** Dismiss occurrences of a recurring page to the skip-set. Returns an undo
-   *  function that restores all of them. */
   skipOccurrences: (pageId: string, dates: string[]) => Promise<() => void>;
   /**
-   * Unchecking a recurring done clone (native or synced) → uncomplete that
-   * occurrence and restore it, rather than a plain status flip a recompute would
-   * revert. Returns true when handled — the caller must not fall through.
+   * Uncomplete a recurring done clone (native or synced) rather than flip its status, which a
+   * recompute would revert. Returns true when handled; the caller must not fall through.
    */
   maybeUncompleteRecurringClone: (page: PageSummary, nextStatus: PageStatus) => boolean;
   /**
-   * Un-done of a native recurring head → occurrence-uncomplete (undo the last
-   * completion), not a plain status flip that a recompute would revert. Returns
-   * true when handled; false (non-recurring, active-synced, or legacy completion)
-   * leaves the caller to do its plain flip.
+   * Occurrence-uncomplete of a native recurring head. Returns false (non-recurring, active-synced,
+   * or legacy completion) to leave the caller to its plain flip.
    */
   uncompleteRecurringHead: (pageId: string) => Promise<boolean>;
-  /**
-   * Uncheck a recurring page: rewind the last occurrence via
-   * `uncompleteRecurringHead`, or plain-flip to `not_started` when there's
-   * nothing to rewind.
-   */
   uncompleteRecurringOrFlip: (pageId: string) => Promise<void>;
-  /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
-  /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
   mergePages: (incoming: PageSummary[]) => void;
-  /** Unified FTS5 search — title matches ranked above content via bm25(). */
   searchPages: (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
-  /** Tag name prefix search — for autocomplete in tag chip inputs. */
   searchTags: (query: string) => Promise<string[]>;
-  /** Per-page error state from failed debounced writes or scheduling mutations.
-   *  Typed so consumers can branch on err.kind for friendly UI copy without
-   *  leaking raw sqlx/Tauri text. */
+  /** Typed so consumers can branch on err.kind without leaking raw sqlx/Tauri text. */
   pageErrors: Map<string, StorageError>;
   clearPageError: (id: string) => void;
 }
@@ -194,8 +140,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   const { emit } = eventBus;
   const { defaultFolderId } = useAppSettings();
 
-  // Collections, their latest-state mirrors, derived tags, and the loader
-  // WorkspaceContext dispatches on init/reload/resetAndSeed.
   const {
     folders,
     foldersRef,
@@ -209,8 +153,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     tags,
   } = usePagesStore({ adapter, registerDataLoader, viewCache });
 
-  // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
-  // the optimistic-write shape every mutation below goes through.
   const {
     cancelPendingWrite,
     clearPageError,
@@ -227,8 +169,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     enqueue(id, () => adapter.updatePage(id, { lastOpenedAt: at })).catch(() => undefined);
   }
 
-  // Rules, completion, uncomplete, skips, and virtual-occurrence materialisation
-  // — every write that defers the head to the backend recompute.
   const recurring = useRecurringWrites({
     adapter,
     enqueue,
@@ -239,7 +179,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     updatePage,
   });
 
-  // Folder CRUD + ordering, which also prunes/restores the pages they hold.
   const {
     createFolder,
     deleteFolder,
@@ -250,7 +189,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     updateFolder,
   } = useFolderWrites({ adapter, emit, foldersRef, optimistic, setFolders, setPages });
 
-  // Page CRUD: create, delete (hard + soft), restore, reorder, bulk status.
   const {
     clearPendingDescription,
     createPage: createPageOnly,
@@ -270,7 +208,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setPages,
   });
 
-  // The one-off schedule block — which is also how a recurring series' anchor moves.
   const { clearSchedule, scheduleOnce } = useScheduleWrites({
     adapter,
     optimistic,
@@ -286,8 +223,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     viewCache.adoptCreated(page);
     return page;
   }
-
-  // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
   function getPage(id: string): Promise<Page | null> {
     return viewCache.body(id);

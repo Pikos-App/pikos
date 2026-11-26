@@ -1,8 +1,3 @@
-// MonthGrid — what the month view puts on screen (day numbers, chips, the
-// "+K more" pill) and where each click goes. The popover seam is asserted via
-// the chip's own trigger; navigation is asserted through the injected
-// `onOpenDay`, which CalendarView wires to referenceDate + view mode.
-
 import type { MonthCell, PageSummary } from "@pikos/core";
 import { buildMonthGrid } from "@pikos/core";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
@@ -60,7 +55,6 @@ function makePage(over: Partial<PageSummary> & { id: string }): PageSummary {
   };
 }
 
-// March 2026 (Monday-anchored) → Feb 23 … Apr 5.
 const WEEKS: MonthCell[][] = buildMonthGrid(new Date(2026, 2, 15), 1, new Date(2026, 2, 15));
 
 function renderGrid(pages: PageSummary[]) {
@@ -114,9 +108,7 @@ describe("MonthGrid — event chips", () => {
     expect(cell("Tuesday March 10, 2026")).toContainElement(chip);
   });
 
-  // A month cell is an overview and its width is the scarce thing. The time used
-  // to lead the chip and refuse to shrink, leaving "10:30am Standu…" — a time and
-  // nothing scannable. It is off the chip entirely now, and stays in the name.
+  // A month cell is an overview and its width is scarce, so the time stays off the chip and in its name.
   it("shows the title alone, keeping the time in the accessible name", () => {
     renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
     const chip = screen.getByRole("button", { name: "Standup 9 AM" });
@@ -182,7 +174,6 @@ describe("MonthGrid — event chips", () => {
     try {
       renderGrid([makePage({ id: "Standup", scheduledStart: "2026-03-10T09:00:00" })]);
       fireEvent.click(screen.getByRole("button", { name: "Standup 9 AM" }));
-      // The chip discriminates click from double-click on a timer.
       act(() => {
         vi.runOnlyPendingTimers();
       });

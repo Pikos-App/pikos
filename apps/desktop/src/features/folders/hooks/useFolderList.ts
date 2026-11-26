@@ -11,7 +11,6 @@ export type FolderSortOrder = "manual" | "alphabetical" | "page-count";
 
 export interface FolderListState {
   folders: Folder[];
-  /** System-managed synced-calendar folders — rendered in their own sidebar area. */
   externalFolders: Folder[];
   pageCountByFolder: Record<string, number>;
   activeViewId: string;
@@ -39,7 +38,6 @@ export function useFolderList(): FolderListState {
 
   const visibleFolders = folders.filter((f) => !hiddenFolderIds.has(f.id));
 
-  // If the active view points to a folder that no longer exists, fall back to inbox.
   const isFolderView = !isSmartViewId(activeViewId);
   if (isFolderView && !visibleFolders.some((f) => f.id === activeViewId)) {
     setActiveViewId("inbox");
@@ -52,9 +50,8 @@ export function useFolderList(): FolderListState {
   const upcomingCount = counted?.upcoming ?? 0;
   const inboxCount = counted?.inbox ?? 0;
 
-  // "manual" — use workspace array order as-is; reorderFolders keeps it correct via optimistic
-  // update. Sorting by folder.sortOrder would revert the order since optimistic update doesn't
-  // update the sortOrder field on each Folder object (only the DB write does).
+  // "manual" uses the workspace array order as-is: reorderFolders keeps it correct optimistically,
+  // and sorting by sortOrder would revert it, since only the DB write updates that field.
   const sortedFolders =
     sortOrder === "manual"
       ? visibleFolders

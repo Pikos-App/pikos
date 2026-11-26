@@ -3,12 +3,9 @@ import { Fragment, type ReactNode } from "react";
 import { getPlatform } from "@/shared/platform";
 
 /**
- * Renders the narrow markdown subset used in release notes — headings (as
- * compact section labels), bullet lists, **bold**, `inline code` and
- * [links](https://…), which open in the browser. The notes
- * are authored by us to a convention (not arbitrary user input), so the subset
- * is deliberately small. Text is rendered as React children (never
- * dangerouslySetInnerHTML), so it can't inject markup.
+ * Renders the small markdown subset release notes use (headings as section labels, bullets,
+ * **bold**, `inline code`, links that open in the browser). The notes are authored by us, so the
+ * subset is deliberately small, and text renders as React children, never dangerouslySetInnerHTML.
  */
 
 type Block =

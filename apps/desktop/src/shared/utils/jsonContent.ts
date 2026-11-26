@@ -1,11 +1,6 @@
-// Defensive parser for Tiptap JSON content blobs persisted in pages.content.
-//
-// pages.content is *always* written by Tiptap's own getJSON() output, so a
-// parse failure means the row is corrupted (manual DB edit, partial write,
-// or a future schema bump that wasn't migrated). Silently swallowing the
-// error would mask the corruption; throwing would crash the editor on
-// page open. Log + fall back to the empty doc so the user can keep using
-// the page, and the bug shows up in the log file.
+// pages.content is always written by Tiptap's getJSON(), so a parse failure means a corrupted row.
+// Swallowing it would mask the corruption and throwing would crash the editor on page open: log
+// and fall back to the empty doc so the user keeps using the page and the log shows the bug.
 
 import type { JSONContent } from "@tiptap/core";
 
@@ -18,13 +13,7 @@ export const EMPTY_TIPTAP_DOC: JSONContent = {
   type: "doc",
 };
 
-/**
- * Parse a Tiptap JSON document string. Returns `null` for empty/missing
- * input so callers can choose their own fallback (some need an empty doc,
- * some need to skip the operation). Logs at error severity on parse
- * failure — a corrupted document is the kind of thing we want surfaced
- * in bug reports.
- */
+/** Returns `null` for empty or missing input so callers choose their own fallback. */
 export function tryParseTiptapJson(
   raw: string | null | undefined,
   context: string

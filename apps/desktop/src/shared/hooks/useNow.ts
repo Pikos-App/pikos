@@ -12,12 +12,11 @@ function msUntilNextMinute(from: Date): number {
 }
 
 /**
- * One clock for the whole app, current to the minute. A timer per reader drifted in a
- * different way each time: a timer paused in a hidden calendar, one held back while the
- * window was out of view, one stalled through the Mac's sleep. Here one timer reads the
- * time at each minute's turn and at least every few seconds, and a reader asks for the
- * time when it draws, so a reader shown again, a window brought back or a Mac woken up
- * is current at once with nothing to catch up.
+ * One clock for the whole app, current to the minute. Per-reader timers drift: one pauses in a
+ * hidden calendar, one is held back while the window is out of view, one stalls through the
+ * Mac's sleep. Here one timer reads the time at each minute's turn and at least every few
+ * seconds, and a reader asks for the time when it draws, so a reader shown again, a window
+ * brought back or a Mac woken up is current at once with nothing to catch up.
  */
 const listeners = new Set<() => void>();
 let now = new Date();
@@ -27,7 +26,6 @@ function tell(): void {
   for (const listener of listeners) listener();
 }
 
-/** Takes the time, and returns whether the minute moved on since the last reading. */
 function read(): boolean {
   const at = new Date();
   if (sameMinute(now, at)) return false;
@@ -58,10 +56,6 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-/**
- * A reader drawing after the minute moved, before the timer noticed, reads the new minute,
- * and the others hear of it once this render is done.
- */
 function getSnapshot(): Date {
   if (read()) queueMicrotask(tell);
   return now;

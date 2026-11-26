@@ -1,8 +1,3 @@
-// TypedConfirmDialog — verifies the typed-phrase guard around destructive
-// confirmations. The dialog must keep its primary action disabled until the
-// user types the exact phrase (case-insensitive, trimmed); Enter on a
-// matching input must commit; busy state must lock the whole UI.
-
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -133,13 +128,11 @@ describe("TypedConfirmDialog", () => {
     fireEvent.change(input, { target: { value: "delete" } });
     expect(screen.getByRole("button", { name: "Delete Everything" })).toBeEnabled();
 
-    // Cancel via Escape — Radix closes; reopen.
     act(() => {
       fireEvent.keyDown(document.body, { key: "Escape" });
     });
     fireEvent.click(screen.getByRole("button", { name: "reopen" }));
 
-    // The input is fresh; confirm is disabled again.
     expect(screen.getByRole("textbox")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Delete Everything" })).toBeDisabled();
   });

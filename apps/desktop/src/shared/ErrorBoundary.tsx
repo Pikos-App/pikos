@@ -10,9 +10,8 @@ const log = createLogger("ErrorBoundary");
 
 interface Props {
   children: ReactNode;
-  /** Optional custom fallback. When omitted, the full-screen "Something went
-   *  wrong" shell renders. Pass a compact alternative when wrapping individual
-   *  panes/dialogs so one pane's crash doesn't blank the whole window. */
+  /** Pass a compact alternative when wrapping individual panes or dialogs so one crash doesn't blank
+   *  the whole window. */
   fallback?: (args: { error: Error; reset: () => void }) => ReactNode;
 }
 
@@ -41,8 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Component stack contains React component names only — safe to log.
-    // Error is sanitized (paths scrubbed) by the logger before file write.
+    // Component names only, and the logger scrubs paths before the file write.
     log.error(`Render error in${info.componentStack ?? ""}`, error);
     this.setState({ componentStack: info.componentStack ?? null });
   }
@@ -84,9 +82,7 @@ export class ErrorBoundary extends Component<Props, State> {
       });
   };
 
-  /** App-controlled error report payload. formatError() runs the same
-   *  path-scrubbing the disk logger uses so a copy-and-paste won't leak
-   *  the user's home directory into a bug report. */
+  /** formatError() path-scrubs as the disk logger does, so a pasted report doesn't leak the home directory. */
   formatReport(): string {
     const { componentStack, error } = this.state;
     const lines = [
@@ -104,7 +100,6 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    // Caller-supplied compact fallback for pane/dialog boundaries — see PaneErrorFallback.
     if (this.props.fallback && this.state.error) {
       return this.props.fallback({ error: this.state.error, reset: this.reset });
     }

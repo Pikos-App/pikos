@@ -1,13 +1,7 @@
-// useRecurringWrites — every write that touches a recurring series: the rules
-// themselves, completion (native head and synced occurrence alike), the
-// uncomplete rewinds, skips, and materialising a virtual occurrence.
-//
-// What holds this cluster together is that none of these writes owns the head.
-// The backend derivation does: each one hands the command over and then adopts
-// what the recompute produced (patchRecomputedHead), because a locally guessed
-// head is the bug this whole area kept reproducing. The re-entrancy guards are
-// the other half — every clone-minting path is fire-and-forget from a control
-// with no disabled state, so an unguarded second call mints a duplicate.
+// None of these writes owns the head: the backend derivation does. Each hands the command over
+// and adopts what the recompute produced (patchRecomputedHead), since a locally guessed head is
+// wrong. Clone-minting paths are fire-and-forget from controls with no disabled state, so each
+// is re-entrancy guarded.
 
 import type {
   CompleteRecurringResult,
@@ -31,10 +25,9 @@ import {
 } from "@pikos/core";
 import { type Dispatch, type RefObject, type SetStateAction, useRef, useState } from "react";
 
-/** Chaining + bound for a "complete everything to today" run. `fromHead` carries
- * the recomputed head returned by the gesture that opened the run — `pages` state
- * lags a sequential loop, so a state read would re-complete the same occurrence.
- * `maxSteps` is the runaway backstop: the dialog counted the backlog it promised. */
+/** Chaining + bound for a "complete everything to today" run. `fromHead` carries the recomputed
+ * head returned by the gesture that opened the run: `pages` state lags a sequential loop, so a
+ * state read would re-complete the same occurrence. `maxSteps` is the runaway backstop. */
 export interface GapRunOptions {
   fromHead?: PageSummary;
   maxSteps?: number;
@@ -62,8 +55,7 @@ export interface RecurringWrites {
   listOverridesForRules: (ruleIds: string[]) => Promise<PageSchedule[]>;
   maybeUncompleteRecurringClone: (page: PageSummary, nextStatus: PageStatus) => boolean;
   overridesVersion: number;
-  /** Adopt the head the backend derivation produced. Also reached from the
-   *  one-off schedule write, which moves a recurring anchor. */
+  /** Adopt the head the backend derivation produced. Also reached from the one-off schedule write. */
   patchRecomputedHead: (pageId: string, dropCloneId?: string) => Promise<void>;
   rescheduleVirtualOccurrence: (
     ruleId: string,
@@ -77,10 +69,8 @@ export interface RecurringWrites {
   updateRecurrence: (ruleId: string, updates: RecurrenceRuleUpdate) => Promise<PageRecurrenceRule>;
 }
 
-/** Put a page a write returned into the list, replacing any copy already there.
- *  It can be: an idempotent repeat returns the same clone, and a fetch that ran
- *  while the write was in flight (the Completed section's, opened right after a
- *  tick) can land it first. Appending blind listed the page twice. */
+/** Replaces any copy already listed: an idempotent repeat returns the same clone, and a fetch
+ *  that ran during the write can land it first. Appending blind listed the page twice. */
 function upsertPage(pages: PageSummary[], page: PageSummary): PageSummary[] {
   return pages.some((p) => p.id === page.id)
     ? // Stryker disable next-line ConditionalExpression: the copy already listed is the same page
@@ -105,22 +95,17 @@ export function useRecurringWrites({
   setRecurrenceRules: Dispatch<SetStateAction<PageRecurrenceRule[]>>;
   updatePage: (id: string, patch: PageUpdate) => void;
 }): RecurringWrites {
-  // In-flight recurring writes that mint a clone (completion by page id,
-  // virtual reschedule by ruleId|originalDate). The backend creates one clone
-  // per call and both UI paths are fire-and-forget with no disabled state, so a
-  // re-entrant call would mint a duplicate. Checked + added synchronously
-  // before the first await; cleared on settle so a later genuine call runs.
+  // Clone-minting writes in flight (completion by page id, virtual reschedule by
+  // ruleId|originalDate). Callers are fire-and-forget, so a re-entrant call would mint a
+  // duplicate. Checked and added before the first await; cleared on settle.
   const completingRecurringRef = useRef<Set<string>>(new Set());
-  // Same guard for synced occurrences: the toggle path fires completeSyncedOccurrence
-  // fire-and-forget with no disabled state, so a double-click would append the
-  // (idempotent) clone twice into `pages`.
+  // Same guard for synced occurrences, whose idempotent clone would otherwise append twice.
   const completingSyncedRef = useRef<Set<string>>(new Set());
   const reschedulingVirtualRef = useRef<Set<string>>(new Set());
   const [overridesVersion, setOverridesVersion] = useState(0);
 
-  /** `isRecurring` is the backend's projection, read with the page, so a rule
-   *  added or removed here leaves it stale until the next read unless it is
-   *  patched too. Stale, "Move to today" moved a new series as a plain page. */
+  /** `isRecurring` is the backend's projection, read with the page, so a rule added or removed here
+   *  leaves it stale unless patched too. Stale, "Move to today" moved a new series as a plain page. */
   function markRecurring(pageId: string, isRecurring: boolean): void {
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, isRecurring } : p)));
   }
@@ -150,11 +135,8 @@ export function useRecurringWrites({
     if (pageId) markRecurring(pageId, false);
   }
 
-  /** Re-fetch a recurring head after a backend recompute (which returns void) and
-   * patch its derived fields into state, so the FE reflects the head the derivation
-   * produced rather than an optimistic guess. `dropCloneId` removes the deleted done
-   * clone in the same update (the uncomplete path); the drop applies even if the head
-   * fetch comes back empty. */
+  /** Re-fetch a recurring head after a backend recompute (which returns void) and patch its
+   * derived fields into state. `dropCloneId` removes the deleted done clone in the same update. */
   async function patchRecomputedHead(pageId: string, dropCloneId?: string): Promise<void> {
     const fresh = await adapter.getPage(pageId);
     setPages((prev) => {
@@ -175,8 +157,7 @@ export function useRecurringWrites({
     });
   }
 
-  /** Uncompletes the NEWEST completed occurrence, then adopts the recomputed head.
-   * Contract + false-return cases are on the interface type. */
+  /** Uncompletes the NEWEST completed occurrence, then adopts the recomputed head. */
   async function uncompleteRecurringHead(pageId: string): Promise<boolean> {
     const head = pagesRef.current.find((p) => p.id === pageId);
     if (!head || head.scheduleLocked) return false;
@@ -199,18 +180,10 @@ export function useRecurringWrites({
   }
 
   /**
-   * Drag-to-reschedule (or popover Date pick) on a virtual rrule occurrence.
-   * Materialises the occurrence as an independent real page: clones the head's
-   * content + metadata, schedules the clone at the new time, and adds the
-   * original date to the head's rruleExdates so the virtual disappears.
-   *
-   * The clone is a normal page — own id, status, movable, completable. The
-   * head and rule are untouched, so the next virtual still appears at the
-   * next non-excluded rrule occurrence.
-   *
-   * The previous "page_schedules override row" approach was discarded
-   * because synthetic override blocks couldn't seamlessly inherit page
-   * functionality (drag would duplicate, checkbox would advance the head).
+   * Drag-to-reschedule or popover date pick on a virtual rrule occurrence: materialises it as an
+   * independent page (clone of the head, scheduled at the new time) and adds the original date to
+   * the head's rruleExdates. An override row instead would not inherit page behaviour: drag would
+   * duplicate, and the checkbox would advance the head.
    */
   async function rescheduleVirtualOccurrence(
     ruleId: string,
@@ -218,16 +191,12 @@ export function useRecurringWrites({
     start: string,
     end?: string
   ): Promise<void> {
-    // Re-entrancy guard, keyed per occurrence: callers are fire-and-forget
-    // (calendar drag, popover date pick) with nothing disabled in flight, so a
-    // double-invoke would materialize the same occurrence twice.
     const guardKey = `${ruleId}|${originalDate}`;
     if (reschedulingVirtualRef.current.has(guardKey)) return;
     reschedulingVirtualRef.current.add(guardKey);
     try {
-      // Clone + schedule + exdate happen in ONE backend transaction — a
-      // mid-sequence failure can no longer leave both the clone and the
-      // still-unexcluded virtual on the calendar.
+      // One backend transaction, so a mid-sequence failure can't leave both the clone and the
+      // unexcluded virtual on the calendar.
       const result = await adapter.rescheduleVirtualOccurrence({
         originalDate,
         ruleId,
@@ -235,17 +204,15 @@ export function useRecurringWrites({
         timezone: getLocalTimezone(),
         ...(end !== undefined && { scheduledEnd: end }),
       });
-      // No clone means the occurrence already had an override row and that row
-      // moved in place. Nothing entered the page list, and no dep the calendar's
-      // override fetch watches has changed — hence the explicit version bump.
+      // No clone means the occurrence already had an override row that moved in place: no dep the
+      // calendar's override fetch watches changed, hence the explicit version bump.
       const { clone } = result;
       if (clone) {
         setPages((prev) => upsertPage(prev, clone));
       } else {
         setOverridesVersion((v) => v + 1);
       }
-      // Rule state syncs from the post-merge exdates the backend returns, not
-      // a locally computed array — see addExdates in CompleteRecurringInput.
+      // Rule state syncs from the post-merge exdates the backend returns, not a locally computed array.
       setRecurrenceRules((prev) =>
         prev.map((r) => (r.id === ruleId ? { ...r, rruleExdates: result.ruleExdates } : r))
       );
@@ -271,22 +238,16 @@ export function useRecurringWrites({
     head?: PageSummary
   ): Promise<CompleteRecurringResult | null> {
     const page = head ?? pagesRef.current.find((p) => p.id === pageId);
-    // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
-    // in flight, and the backend mints one clone + one head-advance per call —
-    // a re-entrant call (or, now that completion is queued, a SERIALIZED
-    // second call) would complete two occurrences for one gesture. Keyed per
-    // occurrence (`pageId:date`, unified with the synced path) so completing two
-    // different virtuals of one series in quick succession isn't dropped.
+    // The backend mints one clone and one head-advance per call, so a re-entrant or queued second
+    // call would complete two occurrences. Keyed per occurrence (`pageId:date`) so two virtuals of
+    // one series aren't dropped.
     const occKey = `${pageId}:${page?.scheduledStart?.slice(0, 10) ?? ""}`;
     if (completingRecurringRef.current.has(occKey)) return null;
     completingRecurringRef.current.add(occKey);
     try {
-      // The completion itself runs ON the per-page mutation queue: a drag's
-      // scheduleOnce writes (including its trailing denorm updatePage) may
-      // still be in flight, and a completion racing past them lets the stale
-      // schedule write commit AFTER the advance — rewinding the head to the
-      // just-completed occurrence. Reading the refs inside the queued fn also
-      // means the advance is computed from fully settled state.
+      // Runs on the per-page mutation queue: a drag's scheduleOnce writes may still be in flight, and
+      // a completion racing past them lets the stale schedule write commit AFTER the advance,
+      // rewinding the head. Refs are read inside the queued fn so the advance sees settled state.
       return await enqueue(pageId, () => completeRecurringPageQueued(pageId, page));
     } finally {
       completingRecurringRef.current.delete(occKey);
@@ -297,9 +258,8 @@ export function useRecurringWrites({
     pageId: string,
     head: PageSummary | undefined
   ): Promise<CompleteRecurringResult | null> {
-    // An active synced head must name the occurrence it's completing: the reconciler
-    // pins `pages.scheduled_start` at the series base, so the backend can't derive it
-    // the way it does for a native head. The wall-clocks convert out of the source
+    // An active synced head must name its occurrence: the reconciler pins `pages.scheduled_start` at
+    // the series base, so the backend can't derive it. The wall-clocks convert out of the source
     // zone, matching the clone a virtual completion writes.
     const syncedHead =
       head?.scheduleLocked && head.scheduledStart
@@ -312,18 +272,15 @@ export function useRecurringWrites({
           }
         : {};
 
-    // A native head names no occurrence, so the backend derives it from whatever
-    // the head reads at write time. Naming the one this gesture was aimed at keeps
-    // a CLI `done` that landed first from turning this into a second advance.
+    // A native head names no occurrence, so the backend derives it from the head at write time.
+    // Naming the one aimed at keeps a CLI `done` that landed first from becoming a second advance.
     const expected =
       !head?.scheduleLocked && head?.scheduledStart
         ? { expectedOccurrenceDate: head.scheduledStart.slice(0, 10) }
         : {};
 
-    // Refusing is the point of the expectation: the series moved under this
-    // gesture, so the tick applies to nothing. The watcher's refetch already
-    // carries the truth, which is what the user should see. Only a call that sent
-    // one absorbs its refusal; every other conflict still surfaces.
+    // The series moved under this gesture, so the tick applies to nothing and the watcher's refetch
+    // carries the truth. Only a call that sent an expectation absorbs its refusal.
     let result: CompleteRecurringResult;
     try {
       result = await adapter.completeRecurringPage({ pageId, ...syncedHead, ...expected });
@@ -341,10 +298,8 @@ export function useRecurringWrites({
     return result;
   }
 
-  /** Each step is the ordinary single completion, so the backend picks the next
-   * open occurrence off truth and the client never computes a date. Stops when the
-   * recomputed head reaches today, stops advancing (an out-of-envelope rule the
-   * recompute can't move), or the caller's step budget runs out. */
+  /** Each step is the ordinary single completion, so the client never computes a date. Stops when
+   * the recomputed head reaches today, stops advancing, or the step budget runs out. */
   async function completeRecurringToToday(pageId: string, opts: GapRunOptions = {}): Promise<void> {
     const todayKey = formatDateOnly(new Date());
     const budget = opts.maxSteps ?? Number.MAX_SAFE_INTEGER;
@@ -360,9 +315,8 @@ export function useRecurringWrites({
   }
 
   async function skipOccurrences(pageId: string, dates: string[]): Promise<() => void> {
-    // Skips are per-occurrence state in the skip-set, not rule EXDATEs. Expansion
-    // excludes each date via page.skippedOccurrences; the head is adopted from the
-    // backend's recompute because a bulk dismissal can cover the head's own date.
+    // Skips are per-occurrence state in the skip-set, not rule EXDATEs. The head is adopted from the
+    // recompute because a bulk dismissal can cover the head's own date.
     for (const date of dates) {
       await adapter.skipOccurrence({ occurrenceDate: date, pageId });
     }
@@ -397,13 +351,10 @@ export function useRecurringWrites({
     };
   }
 
-  // ─── Synced recurring occurrence completion ────────────────────────────────
-  // Thin routing to the unified command with the client-rendered virtual; the model
-  // (why a synced series supplies its occurrence, and how the recompute converges) is
-  // documented on `complete_recurring_page` in the backend.
+  // Routing to the unified command; the model is documented on `complete_recurring_page` in the
+  // backend.
 
-  /** `scheduledStart`/`scheduledEnd` are the occurrence as the engine emits it —
-   *  source-zone wall-clock — and convert to the viewer's zone here. */
+  /** The occurrence as the engine emits it, in source-zone wall-clock, converted to the viewer's zone here. */
   async function completeSyncedOccurrence(input: {
     pageId: string;
     occurrenceDate: string;
@@ -435,8 +386,6 @@ export function useRecurringWrites({
     return result;
   }
 
-  // The unified backend uncomplete recomputes the head (native or synced), so
-  // re-fetch it rather than guess.
   async function uncompleteRecurringClone(seriesId: string, occurrenceDate: string): Promise<void> {
     const series = pagesRef.current.find((p) => p.id === seriesId);
     const cloneId = series?.completedOccurrences?.[occurrenceDate];
@@ -445,10 +394,9 @@ export function useRecurringWrites({
   }
 
   /**
-   * Intercepts the un-check of a recurring done clone (native or synced) and
-   * returns true ONLY when it handled it (caller must then NOT fall through) — a
-   * plain status flip would be reverted by the next recompute. Completion routes
-   * the other way, through the gap dialog, which owns the scope choice.
+   * Intercepts the un-check of a recurring done clone (native or synced). Returns true ONLY when it
+   * handled it, so the caller must not fall through: a plain status flip would be reverted by the
+   * next recompute. Completion routes through the gap dialog instead.
    */
   function maybeUncompleteRecurringClone(page: PageSummary, nextStatus: PageStatus): boolean {
     if (nextStatus !== "not_started") return false;

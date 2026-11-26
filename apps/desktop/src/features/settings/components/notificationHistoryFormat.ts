@@ -22,7 +22,6 @@ export function formatFiredAt(firedAt: string): string {
   return `${format(at, "EEE d MMM")} ${time}`;
 }
 
-/** What this row says happened, in the user's terms. */
 export function describeEntry(entry: NotificationHistoryEntry): string {
   if (entry.kind === "suppressed") return "Silenced by quiet hours";
   if (entry.kind === "refused") return "Not shown: notifications are off for Pikos";

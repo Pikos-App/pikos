@@ -7,7 +7,7 @@ import { KeyboardShortcut } from "./KeyboardShortcut";
 
 interface TooltipIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
-  shortcut?: string; // canonical format: "mod+shift+c"
+  shortcut?: string;
   icon: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
 }

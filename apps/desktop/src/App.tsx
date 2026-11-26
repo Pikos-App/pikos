@@ -59,9 +59,8 @@ function useTrackPageOpened() {
   }, [activePageId]);
 }
 
-/** Native menu event IDs — Rust calls `webview.eval('__onMenuEvent("<id>")')`
- *  from src-tauri so the strings must stay in sync. Keep this union and the
- *  Rust dispatch list synchronised on every menu addition. */
+/** Native menu event IDs, which Rust calls via `webview.eval('__onMenuEvent("<id>")')`. Keep this
+ *  union and the Rust dispatch list in sync on every menu addition. */
 type MenuEventId =
   | "new_page"
   | "close_page"
@@ -82,7 +81,6 @@ declare global {
   }
 }
 
-/** Handle native menu events via global callback invoked from Tauri eval(). */
 function useMenuEvents() {
   const ui = useUI();
   const updater = useUpdate();
@@ -148,7 +146,6 @@ function useMenuEvents() {
   }, [setSidebarCollapsed, setRightPanel]);
 }
 
-/** The mouse's back and forward buttons, by the number the browser gives them. */
 const HISTORY_BUTTONS: Partial<Record<number, -1 | 1>> = { 3: -1, 4: 1 };
 
 function useMouseHistoryButtons() {
@@ -194,10 +191,9 @@ function useGlobalShortcuts() {
     stepTextSize: stepCalendarSize,
   } = useCalendarSettings();
 
-  // The size keys act on the panel in front of you, not on whatever holds focus.
-  // Settings is a full-window overlay, so while it is open it is that panel and
-  // the keys size the interface — which is what keeps the fix for "I cannot read
-  // this" from being reachable only by reading.
+  // The size keys act on the panel in front of you. Settings is a full-window overlay, so while it
+  // is open the keys size the interface, which is what keeps the fix for "I cannot read this" from
+  // being reachable only by reading.
   const sizeTarget = () => (settingsOpen ? "interface" : rightPanel);
   const stepVisible = (direction: 1 | -1) => {
     if (sizeTarget() === "interface") return stepInterfaceScale(direction);
@@ -230,8 +226,7 @@ function useGlobalShortcuts() {
     group: "Navigation",
     label: "Forward to the next page",
   });
-  // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
-  // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
+  // Cmd+/ because macOS reserves Cmd+? for the Help menu's search field.
   useKeyboardShortcut(
     "Mod+/",
     () => {
@@ -277,7 +272,6 @@ function useGlobalShortcuts() {
     label: "Reset calendar hours",
   });
 
-  // ⌘1-9 — switch to folder by index (1-based).
   // Use the Keyboard registry directly to register all 9 bindings in one effect,
   // avoiding calling useKeyboardShortcut in a loop (violates rules of hooks).
   const foldersRef = useRef(folders);
@@ -308,10 +302,8 @@ function useGlobalShortcuts() {
   }, []);
 }
 
-/** Puts the interface text scale on the document root rather than on a wrapper.
- *  Dialogs, dropdowns and tooltips portal to `body`, so a subtree style would
- *  leave every menu in the app unscaled — the missed-surface failure this whole
- *  change exists to avoid. */
+/** Puts the interface text scale on the document root rather than on a wrapper: dialogs,
+ *  dropdowns and tooltips portal to `body`, so a subtree style would leave every menu unscaled. */
 function useInterfaceTextScale() {
   const { textScale } = useInterfaceSettings();
   useEffect(() => {
@@ -340,10 +332,9 @@ function AppShell() {
   const updater = useUpdate();
   const { handleToastDismiss, toastItems } = useUndoDelete();
 
-  // Per-surface ErrorBoundary so a render error in one dialog/page can't
-  // black-screen the rest of the shell. Each boundary uses a compact inline
-  // fallback (PaneErrorFallback) — the app-level full-screen boundary in
-  // <App> below stays as the last-resort catch.
+  // Per-surface ErrorBoundary so a render error in one dialog or page can't black-screen the
+  // shell, with a compact inline fallback (PaneErrorFallback). The app-level boundary in <App>
+  // is the last resort.
   return (
     <>
       <ThreePanelLayout />
@@ -440,7 +431,6 @@ function WorkspaceGate() {
     return <WorkspaceLoadError error={loadError} />;
   }
   if (isLoading || !workspace) {
-    // Blank while initializing — workspace is auto-created on first launch
     return null;
   }
 

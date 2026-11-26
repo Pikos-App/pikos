@@ -1,12 +1,7 @@
-// The focus panel on the Data page.
-//
-// A running total is a number you read once and learn nothing from. What makes
-// focus time worth showing is its shape over time, so the same 12 weeks the
-// activity chart covers get a second row of bars — an empty stretch reads as
-// plainly as a full one, which is the point.
-//
-// Hidden entirely until a first session exists: an all-zero chart on a feature
-// the user has never opened is furniture, not information.
+// The focus panel on the Data page. A running total teaches nothing; focus time's shape over time does,
+// so the activity chart's 12 weeks get a second row of bars, where an empty stretch reads as plainly
+// as a full one. Hidden until a first session exists: an all-zero chart on a feature never opened is
+// furniture, not information.
 
 import type { WorkspaceUsageStats } from "@pikos/core";
 import { Timer } from "lucide-react";

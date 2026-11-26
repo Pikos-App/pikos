@@ -11,11 +11,10 @@ const NOTHING_HELD = () => NO_PAGES;
 const NOT_LOADING = () => false;
 
 /**
- * The calendar's pages from the view cache: every page touching the days from `start` to `end`
- * (instants), any status, plus every recurring series' head so occurrences expand whatever day
- * the head sits on, and whether the range is still loading for the first time. Null when the flag
- * is off. Ranges stay held while the calendar is mounted, so going back a week shows at once and
- * refetches only after a write; `neighbours` are loaded behind it, so a step forward does too.
+ * The calendar's pages from the view cache: every page touching `start` to `end`, any status,
+ * plus every recurring series' head so occurrences expand whatever day the head sits on. Null
+ * when the flag is off. Ranges stay held while the calendar is mounted, so going back a week
+ * shows at once; `neighbours` are loaded behind it.
  */
 export function useCachedRange(
   start: string | null,

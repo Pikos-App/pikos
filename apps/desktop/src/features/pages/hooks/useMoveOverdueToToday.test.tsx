@@ -9,7 +9,6 @@ import { usePagesNow } from "@/test/usePagesNow";
 
 import { useMoveOverdueToToday } from "./useMoveOverdueToToday";
 
-// Wed 2026-06-17, mid-morning — far from any day boundary.
 const NOW = new Date(2026, 5, 17, 10, 0, 0);
 const TODAY = "2026-06-17";
 

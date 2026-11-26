@@ -19,22 +19,15 @@ export interface CachedView {
   key: ViewKey;
   /** The list in order: a page where its row is held, else a placeholder. */
   slots: ListSlot[];
-  /** The loaded pages alone, in order. */
   pages: PageSummary[];
-  /** Every id known so far, in order; may run past the loaded rows. */
   ids: string[];
-  /** Every row in the list, loaded or not. */
   total: number;
   /** Rows after `slots` whose ids aren't known yet. */
   tail: number;
   loading: boolean;
-  /** Load what the rows from `first` through `last` need: more of the list, or rows for ids. */
   ensure: (first: number, last: number) => void;
-  /** Every id in the list, loading the ones not yet known. */
   allIds: () => Promise<string[]>;
-  /** Summaries for `ids`, fetching any not held. */
   rows: (ids: string[]) => Promise<PageSummary[]>;
-  /** Show pages moved, ahead of the write that moves them. */
   place: (moving: string[], place: Placement) => void;
 }
 
@@ -73,7 +66,6 @@ export function cachedViewKeys(viewId: string, sort: SortMode, today: string): V
 const sameSlot = (a: ListSlot, b: ListSlot) =>
   a === b || ("placeholder" in a && "placeholder" in b && a.id === b.id);
 
-/** The last read of each list, by controller, so a read that finds nothing changed returns it. */
 const lastViews = new WeakMap<ViewCacheController, Map<string, CachedView>>();
 
 /** The list as the controller holds it; the same object while its rows and counts are, so a write
@@ -119,7 +111,6 @@ function readView(controller: ViewCacheController, key: ViewKey): CachedView {
   return view;
 }
 
-/** The lists a view shows as last read, by controller and view, kept like `lastViews`. */
 const lastLists = new WeakMap<ViewCacheController, Map<string, CachedLists>>();
 
 interface CachedLists {
@@ -183,7 +174,7 @@ export function useCachedViews(
 
 /**
  * The one list an Inbox or folder view shows, read when an action needs it rather than subscribed
- * to: a drag needs the order only when it starts and ends, and a subscription re-rendered the
+ * to: a drag needs the order only when it starts and ends, and a subscription would re-render the
  * whole layout with every change to the store. Null when the cache doesn't serve the view.
  */
 export function cachedListNow(

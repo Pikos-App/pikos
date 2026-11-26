@@ -65,7 +65,6 @@ export function SettingsPage() {
       .catch(() => {});
   }, [storage, settingsOpen, weekStart]);
 
-  // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {
     if (!settingsOpen) return;
     function onKey(e: KeyboardEvent) {
@@ -101,7 +100,6 @@ export function SettingsPage() {
         onNavigate={setSettingsSection}
       />
 
-      {/* Content — mapping → preview → progress, or normal section */}
       {showingMapping ? (
         <CSVColumnMappingPage
           headers={importState.headers}

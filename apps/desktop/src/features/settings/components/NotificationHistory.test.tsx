@@ -1,7 +1,3 @@
-// The history list is the only place a user can see that a reminder happened —
-// and the only place a quiet-hours silence is visible at all — so what each row
-// says is the behaviour worth pinning.
-
 import type { NotificationHistoryEntry } from "@pikos/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,7 +54,6 @@ describe("NotificationHistory", () => {
       />
     );
     expect(screen.getByText("Silenced by quiet hours")).toBeInTheDocument();
-    // Still clickable: the page is the point of knowing it was silenced.
     expect(screen.getByRole("button", { name: "Standup" })).toBeInTheDocument();
   });
 

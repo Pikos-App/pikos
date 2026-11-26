@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Keyboard } from "./registry";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function makeKeyEvent(
   key: string,
   opts: {
@@ -28,29 +26,22 @@ function makeKeyEvent(
   } as unknown as KeyboardEvent;
 }
 
-// ─── Setup / teardown ────────────────────────────────────────────────────────
-
 beforeEach(() => {
-  // Reset scopes to default
   Keyboard.setActiveScopes(["global"]);
 });
 
 afterEach(() => {
-  // Unregister all test bindings
   for (const b of Keyboard.listActiveBindings()) {
     Keyboard.unregister(b.id);
   }
   Keyboard.setActiveScopes(["global"]);
 });
 
-// ─── Basic registration and handling ─────────────────────────────────────────
-
 describe("register + handle", () => {
   it("fires handler for matching combo", () => {
     const handler = vi.fn();
     Keyboard.register({ combo: "Mod+d", handler, id: "test-mod-d" });
 
-    // On non-Mac, Mod = Ctrl
     Keyboard.handle(makeKeyEvent("d", { ctrlKey: true }));
     expect(handler).toHaveBeenCalledOnce();
   });
@@ -104,8 +95,6 @@ describe("register + handle", () => {
   });
 });
 
-// ─── Scope push/pop ordering ─────────────────────────────────────────────────
-
 describe("scope push/pop", () => {
   it("top scope handler takes priority", () => {
     const globalHandler = vi.fn();
@@ -155,15 +144,13 @@ describe("scope push/pop", () => {
   });
 
   it("always retains global scope as fallback", () => {
-    Keyboard.popScope(); // pop the only scope
+    Keyboard.popScope();
     const handler = vi.fn();
     Keyboard.register({ combo: "Escape", handler, id: "global-esc" });
     Keyboard.handle(makeKeyEvent("Escape"));
     expect(handler).toHaveBeenCalledOnce();
   });
 });
-
-// ─── Repeat suppression ─────────────────────────────────────────────────────
 
 describe("repeat", () => {
   it("suppresses auto-repeat when repeat: false is explicit", () => {
@@ -190,8 +177,6 @@ describe("repeat", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 });
-
-// ─── allowInInputs ──────────────────────────────────────────────────────────
 
 describe("allowInInputs", () => {
   it("blocks handler when target is editable by default", () => {
@@ -264,8 +249,6 @@ describe("unlessHandled", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 });
-
-// ─── blocking dialog suppression ────────────────────────────────────────────
 
 describe("blocking dialog open", () => {
   function openDialog(slot = "dialog-content"): HTMLElement {
@@ -349,8 +332,6 @@ describe("blocking dialog open", () => {
   });
 });
 
-// ─── when conditional ───────────────────────────────────────────────────────
-
 describe("when conditional", () => {
   it("skips handler when when() returns false", () => {
     const handler = vi.fn();
@@ -379,8 +360,6 @@ describe("when conditional", () => {
   });
 });
 
-// ─── Modifier matching ──────────────────────────────────────────────────────
-
 describe("modifier matching", () => {
   it("Alt must match exactly", () => {
     const handler = vi.fn();
@@ -408,17 +387,13 @@ describe("modifier matching", () => {
     const handler = vi.fn();
     Keyboard.register({ combo: "Mod+Shift+c", handler, id: "test-mod-shift" });
 
-    // Only Mod, no Shift
     Keyboard.handle(makeKeyEvent("c", { ctrlKey: true, shiftKey: false }));
     expect(handler).not.toHaveBeenCalled();
 
-    // Both Mod + Shift
     Keyboard.handle(makeKeyEvent("c", { ctrlKey: true, shiftKey: true }));
     expect(handler).toHaveBeenCalledOnce();
   });
 });
-
-// ─── unregister ─────────────────────────────────────────────────────────────
 
 describe("unregister", () => {
   it("removes binding so handler no longer fires", () => {
@@ -430,8 +405,6 @@ describe("unregister", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 });
-
-// ─── Space key ──────────────────────────────────────────────────────────────
 
 describe("Space key", () => {
   it("matches a 'Space' combo against the literal ' ' KeyboardEvent.key", () => {
@@ -469,27 +442,21 @@ describe("Plus key", () => {
   });
 });
 
-// ─── listActiveBindings ─────────────────────────────────────────────────────
-
 describe("listActiveBindings", () => {
   it("returns bindings in active scopes only", () => {
     Keyboard.register({ combo: "Mod+a", handler: vi.fn(), id: "g1", scope: "global" });
     Keyboard.register({ combo: "Mod+b", handler: vi.fn(), id: "m1", scope: "modal" });
 
-    // Only global scope is active
     const active = Keyboard.listActiveBindings();
     expect(active.map((b) => b.id)).toContain("g1");
     expect(active.map((b) => b.id)).not.toContain("m1");
 
-    // Push modal scope
     Keyboard.pushScope("modal");
     const activeWithModal = Keyboard.listActiveBindings();
     expect(activeWithModal.map((b) => b.id)).toContain("g1");
     expect(activeWithModal.map((b) => b.id)).toContain("m1");
   });
 });
-
-// ─── listShortcutCatalog ────────────────────────────────────────────────────
 
 describe("listShortcutCatalog", () => {
   it("lists a key once under its group, with the label it was last registered under", () => {
@@ -540,8 +507,6 @@ describe("listShortcutCatalog", () => {
     expect(rows.map((d) => d.label).sort()).toEqual(["Jump", "Link"]);
   });
 });
-
-// ─── listCommands ───────────────────────────────────────────────────────────
 
 describe("listCommands", () => {
   it("leaves out a command marked as not for the palette", () => {
@@ -648,8 +613,6 @@ describe("listCommands", () => {
     expect(Keyboard.listCommands().map((b) => b.id)).toContain("c-modal");
   });
 });
-
-// ─── listShortcutCatalog ────────────────────────────────────────────────────
 
 describe("listShortcutCatalog", () => {
   it("remembers a labelled shortcut after its component unregisters it", () => {

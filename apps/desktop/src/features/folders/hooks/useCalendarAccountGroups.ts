@@ -12,10 +12,9 @@ export interface CalendarAccountGroup {
 }
 
 /**
- * Groups synced-calendar folders by owning account, preserving the given folder
- * order. One group means there is nothing to disambiguate, so the caller renders
- * it without a heading — as it does for the unnamed group, which would otherwise
- * flash an empty heading before the account read resolves.
+ * Groups synced-calendar folders by owning account, preserving folder order. One group means
+ * nothing to disambiguate, so the caller renders it without a heading, as it does the unnamed
+ * group, which would otherwise flash an empty heading before the account read resolves.
  */
 export function useCalendarAccountGroups(externalFolders: Folder[]): CalendarAccountGroup[] {
   const { storage } = useWorkspace();

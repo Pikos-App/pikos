@@ -27,7 +27,6 @@ function isEmptyParagraph(node: JSONContent): boolean {
   return node.type === "paragraph" && (!node.content || node.content.length === 0);
 }
 
-/** Get the flat text of a node (ignoring hardBreaks). */
 function textOf(node: JSONContent): string {
   if (!node.content) return "";
   return node.content
@@ -113,7 +112,6 @@ describe("convertMarkdownToTiptap", () => {
 
   it("preserves extra blank lines as additional empty paragraphs", () => {
     const json = convert("A\n\n\n\nB");
-    // \n\n\n\n = 3 blank lines → 3 empty paragraphs between A and B
     const empty = json.content!.filter(isEmptyParagraph);
     expect(empty.length).toBeGreaterThanOrEqual(3);
   });

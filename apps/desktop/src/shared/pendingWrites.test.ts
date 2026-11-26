@@ -2,12 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { flushPendingWrites, onDrainPending, onFlushPending } from "./pendingWrites";
 
-// Draining has to be two phases. A producer (the editor's autosave) hands its
-// content to the write queue, and the queue is the drain — so a single-phase
-// flush writes the queue out while the editor is still holding the newest text.
+// A single-phase flush writes the queue out while the editor still holds the newest text.
 describe("pendingWrites", () => {
-  // The registries are module-level, so a test that leaves one registered is seen
-  // by the next. Disposers run in afterEach whatever the outcome.
+  // The registries are module-level, so a test that leaves one registered is seen by the next.
   let disposers: (() => void)[] = [];
 
   function track(off: () => void): void {

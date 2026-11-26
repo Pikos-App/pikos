@@ -1,7 +1,6 @@
-// Synced events own a locked schedule (scheduleLocked). The timed-block drag
-// must no-op on a locked block — handleBlockDragStart returns before attaching
-// any listeners, so onReschedule never fires, including the drop-into-all-day
-// branch. Mirrored with an unlocked block to prove the guard, not a dead harness.
+// A synced event's schedule is locked: handleBlockDragStart returns before attaching any
+// listeners, so onReschedule never fires, including the drop-into-all-day branch. Mirrored
+// with an unlocked block to prove the guard, not a dead harness.
 
 import type { CalendarBlock, PageSummary } from "@pikos/core";
 import { buildCollapseGeometry, DEFAULT_COLLAPSE_CONFIG, DEFAULT_METRICS } from "@pikos/core";
@@ -129,7 +128,6 @@ describe("useTimedDrag — schedule lock guard", () => {
       new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
     );
     expect(onReschedule).toHaveBeenCalledTimes(1);
-    // All-day drop → date-only start, no end.
     expect(onReschedule).toHaveBeenCalledWith("p1", "2099-01-05", undefined, undefined);
   });
 });

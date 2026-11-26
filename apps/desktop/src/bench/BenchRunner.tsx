@@ -16,7 +16,6 @@ import {
   whenShown,
 } from "./session";
 
-/** Samples per launch for each action, unless the script asks for a fixed number. */
 const COUNTS = {
   captures: 10,
   coldFolders: 10,
@@ -30,7 +29,6 @@ const COUNTS = {
   warmSwitches: 26,
   weeks: 10,
 };
-/** Where a click lands after the pointer arrives, by the large-workspace spec's measure. */
 const HOVER_MS = 250;
 /** Longer than the editor's and the search's typing bursts, so each open and each search is a
  *  fresh one rather than the tail of the last, as it is when a person does them. */
@@ -59,7 +57,6 @@ function typeInto(field: HTMLInputElement | HTMLTextAreaElement, value: string) 
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** A fixed seed, so every launch makes the same choices. */
 function seeded() {
   let state = 0x5eed;
   return (n: number) => {
@@ -68,14 +65,12 @@ function seeded() {
   };
 }
 
-/** The pointer arriving, as React's enter and over handlers see it. */
 function hover(el: Element) {
   for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter"]) {
     el.dispatchEvent(new MouseEvent(type, { bubbles: type.endsWith("over") }));
   }
 }
 
-/** Hover, wait as a person would, click, and time from the click to the next paint after `done`. */
 async function hoverAndClick(el: HTMLElement, done: () => boolean, what: string) {
   hover(el);
   await sleep(HOVER_MS);
@@ -101,7 +96,6 @@ const rowById = (id: string) =>
     `[role="group"] [data-page-list-item][data-page-id="${CSS.escape(id)}"]`
   );
 
-/** A sidebar entry by its visible name. */
 function sidebarEntry(name: string): HTMLElement {
   const nav = document.querySelector('nav[aria-label="Workspace navigation"]');
   const entry = [...(nav?.querySelectorAll<HTMLElement>("button, [role='button']") ?? [])].find(
@@ -117,7 +111,7 @@ function sidebarEntry(name: string): HTMLElement {
  */
 function switchTo(name: string) {
   // A smart list is drawn once it has stopped loading and shows a row, its pages or its empty
-  // state: a row alone was met by the Completed toggle while Today still waited for its lists.
+  // state: the Completed toggle alone is a row while Today still waits for its lists.
   const drawn = SMART_VIEWS.includes(name)
     ? () => {
         const group = listGroup(name);
@@ -138,7 +132,6 @@ function rowInView(list: HTMLElement) {
   });
 }
 
-/** Times what a person waits for in the real window, then hands the numbers to the bench build's Rust side. */
 export default function BenchRunner() {
   const ui = useUI();
   const uiRef = useRef(ui);
@@ -198,7 +191,6 @@ export default function BenchRunner() {
         }
 
         if (wants("open")) {
-          // From a list: a row of the folder on screen, hovered and then clicked.
           const hovered: number[] = [];
           for (let i = 0; i < n("listOpens") && coldFolders.length > 0; i++) {
             const folder = coldFolders[i % coldFolders.length]!;
@@ -232,7 +224,6 @@ export default function BenchRunner() {
           await whenShown(() => dialog()?.querySelector("input") != null, "the search palette");
           const palette = dialog()!;
           const input = palette.querySelector("input")!;
-          // A result row highlights the word it matched, so a <mark> appearing is the results arriving.
           const showsMatches = () => palette.querySelector("mark") != null;
           const searches: number[] = [];
           for (let i = 0; i < n("searches"); i++) {
@@ -264,7 +255,6 @@ export default function BenchRunner() {
         }
 
         if (wants("scroll")) {
-          // Down the biggest list in jumps, timed until rows at the new place are drawn.
           await goTo("Inbox");
           const list = listGroup("Inbox")!;
           const steps = n("scrollSteps");
@@ -292,7 +282,6 @@ export default function BenchRunner() {
           const candidates = () =>
             listRows(folder).filter((row) => row.dataset["active"] !== "true");
 
-          // Renaming in the editor, timed until the list row shows the new title.
           const renames: number[] = [];
           for (let i = 0; i < n("renames"); i++) {
             const row = candidates()[pick(Math.min(candidates().length, 12))];
@@ -321,7 +310,6 @@ export default function BenchRunner() {
           }
           results["renameMs"] = renames;
 
-          // Completing from the list, timed until the row shows it done or leaves.
           const completes: number[] = [];
           for (let i = 0; i < n("completes"); i++) {
             const row = candidates()[pick(Math.min(candidates().length, 12))];
@@ -364,9 +352,9 @@ export default function BenchRunner() {
             labels()
               .filter((label) => !DAY_LABEL.test(label))
               .join("\n");
-          // A week is drawn once the heading moves on, its pages have loaded, and, when a seeded
-          // page falls in it, its blocks have replaced the last week's. On a busy day most fold into a "+N more" pill,
-          // so the test is that the blocks changed, not that a given page is showing.
+          // A week is drawn once the heading moves on, its pages have loaded and, when a seeded page falls
+          // in it, its blocks have replaced the last week's. On a busy day most fold into a "+N more"
+          // pill, so the test is that the blocks changed, not that a given page is showing.
           const weekDrawn = (before: { heading: string | null; blocks: string }) => () => {
             if (heading() === before.heading) return false;
             const week = document.querySelector('[aria-label="Week calendar"]');
@@ -392,8 +380,6 @@ export default function BenchRunner() {
         }
 
         if (wants("capture")) {
-          // A thought into a page, as the menu's New Page does it: the shortcut until the title
-          // takes typing, then Shift+Enter until the new page is open in the editor.
           const opened: number[] = [];
           const committed: number[] = [];
           let cursor: string | null = null;
@@ -431,9 +417,8 @@ export default function BenchRunner() {
         }
 
         if (wants("ipc") && storageRef.current) {
-          // The trip to the database and back as the app makes it: the call, the crossing, and
-          // the parse of what comes back. The change counter is the smallest reply there is; a
-          // window of the Inbox is the largest the app asks for while you work.
+          // The change counter is the smallest reply there is; a window of the Inbox is the largest the app
+          // asks for while you work.
           const adapter = storageRef.current;
           const inbox: ViewKey = {
             dates: null,

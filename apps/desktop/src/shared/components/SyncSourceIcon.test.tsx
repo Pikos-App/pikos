@@ -1,5 +1,4 @@
-// SyncSourceIcon — the provenance glyph for a synced page. Three branches:
-// native (null → nothing), active mirror, detached mirror.
+// Three branches: native (null renders nothing), active mirror, detached mirror.
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

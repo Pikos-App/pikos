@@ -93,13 +93,9 @@ describe("usePageList — visible pages", () => {
   });
 
   it("today view: skips the sortPages step (visible filter is applied as-is)", async () => {
-    // Freeze the clock — `format(new Date(), ...)` and the `today` view's
-    // `localToday()` are read at slightly different moments. If the test runs
-    // across local midnight (or UTC midnight on UTC-aware code paths) the two
-    // disagree by a day and the assertion flakes. Pin a clearly mid-day instant
-    // so neither call straddles a boundary. `shouldAdvanceTime` keeps real
-    // setTimeouts in the React render path firing — pure fake timers would
-    // deadlock waitFor on its internal setTimeouts.
+    // Freeze the clock: `format(new Date(), ...)` and the `today` view's `localToday()` are read at
+    // different moments, so a run across local midnight would flake. `shouldAdvanceTime` keeps real
+    // setTimeouts in the render path firing; pure fake timers would deadlock waitFor.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
     try {
@@ -201,7 +197,6 @@ describe("usePageList — visible pages", () => {
         const row = hook.result.current.pageList.visiblePages.find((p) => p.id === page.id);
         expect(row?.scheduledStart).toBe("2026-06-15T09:00:00");
       });
-      // Still one row for the series: the head is replaced, never joined.
       expect(hook.result.current.pageList.visiblePages).toHaveLength(1);
     } finally {
       vi.useRealTimers();
@@ -301,12 +296,10 @@ describe("usePageList — handleToggleStatus", () => {
 
     await act(async () => {
       hook.result.current.pageList.handleToggleStatus(page.id, "not_started");
-      // Allow the workspace's awaited adapter ops to resolve.
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    // The page itself remains not_started — the head advanced to a future occurrence.
     const updated = hook.result.current.pages.pages.find((p) => p.id === page.id);
     expect(updated?.status).toBe("not_started");
   });

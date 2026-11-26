@@ -1,7 +1,5 @@
-// Reloads the workspace when another process (the CLI, or a second app instance)
-// writes the DB. The Rust watcher emits "workspace:external-change"; we ignore the
-// echo of our own writes via the suppression window, then reload. Mount once at the
-// app shell.
+// Reloads when another process (the CLI, a second app instance) writes the DB. Our own writes'
+// echo is ignored via the suppression window.
 
 import { useReloadOnEvent } from "@/shared/hooks/useReloadOnEvent";
 import { externalChangeSuppressed } from "@/shared/lib/externalChange";

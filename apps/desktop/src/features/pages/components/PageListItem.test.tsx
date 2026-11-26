@@ -184,10 +184,9 @@ describe("PageListItem menu", () => {
   });
 });
 
-// The row and the calendar block draw the same event, so they have to agree.
-// Reading the stored wall-clock made a London 5pm meeting read as still to come
-// long after it ran at 9am here, and put a Tokyo morning on the wrong day.
-// Vitest pins TZ=UTC, so these offsets are relative to UTC.
+// The row and the calendar block draw the same event, so they have to agree: reading the stored
+// wall-clock put a London 5pm meeting as still to come at 9am here. Vitest pins TZ=UTC, so these
+// offsets are relative to UTC.
 describe("PageListItem — a synced event shows the viewer's time", () => {
   afterEach(() => {
     cleanup();

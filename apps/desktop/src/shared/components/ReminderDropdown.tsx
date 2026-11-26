@@ -29,19 +29,16 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 1440, label: "1 day before" },
 ];
 
-// An all-day page has no start time, so no lead time can anchor its reminder —
-// it gets one option, resolved against the date by the scheduler's day-before
-// arm (`pikos_db::due_day_before_reminders`).
+// An all-day page has no start time, so no lead time can anchor its reminder: it gets one option,
+// resolved by the scheduler's day-before arm (`pikos_db::due_day_before_reminders`).
 const ALL_DAY_OPTIONS: { id: PageReminderChoice; label: string }[] = [
   { id: DAY_BEFORE_SENTINEL, label: "Day before at 9:00" },
 ];
 
 export interface ReminderDropdownProps {
   pageId: string;
-  /** Icon size in pixels. Default 14 (3.5 tailwind). */
   iconSize?: number;
-  /** The page is scheduled all-day, so it takes the day-before anchor instead of
-   *  lead times. Callers derive it from the schedule they already hold. */
+  /** The page is scheduled all-day, so it takes the day-before anchor instead of lead times. */
   allDay?: boolean;
 }
 
@@ -119,9 +116,8 @@ export function ReminderDropdown({ allDay = false, iconSize = 14, pageId }: Remi
 
         {options.map((opt) => {
           const isExplicit = activeReminders.some((r) => r.minutesBefore === opt.id);
-          // The global default is a lead time, so it never stands in for an
-          // all-day page — which is why an all-day page reminds only when the
-          // user asks it to.
+          // The global default is a lead time, so it never stands in for an all-day page, which reminds
+          // only when the user asks.
           const isDefault =
             !allDay && !hasCustomReminders && !isNone && opt.id === defaultReminderMinutes;
           const isActive = isExplicit || isDefault;

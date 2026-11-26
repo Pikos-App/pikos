@@ -19,8 +19,7 @@ const MONTH_NAMES = [
 const DAY_ABBRS_SUNDAY = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const DAY_ABBRS_MONDAY = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
-/** Fixed height of the rendered grid — used by parents that pad surrounding
- * content so the next-month transition doesn't shift layout. */
+/** Fixed height of the grid, for parents that pad around it so the next-month transition doesn't shift layout. */
 export const CAL_HEIGHT = 48 + 6 * 26;
 
 interface MiniCalendarProps {
@@ -44,7 +43,6 @@ export function MiniCalendar({
 }: MiniCalendarProps) {
   const today = new Date();
   const rawDay = new Date(year, month, 1).getDay();
-  // Shift so the grid starts on the correct day (0=Sun or 1=Mon)
   const firstDayOfWeek = (rawDay - weekStartsOn + 7) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const dayAbbrs = weekStartsOn === 1 ? DAY_ABBRS_MONDAY : DAY_ABBRS_SUNDAY;

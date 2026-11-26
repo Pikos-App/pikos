@@ -1,17 +1,9 @@
-// Markdown paste detection.
-//
-// tiptap-markdown converts pasted markdown via ProseMirror's `clipboardTextParser`,
-// which only runs when the clipboard has NO `text/html` (prosemirror-view:
-// `asText = !!text && (plainText || inCode || !html)`). The apps people copy
-// markdown from — VS Code, browsers, ChatGPT — attach `text/html` too, so
-// ProseMirror takes the HTML path and the markdown is never converted.
-//
-// To fix that we intercept paste ourselves and force markdown interpretation,
-// but only when the plain text actually looks like markdown — otherwise we'd
-// clobber genuine rich-text/HTML paste (e.g. an article copied from the web,
-// whose plain-text form carries no markdown syntax).
+// Markdown paste detection. tiptap-markdown converts pasted markdown via `clipboardTextParser`, which
+// runs only when the clipboard has no `text/html` (prosemirror-view: `asText = !!text && (plainText ||
+// inCode || !html)`). VS Code, browsers and ChatGPT attach `text/html`, so the markdown is never
+// converted. We intercept paste and force markdown only when the plain text looks like markdown, so
+// genuine rich-text paste (an article whose plain text carries no syntax) is untouched.
 
-/** Patterns that signal intentional markdown syntax in pasted plain text. */
 const MARKDOWN_PATTERNS: readonly RegExp[] = [
   /^#{1,6}\s+\S/m, // ATX heading: "# Title"
   /^\s*>\s+\S/m, // blockquote: "> quote"
@@ -30,11 +22,7 @@ const MARKDOWN_PATTERNS: readonly RegExp[] = [
   /!?\[[^\]]+\]\([^)\s]+\)/, // link or image: "[text](url)"
 ];
 
-/**
- * Heuristic: does this plain text contain markdown block/inline syntax worth
- * converting on paste? Conservative — bare prose and bare URLs return false so
- * normal paste handling (including link-on-paste) is preserved.
- */
+/** Does this plain text contain markdown worth converting on paste? Conservative: bare prose and bare URLs return false so link-on-paste is preserved. */
 export function looksLikeMarkdown(text: string): boolean {
   if (!text || text.length < 2) return false;
   return MARKDOWN_PATTERNS.some((re) => re.test(text));

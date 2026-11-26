@@ -1,7 +1,6 @@
-// useFolderWrites — folder CRUD and ordering. Folder writes touch the page list
-// too (deleting a folder soft-deletes its pages, restoring one brings them
-// back), which is why they take the page setter alongside the folder one rather
-// than living behind a folders-only store.
+// Folder CRUD and ordering. Folder writes touch the page list too (deleting a folder soft-deletes
+// its pages, restoring one brings them back), which is why they take the page setter alongside
+// the folder one rather than living behind a folders-only store.
 
 import type { Folder, FolderUpdate, PageSummary, StorageAdapter } from "@pikos/core";
 import { currentPaletteColor, withCurrentColor } from "@pikos/core";

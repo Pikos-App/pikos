@@ -170,7 +170,6 @@ export function GeneralSettingsPreferences() {
         />
       </div>
       <div className="rounded-lg border border-border bg-card px-ui-xl">
-        {/* Default folder uses a searchable popover, not a button group. */}
         <div className="flex items-center justify-between py-3">
           <div>
             <p className="text-sm font-medium">Default folder for new pages</p>

@@ -1,7 +1,6 @@
-// Synced events own a locked schedule (scheduleLocked). Both all-day gestures —
-// the chip drag and the left/right edge resize — must no-op on a locked block:
-// each handler returns before attaching listeners, so onReschedule never fires.
-// Mirrored with unlocked blocks to prove the guards, not a dead harness.
+// A synced event's schedule is locked: the chip drag and the edge resize return before
+// attaching listeners, so onReschedule never fires. Each is mirrored with an unlocked block
+// to prove the guard, not a dead harness.
 
 import type { PageSummary } from "@pikos/core";
 import { buildCollapseGeometry, DEFAULT_COLLAPSE_CONFIG, DEFAULT_METRICS } from "@pikos/core";
@@ -84,11 +83,10 @@ describe("useAllDayDrag — chip drag schedule lock guard", () => {
   });
 });
 
-// Dragging one bar of a recurring all-day series has to say *which* occurrence
-// moved. `originalDate` is that answer, and it survives a round trip through the
-// drag state before it reaches `onReschedule` — drop it anywhere along the way and
-// the move is read as a move of the series itself, rewriting the head's anchor and
-// taking every other occurrence with it. The timed twin shipped exactly that bug.
+// Dragging one bar of a recurring all-day series has to say *which* occurrence moved.
+// `originalDate` is that answer, and it survives a round trip through the drag state before
+// it reaches `onReschedule`. Drop it and the move is read as a move of the series itself,
+// rewriting the head's anchor and taking every other occurrence with it.
 describe("useAllDayDrag — occurrence identity", () => {
   it("carries originalDate through to the reschedule", () => {
     const { onReschedule, result } = setup(false);

@@ -1,6 +1,3 @@
-// The interval input is draft state committed on blur/Enter — keeps RRULE
-// emit out of the per-keystroke path.
-
 import type { RecurrenceFreq, RecurrenceOptions, RecurrenceWeekday } from "@pikos/core";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -12,9 +9,8 @@ import { FREQ_UNIT_LABELS, WEEKDAYS } from "./recurrenceConstants";
 
 export interface RecurrenceCustomEditorProps {
   options: RecurrenceOptions | null;
-  /** Draft + commit state for the interval input — owned by the parent so
-   * blur/Enter still triggers a single emit even when this subcomponent
-   * unmounts (e.g. user clicks a preset). */
+  /** Owned by the parent so blur/Enter still triggers a single emit even when this subcomponent
+   * unmounts (the user clicks a preset). */
   intervalDisplay: string;
   intervalFocused: boolean;
   onIntervalChange: (raw: string) => void;

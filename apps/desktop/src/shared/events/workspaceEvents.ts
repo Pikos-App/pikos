@@ -1,7 +1,5 @@
-// Lightweight event emitter for workspace-level lifecycle and CRUD events.
-// Lives outside WorkspaceContext so callers (e.g. useEditorPage) can subscribe
-// without pulling in the full provider tree, and so the emitter can be unit-
-// tested without React.
+// Lives outside WorkspaceContext so callers (e.g. useEditorPage) can subscribe without the full
+// provider tree, and so the emitter can be unit-tested without React.
 
 import type { Page, Workspace } from "@pikos/core";
 
@@ -16,12 +14,12 @@ export type WorkspaceEvent =
 export interface WorkspaceEventPayloadMap {
   "page:created": Page;
   "page:updated": Page;
-  /** A body typed over an older one was merged with the one stored (`page`), so what was
-   *  saved is not what was `typed`. */
+  /** A body typed over an older one was merged with the stored one (`page`), so what was saved is not
+   *  what was `typed`. */
   "page:merged": { page: Page; typed: string };
   "page:deleted": string;
-  /** A folder went to the trash, taking its pages with it. Its own event because
-   *  the adapter soft-deletes those pages itself, so no page write announces them. */
+  /** A folder went to the trash with its pages. Its own event because the adapter soft-deletes those
+   *  pages itself, so no page write announces them. */
   "folder:deleted": string;
   "workspace:loaded": Workspace;
 }

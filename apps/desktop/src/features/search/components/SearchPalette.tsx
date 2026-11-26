@@ -43,10 +43,8 @@ import { highlightText } from "../highlightText";
 
 const log = createLogger("SearchPalette");
 
-/** FTS5 needs something to prefix-match on; below this the query is too broad to run. */
 const MIN_QUERY_LENGTH = 2;
 
-/** Leading character that turns the palette into a command list. */
 const COMMAND_PREFIX = ">";
 // The trailing space is functional: it leaves the caret past the prefix so the
 // first keystroke filters commands instead of sitting flush against ">".
@@ -67,9 +65,7 @@ function markMatched(label: string, indices: number[]): React.ReactNode {
   );
 }
 
-/** "2026-03-23" or "2026-03-23T10:00:00" → "Mar 23, 2026". */
 function formatShortDate(iso: string): string {
-  // Parse date-only or datetime strings — avoid timezone shifts by parsing parts directly
   const datePart = iso.split("T")[0];
   if (!datePart) return iso;
   const [y, m, d] = datePart.split("-").map(Number);
@@ -78,7 +74,6 @@ function formatShortDate(iso: string): string {
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** Second-line summary for title-only matches: date · priority · tags, falling back to subtitle, then content preview. */
 function buildMetadataSummary(item: SearchResult): string {
   const parts: string[] = [];
 
@@ -97,14 +92,11 @@ function buildMetadataSummary(item: SearchResult): string {
 
   if (item.subtitle) return item.subtitle;
 
-  // Fallback: first ~80 chars of content preview
   if (item.contentPreview) return item.contentPreview;
 
   return "";
 }
 
-/** A row for a page the filter path returned — no bm25 excerpt exists, so the
- *  metadata line carries the second line (the same shape recents use). */
 function summaryToResult(page: PageSummary): SearchResult {
   return {
     contentPreview: "",
@@ -150,7 +142,6 @@ async function runFilteredSearch(
     const { results } = await opts.searchPages(parsed.text, true);
     rows = results.filter((r) => allowed.has(r.id));
   } else {
-    // A single leftover character is below the FTS floor — match it on the title.
     const needle = parsed.text.toLowerCase();
     rows = summaries
       .filter((p) => needle === "" || p.title.toLowerCase().includes(needle))
@@ -168,7 +159,6 @@ async function runFilteredSearch(
  *  rather than run for every key. A keystroke after a pause searches at once. */
 const SEARCH_BURST_MS = 150;
 
-/** Recent pages the palette lists with no query. */
 const RECENT_LIMIT = 10;
 
 export function SearchPalette() {
@@ -189,7 +179,6 @@ export function SearchPalette() {
   const [showCompleted, setShowCompleted] = useState(false);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
-  // Reset mouse guard when palette opens or results change (derived state during render)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [prevResults, setPrevResults] = useState(results);
   if (isOpen !== prevIsOpen || results !== prevResults) {
@@ -197,14 +186,10 @@ export function SearchPalette() {
     setPrevResults(results);
     setMouseMoved(false);
     setMouseActive(false);
-    // On open transition: seed query from deep-link prefill if present,
-    // otherwise leave the previous query alone (existing behaviour).
     if (isOpen && !prevIsOpen && dialogPrefill !== null) {
       setQuery(dialogPrefill);
     }
   }
-
-  // ── Command mode ("> …") ─────────────────────────────────────────────────
 
   const isCommandMode = query.startsWith(COMMAND_PREFIX);
   const commandFilter = query.slice(COMMAND_PREFIX.length).trim().toLowerCase();
@@ -235,11 +220,9 @@ export function SearchPalette() {
         )
     : [];
 
-  // Both open this palette, so both are inert once it is open. The guard is here
-  // rather than in a `when` gate because the command list would not see the gate:
-  // `listCommands` is snapshotted during the render that opens the palette, and the
-  // registry refreshes each binding's `when` in a layout effect that has not run yet.
-  // Nothing re-renders in between, so the snapshot keeps the stale answer.
+  // Both open this palette, so both are inert once it is open. Guarded here, not by a `when` gate:
+  // `listCommands` is snapshotted during the render that opens the palette, before the registry
+  // refreshes each `when` in a layout effect, so the snapshot would keep the stale answer.
   useKeyboardShortcut(
     "Mod+K",
     () => {
@@ -256,18 +239,13 @@ export function SearchPalette() {
     { allowInInputs: true, group: "Navigation", inPalette: false, label: "Run a command" }
   );
 
-  // ── Search as you type ────────────────────────────────────────────────────
-
   const lastInputAtRef = useRef(Number.NEGATIVE_INFINITY);
   const searchRequestRef = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
-    // Command mode never touches the database.
     if (q.startsWith(COMMAND_PREFIX)) return;
     const parsedQuery = parseSearchQuery(q);
-    // Operators carry their own meaning, so `tag:x` runs on its own; plain text
-    // still waits for two characters before hitting the index.
     if (!parsedQuery.hasOperators && q.length < MIN_QUERY_LENGTH) return;
     if (parsedQuery.hasOperators && !storage) return;
 
@@ -315,9 +293,6 @@ export function SearchPalette() {
     return () => clearTimeout(timer);
   }, [query, showCompleted, searchPages, folders, storage]);
 
-  // ── Recent pages (shown when input is empty) ────────────────────────────
-
-  // Read so an open recorded while the palette is up reorders the list.
   const opens = useSyncExternalStore(subscribeToOpens, opensVersion);
   // Only what's been shown is held, so the database names the recent pages; the held ones stay
   // in, for an open whose write hasn't landed yet.
@@ -354,8 +329,7 @@ export function SearchPalette() {
 
   const trimmedQuery = query.trim();
   const parsed = parseSearchQuery(trimmedQuery);
-  // On the operator path only the residual text reached the index, so only it is
-  // highlighted; `highlightText` says how the text and its tokens are marked.
+  // On the operator path only the residual text reached the index, so only it is highlighted.
   const searchedText = parsed.hasOperators ? parsed.text : trimmedQuery;
   const queryWords = ftsTokens(searchedText);
 
@@ -380,13 +354,11 @@ export function SearchPalette() {
     setShowCompleted(false);
   }
 
-  /** Index of the item in the flat result list — drives keyboard selection. */
   function getDisplayIndex(item: SearchResult): number {
     return pageItems.indexOf(item);
   }
 
   function scrollToIdx(idx: number) {
-    // Defer to next frame so the DOM has updated with the new selected state
     requestAnimationFrame(() => {
       itemRefs.current.get(idx)?.scrollIntoView({ block: "nearest" });
     });
@@ -433,8 +405,6 @@ export function SearchPalette() {
     const hasContentExcerpt =
       item.excerpt && (item.matchSource === "content" || item.matchSource === "both");
 
-    // Line 2: subtitle (highlighted) for subtitle matches, content excerpt for content/both,
-    // metadata summary for title-only
     let secondLine: React.ReactNode = null;
     if (item.matchSource === "subtitle" && item.subtitle) {
       secondLine = highlightText(item.subtitle, queryWords, searchedText);
@@ -546,14 +516,12 @@ export function SearchPalette() {
         }}
         showCloseButton={false}
       >
-        {/* Radix Dialog requires a title + description for screen readers
-            even on a command-palette UI; sr-only keeps both invisible. */}
+        {/* Radix Dialog requires a title and description for screen readers; sr-only hides both. */}
         <DialogTitle className="sr-only">Search pages</DialogTitle>
         <DialogDescription className="sr-only">
           Search across all pages and folders, or start with &gt; to run a command. Use arrow keys
           to navigate results, Enter to open.
         </DialogDescription>
-        {/* Search input */}
         <div className="flex items-center gap-2 border-b border-border/40 px-4 py-3">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground/50" />
           <input
@@ -578,7 +546,6 @@ export function SearchPalette() {
           />
         </div>
 
-        {/* Results */}
         <div
           className="max-h-[340px] overflow-y-auto py-1"
           onMouseMove={() => {
@@ -587,24 +554,19 @@ export function SearchPalette() {
         >
           {isCommandMode ? (
             <>
-              {/* Commands — whatever the keyboard registry has active right now */}
               {commandItems.map(renderCommand)}
 
               {commandItems.length === 0 && <EmptyState compact message="No matching commands" />}
             </>
           ) : (
             <>
-              {/* Recent pages (no query) */}
               {!trimmedQuery && recentItems.length > 0 && recentItems.map(renderItem)}
 
-              {/* Search results — bm25 ranked order, no section splits */}
               {trimmedQuery && results.length > 0 && results.map(renderItem)}
 
-              {/* Empty state — search returned nothing (and no completed matches either) */}
               {showEmpty && <EmptyState compact message="No pages found" />}
 
-              {/* Toggle to include/hide completed pages. `is:done` already asked for
-                  them, so the toggle reports that state instead of offering to fight it. */}
+              {/* `is:done` already asked for completed pages, so the toggle reports that state instead of offering to fight it. */}
               {trimmedQuery &&
                 (showCompleted || completedCount > 0) &&
                 (parsed.status === "done" ? (
@@ -621,7 +583,6 @@ export function SearchPalette() {
                   </button>
                 ))}
 
-              {/* Empty state — no recent pages and no query */}
               {!trimmedQuery && recentItems.length === 0 && (
                 <EmptyState compact message="No recent pages" />
               )}

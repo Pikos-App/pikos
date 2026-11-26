@@ -9,11 +9,9 @@ interface SyncedEventDetailsProps {
 }
 
 /**
- * Read-only mirror metadata for a synced (locked) event — the calendar-owned
- * location and attendee list. These are never editable (only the reconciler
- * writes them). Renders nothing when both are empty, so callers can drop it in
- * unconditionally for any page. Attendees collapse to a count with the full list
- * in a tooltip to keep the byline/popover compact.
+ * Read-only calendar-owned location and attendee list for a synced event, never editable (only
+ * the reconciler writes them). Renders nothing when both are empty. Attendees collapse to a count
+ * with the full list in a tooltip.
  */
 export function SyncedEventDetails({ attendees, className, location }: SyncedEventDetailsProps) {
   const hasLocation = !!location;

@@ -1,12 +1,10 @@
 import type { PageSummary } from "@pikos/core";
 
 /**
- * When each page was last opened this session, kept apart from the page list.
- *
- * Opening a page saves `lastOpenedAt` to the database, but writing it into the in-memory list would
- * replace that list on every click, and everything derived from it (the list rows, the calendar,
- * the folder counts) would recompute over every page: seconds per click at 200,000 pages. Only the
- * search palette's recent pages reads the time, so it reads it from here, over the list's copy.
+ * When each page was last opened this session, kept apart from the page list: writing
+ * `lastOpenedAt` into the in-memory list would replace it on every click, and everything derived
+ * from it would recompute over every page (seconds per click at 200,000 pages). Only the search
+ * palette's recent pages reads the time.
  */
 const opened = new Map<string, string>();
 const listeners = new Set<() => void>();

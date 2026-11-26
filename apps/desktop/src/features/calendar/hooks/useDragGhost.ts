@@ -24,21 +24,14 @@ export interface UseDragGhostResult {
   positionGhost: (dayIndex: number, top: number, height: number) => void;
   showGhost: () => void;
   hideGhost: () => void;
-  /** Caller records the desired initial position before triggering the
-   * React render that mounts the ghost. The ref callback applies it the
-   * moment the ghost element exists. */
+  /** Record the initial position before the render that mounts the ghost; the ref callback applies it. */
   queueInitialPosition: (dayIndex: number, top: number, height: number) => void;
 }
 
 /**
- * Owns the shared drag-ghost overlay: content state plus imperative DOM ops
- * (positionGhost/showGhost/hideGhost) invoked from each drag hook's
- * mousemove, and queueInitialPosition for the "ghost mounted with no
- * mousemove yet" case at gesture start.
- *
- * Refs are not exposed in the result object — react-compiler treats hook
- * outputs as immutable, so mutating refs read off them would lint-fail.
- * The drag hooks call the exposed functions instead.
+ * Shared drag-ghost overlay: content state plus imperative DOM ops invoked from each drag
+ * hook's mousemove. Refs aren't exposed in the result: react-compiler treats hook outputs as
+ * immutable, so mutating refs read off them fails lint.
  */
 export function useDragGhost({
   dayColumnsRef,

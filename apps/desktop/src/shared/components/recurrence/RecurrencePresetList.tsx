@@ -31,8 +31,8 @@ export function RecurrencePresetList({
           <div key={preset.id}>
             {preset.startsGroup && <div className="my-1 border-t border-border/40" />}
             <button
-              // Two rows can differ only in their detail, and the spans concatenate with
-              // no separator — the computed name would be "Monthly6th".
+              // Rows can differ only in their detail and the spans concatenate with no separator, so the
+              // computed name would be "Monthly6th".
               aria-label={preset.detail ? `${preset.label}, ${preset.detail}` : preset.label}
               aria-pressed={isActive}
               className={cn(

@@ -1,13 +1,3 @@
-// RecurringGapDialogContext — which gesture opens the scope prompt, and what
-// each scope writes.
-//
-// The dialog is a gap-resolution tool: it only appears when the gesture lands
-// inside a backlog of occurrences still open before today. Everything else
-// commits straight away, so a steady-state tick stays instant. Both origins
-// route through here, and the split between them is which occurrence a gesture
-// names — a native series funnels to its head, a synced one ticks the instance
-// the user pointed at.
-
 import type { PageSchedule, PageSummary } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, waitFor } from "@testing-library/react";
@@ -18,8 +8,6 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 import { usePagesNow } from "@/test/usePagesNow";
 
-// Head 2099-01-05 on a daily rule, "today" 2099-01-10 → 06..09 are the backlog
-// behind a head tick.
 const NOW = "2099-01-10T12:00:00";
 
 beforeEach(() => {
@@ -55,8 +43,7 @@ async function setup(opts: { synced?: boolean } = {}) {
     });
   });
   if (opts.synced) {
-    // Connected before the head, so the render floor doesn't swallow the backlog —
-    // occurrences that predate the connect day were never the user's to act on.
+    // Connected before the head, so the render floor doesn't swallow the backlog.
     await act(async () => {
       const storage = hook.result.current.workspace.storage as MockStorageAdapter;
       storage.markPageSynced(pageId, {
@@ -195,7 +182,6 @@ describe("when the dialog opens", () => {
   });
 
   it("a gesture on a future occurrence completes instantly, backlog or not", async () => {
-    // The dialog resolves a backlog; ticking next week has nothing to do with it.
     const { hook, pageId } = await setup({ synced: true });
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
@@ -331,7 +317,6 @@ describe("deleting through the dialog", () => {
         "2099-01-09",
       ])
     );
-    // Dismissals never mint a clone, and the head walks past every skipped day.
     expect(doneClones(hook)).toEqual([]);
     expect(head(hook, pageId).scheduledStart).toBe("2099-01-10T09:00:00");
   });

@@ -1,10 +1,7 @@
 /**
- * Back and forward through the pages you opened.
- *
- * Only opening a page is a step: switching folders, moving the calendar's week and opening a
- * dialog are not, because a history that records everything is as useless as one recording
- * nothing. Arrowing through the list is browsing, so a run of arrow steps is one entry: Back
- * from the end of the run returns to the page it started from, not through every page passed.
+ * Back and forward through opened pages. Only opening a page is a step: switching folders, moving
+ * the calendar's week and opening a dialog are not. Arrowing through the list is browsing, so a
+ * run of arrow steps is one entry: Back from the end returns to where the run started.
  */
 
 interface Entry {
@@ -17,12 +14,10 @@ export interface PageHistory {
   index: number;
 }
 
-/** Further back than anyone walks, so a long session's history stays small. */
 const MAX_ENTRIES = 100;
 
 export const EMPTY_PAGE_HISTORY: PageHistory = { entries: [], index: -1 };
 
-/** `showing` is recorded first when history doesn't stand on it: the page reopened at launch. */
 export function visitPage(
   history: PageHistory,
   id: string,
@@ -41,7 +36,6 @@ export function visitPage(
   return { entries, index: entries.length - 1 };
 }
 
-/** The ids a step could land on, so the caller can ask which are still open. */
 export function pageHistoryIds(history: PageHistory): string[] {
   return history.entries.map((entry) => entry.id);
 }

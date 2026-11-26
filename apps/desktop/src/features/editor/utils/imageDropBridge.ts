@@ -1,7 +1,6 @@
-// Bridges Tauri's native drag-drop event to the active Tiptap editor.
-// macOS WKWebView swallows HTML5 file drops from Finder, so ProseMirror's
-// handleDrop never fires. We listen to onDragDropEvent at the window level
-// and insert image nodes manually using posAtCoords for the drop location.
+// Bridges Tauri's native drag-drop event to the active Tiptap editor: macOS WKWebView swallows HTML5
+// file drops from Finder, so ProseMirror's handleDrop never fires. Listen at the window level and
+// insert image nodes with posAtCoords.
 
 import type { Editor } from "@tiptap/react";
 
@@ -54,7 +53,6 @@ async function init(): Promise<void> {
       const imagePaths = drop.paths.filter(isImagePath);
       if (imagePaths.length === 0) return;
 
-      // The host reports physical pixels — convert to CSS px for posAtCoords.
       const dpr = window.devicePixelRatio || 1;
       const x = drop.position.x / dpr;
       const y = drop.position.y / dpr;

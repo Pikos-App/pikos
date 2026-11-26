@@ -6,7 +6,6 @@ import { createFindPlugin, type FindParams, WHOLE_DOC } from "./findDecorations"
 
 const BLOCK_TEXTS = ["fox 0", "fox 1", "fox 2", "fox 3", "fox 4"];
 
-/** The blocks whose match is drawn, with a `*` on the active one. */
 function drawn(params: FindParams): string[] {
   const content = BLOCK_TEXTS.map((text) => ({
     content: [{ text, type: "text" }],

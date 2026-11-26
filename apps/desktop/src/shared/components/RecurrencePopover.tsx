@@ -27,37 +27,19 @@ import { RecurrenceEndsEditor, type RecurrenceEndType } from "./recurrence/Recur
 import { RecurrencePresetList } from "./recurrence/RecurrencePresetList";
 
 export interface RecurrencePopoverProps {
-  /** Current RRULE string (no "RRULE:" prefix) or null for "no recurrence". */
   rrule: string | null;
-  /** Emit the new RRULE string, or null to clear the recurrence. */
   onChange: (rrule: string | null) => void;
-  /**
-   * ISO start date of the anchor occurrence (page.scheduledStart or equivalent).
-   * Used to derive contextual preset labels ("Weekly (Thu)", "Yearly (Apr 16)").
-   * When absent, presets are hidden and only Custom controls appear.
-   */
+  /** ISO start date of the anchor occurrence, used for contextual preset labels. When absent,
+   * presets are hidden and only Custom controls appear. */
   anchorDate?: string | null;
-  /** When true, chip is greyed out and popover cannot open. */
   disabled?: boolean;
-  /** When true, chip displays the cadence but doesn't open. */
   readOnly?: boolean;
-  /** Tooltip shown on the disabled chip (e.g., "Set a date first"). */
   disabledHint?: string;
-  /**
-   * "label" (default) — icon + cadence text always; used in PageBlockPopover,
-   *   VirtualPageBlockPopover, MetadataHeader.
-   * "icon" — icon-only with a hover tooltip; used in the page byline.
-   * "compact" — icon-only when no rule / override, icon + short label when
-   *   set; used in QuickAddDialog so the empty state is unobtrusive.
-   */
+  /** "compact" is icon-only with no rule or override and icon plus short label when set, so the
+   * empty state is unobtrusive; "icon" adds a hover tooltip. */
   variant?: "icon" | "label" | "compact";
-  /**
-   * External label shown next to the icon (in compact/label modes) when no
-   * rrule is set. Used by QuickAddDialog to display NLP finite previews like
-   * "3 occurrences" in the same trigger as the recurrence icon.
-   */
+  /** External label shown next to the icon when no rrule is set, such as an NLP preview like "3 occurrences". */
   overrideLabel?: string;
-  /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
 }
 
@@ -83,8 +65,8 @@ export function RecurrencePopover({
   const [untilViewYear, setUntilViewYear] = useState(new Date().getFullYear());
   const [untilViewMonth, setUntilViewMonth] = useState(new Date().getMonth());
 
-  // Local draft state for numeric inputs — only emits on commit (blur/Enter)
-  // so intermediate keystrokes never emit invalid rrules.
+  // Draft state for numeric inputs: emits only on commit (blur/Enter), so keystrokes never emit
+  // invalid rrules.
   const [countDraft, setCountDraft] = useState<string>("");
   const [intervalDraft, setIntervalDraft] = useState<string>("");
   const [intervalFocused, setIntervalFocused] = useState(false);
@@ -118,8 +100,6 @@ export function RecurrencePopover({
   }
 
   function withEndCondition(shape: RecurrenceOptions): RecurrenceOptions {
-    // Preset clicks preserve the current Ends condition (count/until) but
-    // replace freq/interval/byweekday.
     const merged: RecurrenceOptions = { ...shape };
     if (options?.count != null) merged.count = options.count;
     else if (options?.until) merged.until = options.until;
@@ -264,15 +244,14 @@ export function RecurrencePopover({
         "inline-flex items-center gap-1 rounded transition-colors focus:outline-none",
         isIconOnly
           ? "shrink-0 whitespace-nowrap"
-          : // In label mode allow the chip to shrink inside a bounded flex row
-            // (e.g. PageBlockPopover's metadata row); the label itself truncates
-            // with an ellipsis. Icon never shrinks.
+          : // In label mode the chip may shrink inside a bounded flex row; the label truncates, the
+            // icon never shrinks.
             "min-w-0 text-sm",
         disabled
           ? "cursor-not-allowed text-muted-foreground/30"
           : effectiveReadOnly
-            ? // A button carries a pointer cursor by default, which on a chip that
-              // refuses the edit is the surface offering something it will not do.
+            ? // A button's default pointer cursor on a chip that refuses the edit offers something it
+              // will not do.
               "cursor-default text-muted-foreground"
             : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
@@ -286,8 +265,8 @@ export function RecurrencePopover({
   );
 
   if (disabled || effectiveReadOnly) {
-    // Degrade-locked chips get a tooltip even in label mode so the disabled edit
-    // has an explanation; plain read-only label chips stay bare as before.
+    // Degrade-locked chips get a tooltip even in label mode so the disabled edit has an
+    // explanation.
     if (isIconOnly || degradeLocked) {
       return (
         <Tooltip>

@@ -30,9 +30,7 @@ function withSummary(loaded: Page, summary: PageSummary): Page {
 }
 
 interface EditorPageState {
-  /** Full page with content, or null if no page selected / still loading. */
   page: Page | null;
-  /** True while getPage() is in flight. */
   isLoading: boolean;
 }
 
@@ -42,7 +40,6 @@ export function useEditorPage(): EditorPageState {
   const { on } = useWorkspace();
   const [loadedPage, setLoadedPage] = useState<Page | null>(null);
 
-  // Track the ID we're currently loading to avoid race conditions
   const loadingIdRef = useRef<string | null>(null);
   const lastChangeAtRef = useRef(Number.NEGATIVE_INFINITY);
 
@@ -60,7 +57,6 @@ export function useEditorPage(): EditorPageState {
     function load(id: string) {
       if (loadingIdRef.current !== id) return;
       void getPage(id).then((loaded) => {
-        // Only apply if this is still the page we want
         if (loadingIdRef.current === id) {
           setLoadedPage(loaded);
         }
@@ -88,9 +84,6 @@ export function useEditorPage(): EditorPageState {
   // are reflected immediately without waiting for page:updated events.
   const summary = usePageSummary(activePageId);
 
-  // Derive: page is only valid when it matches the active selection.
-  // When activePageId changes to null or a different ID, page becomes null
-  // automatically — no setState needed.
   const page: Page | null = (() => {
     if (activePageId === null || !loadedPage || loadedPage.id !== activePageId) return null;
     if (!summary) return loadedPage;

@@ -23,8 +23,6 @@ import type { UsageStatsData } from "./UsageStats";
 
 const log = createLogger("DataSettings");
 
-// ─── Export helpers ────────────────────────────────────────────────────────
-
 type ExportState =
   | { status: "idle" }
   | { status: "saving" }
@@ -82,8 +80,6 @@ function ExportRow({
   );
 }
 
-// ─── Component ────────────────────────────────────────────────────────────
-
 interface DataSettingsProps {
   importState: ImportState;
   lastImportResult: LastImportResult | null;
@@ -128,7 +124,6 @@ export function DataSettings({
     await new Promise((r) => setTimeout(r, 800));
     try {
       await deleteAllData(storage);
-      // On success, deleteAllData calls relaunch — no further UI needed.
     } catch (e) {
       log.error("deleteAllData failed", e);
       showNotice("Couldn't delete data. Check disk permissions and try again.", 6000);
@@ -136,8 +131,6 @@ export function DataSettings({
     }
   }
 
-  /** Every export row runs the same saving → done/error cycle; only the
-   *  adapter call and the failure verb differ. */
   async function runExport(
     setState: (next: ExportState) => void,
     verb: string,
@@ -164,7 +157,6 @@ export function DataSettings({
 
   return (
     <div className="max-w-settings">
-      {/* ── Usage stats ────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."
         title="Your Workspace"
@@ -172,7 +164,6 @@ export function DataSettings({
         <UsageStats notificationsEnabled={notificationsEnabled} stats={usageStats} />
       </SettingsSection>
 
-      {/* ── Import ──────────────────────────────────────────────────── */}
       <SettingsSection description="Bring your data from other apps into Pikos." title="Import">
         {lastImportResult && (
           <div className="mb-4 flex items-center justify-between rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3">
@@ -212,10 +203,9 @@ export function DataSettings({
         />
       </SettingsSection>
 
-      {/* ── Restore — renders nothing until there is a backup to put back ── */}
+      {/* Renders nothing until there is a backup to put back */}
       <RestoreSection storage={storage} />
 
-      {/* ── Export ─────────────────────────────────────────────────────── */}
       <SettingsSection description="Download your data in different formats." title="Export">
         <div className="rounded-lg border border-border bg-card px-4">
           <ExportRow
@@ -272,10 +262,7 @@ export function DataSettings({
         </div>
       </SettingsSection>
 
-      {/* ── Danger Zone ────────────────────────────────────────────────── */}
-      {/* Lives here (not General) for data-lifecycle coherence and safety-
-          adjacency to Export — back up before you wipe. Inline because it owns
-          local dialog + in-flight state. */}
+      {/* Lives here, not General, beside Export: back up before you wipe. Inline because it owns local dialog and in-flight state. */}
       <section className="mt-12 border-t border-destructive/30 pt-6">
         <h2 className="mb-4 text-base font-semibold text-destructive">Danger Zone</h2>
         <div className="rounded-lg border border-destructive/30 bg-card p-4">

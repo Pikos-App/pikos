@@ -117,7 +117,6 @@ describe("useLeftNavToggle — small layout (sm)", () => {
       return { nav, ui };
     });
 
-    // Persisted collapsed state shouldn't leak through the sm-mode branch.
     act(() => result.current.ui.setSidebarCollapsed(true));
     expect(result.current.nav.isOpen).toBe(false);
     act(() => result.current.ui.setPageListDrawerOpen(true));

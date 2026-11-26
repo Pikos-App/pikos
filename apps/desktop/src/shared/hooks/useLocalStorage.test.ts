@@ -62,8 +62,6 @@ describe("useLocalStorage", () => {
     expect(JSON.parse(localStorage.getItem("obj")!)).toEqual({ a: 2 });
   });
 
-  // The hook is the only writer the app has; the store under it is swappable so
-  // a host with no window.localStorage (a phone) can back the same keys.
   it("writes through whatever key-value store is installed", () => {
     const store = new MemoryKeyValueStore();
     setKeyValueStore(store);

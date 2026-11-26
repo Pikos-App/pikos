@@ -15,11 +15,8 @@ export interface DayHeaderRowProps {
   onCreateDragStart: (args: { clientX: number; clientY: number; dayIndex: number }) => void;
 }
 
-/**
- * A press anywhere on a header cell starts the same drag-to-create gesture
- * as the all-day strip below it, so the header remains a clickable create
- * surface even when the all-day section is scrolled past the fold.
- */
+/** A press on a header cell starts the same drag-to-create as the all-day strip below, so the header
+ *  still creates when the all-day section is scrolled past the fold. */
 export function DayHeaderRow({ days, onCreateDragStart, today }: DayHeaderRowProps) {
   return (
     <div className="flex shrink-0 border-t border-b border-border/40">

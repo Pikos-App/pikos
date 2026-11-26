@@ -3,29 +3,23 @@ import { useRef, useState } from "react";
 interface AllDayCreatePreview {
   startDayIndex: number;
   endDayIndex: number;
-  /** True once the cursor has moved past the click-jitter threshold. Used
-   * by the renderer to decide between single-day and multi-day previews. */
+  /** True once the cursor has moved past the click-jitter threshold. */
   moved: boolean;
 }
 
 export interface UseAllDayCreateOptions {
   days: Date[];
-  /** Refs to the day-columns row — used to translate client X → day index. */
   dayColumnsRef: React.RefObject<HTMLDivElement | null>;
-  /** Called on release. The span is materialised here; if `moved` was false
-   * (plain tap/click) the caller receives just `start`. */
+  /** Called on release. A plain click passes only `start`. */
   onCreateAllDay: (start: Date, end?: Date) => Promise<void> | void;
-  /** Lock cursor / userSelect for the duration of the gesture. */
   disableSelect: (cursor: "dragging-grab" | "dragging-resize") => void;
   enableSelect: () => void;
-  /** Swallow the click that fires after release so the next click doesn't
-   * open whatever's under the pointer. */
+  /** Swallows the click that follows release so it doesn't open what's under the pointer. */
   eatNextClick: () => void;
 }
 
 export interface UseAllDayCreateResult {
   allDayCreatePreview: AllDayCreatePreview | null;
-  /** Bind to pointerdown on the all-day row + the day header row. */
   handleAllDayCreateDragStart: (args: {
     clientX: number;
     clientY: number;
@@ -33,16 +27,13 @@ export interface UseAllDayCreateResult {
   }) => void;
 }
 
-/** Pixel jitter tolerance — moving less than this treats the gesture as a
- * single click and commits a single-day create. */
+/** Moving less than this many pixels counts as a click. */
 const CLICK_JITTER_PX = 4;
 
 /**
- * Press-drag-release in the all-day strip creates a new all-day page. A
- * plain click yields a single-day create; a drag across columns yields a
- * multi-day span. Renders an absolute ghost overlay while active so it does
- * NOT participate in row assignment (the overlay is not a PageSummary) —
- * keeps the popover open-close-open dance from firing.
+ * Press-drag-release in the all-day strip creates an all-day page: a click makes one day,
+ * a drag a multi-day span. The ghost is an overlay, not a PageSummary, so it stays out of
+ * row assignment and the popover doesn't open-close-open.
  */
 export function useAllDayCreate({
   dayColumnsRef,
@@ -77,9 +68,7 @@ export function useAllDayCreate({
       moved: false,
       startDayIndex: dayIndex,
     };
-    // Ghost renders immediately at the first-free-row of the clicked column
-    // (see AllDaySection) so it lands exactly where the real chip will mount
-    // on commit — no visual jump between ghost → chip.
+    // The ghost lands at the clicked column's first free row, where the chip will mount.
     setAllDayCreatePreview({ endDayIndex: dayIndex, moved: false, startDayIndex: dayIndex });
     const originClientX = clientX;
 
@@ -105,10 +94,6 @@ export function useAllDayCreate({
       enableSelect();
       eatNextClick();
       const state = allDayCreatePreviewRef.current;
-      // Clear the ghost overlay synchronously; the create/schedule chain
-      // below is fast (setPages is optimistic) so the real chip appears on
-      // the next render with minimal gap. The overlay is not a PageSummary,
-      // so it doesn't interfere with row assignment or popover anchoring.
       allDayCreatePreviewRef.current = null;
       setAllDayCreatePreview(null);
       if (!state) return;
@@ -120,7 +105,6 @@ export function useAllDayCreate({
       void onCreateAllDay(startDay, state.moved && lo !== hi ? endDay : undefined);
     }
 
-    /** Platform-cancelled gesture — drop the ghost, create nothing. */
     function onCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();

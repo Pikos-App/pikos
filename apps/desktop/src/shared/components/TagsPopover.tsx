@@ -1,5 +1,3 @@
-// Popover stays open across toggles for multi-select; Escape closes.
-
 import { Check, Hash } from "lucide-react";
 import { useState } from "react";
 
@@ -10,9 +8,7 @@ import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/Se
 export interface TagsPopoverProps {
   allTags: string[];
   selected: string[];
-  /** Toggle a tag: add if absent, remove if present. Also called for new tag creation. */
   onToggle: (name: string) => void;
-  /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
 }
 

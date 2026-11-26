@@ -1,6 +1,3 @@
-// Extracted from ReminderPopover for testability. Contains all the business
-// logic; the popover component is a thin UI shell.
-
 import type { PageReminder, StorageAdapter } from "@pikos/core";
 import { useState } from "react";
 
@@ -15,7 +12,6 @@ const NONE_SENTINEL = -1;
  *  in the same column so an all-day reminder is still one ordinary reminder row. */
 export const DAY_BEFORE_SENTINEL = -2;
 
-/** What a per-page reminder can be set to: a lead time, or the all-day anchor. */
 export type PageReminderChoice = ReminderLeadTime | typeof DAY_BEFORE_SENTINEL;
 
 export function usePageReminders(storage: StorageAdapter | null, pageId: string) {

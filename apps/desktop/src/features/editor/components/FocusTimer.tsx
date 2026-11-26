@@ -1,10 +1,7 @@
-// A focus stopwatch for the open page, sitting at the end of the byline row.
-//
-// Deliberately quiet: a ghost icon button at rest, and while running a
-// monospaced elapsed count beside a stop button. It is a stopwatch, not a
-// pomodoro — no target, no chime, no persistence of a running session (see
-// `useFocusTimer` for why). Stopping writes one `focus_sessions` row, which is
-// what the Data panel's "Focus time" card has always been summing.
+// A focus stopwatch for the open page, at the end of the byline row. Deliberately quiet: a ghost
+// icon button at rest, a monospaced elapsed count and a stop button while running. No target, chime
+// or persistence of a running session (see `useFocusTimer`). Stopping writes one `focus_sessions`
+// row, which the Data panel's "Focus time" card sums.
 
 import { Play, Square } from "lucide-react";
 import { useEffect } from "react";

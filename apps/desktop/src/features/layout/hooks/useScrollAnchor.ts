@@ -3,9 +3,7 @@ import type { Virtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
 
 interface Seen {
-  /** Each row on screen, by key, with its index then. */
   indexOf: Map<string, number>;
-  /** How far the first of them sat below the top. */
   delta: number;
   firstKey: string;
   data: string;
@@ -52,7 +50,6 @@ export function useScrollAnchor(
     if (target) virtualizer.scrollToOffset(target.start - before.delta);
   }, [onScreen]);
 
-  // Remember what's on screen after every render, for the next change to anchor on.
   useEffect(() => {
     const el = listRef.current;
     const first = items.find((item) => item.end > (el?.scrollTop ?? 0));

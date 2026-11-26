@@ -8,15 +8,11 @@ interface SearchablePopoverProps {
   align?: "start" | "center" | "end";
   className?: string;
   onQueryChange?: (query: string) => void;
-  /** Called on Enter keypress in the search input. Receives the trimmed query. */
   onEnter?: (query: string) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /**
-   * Intercepts Radix's focus-restore on close. When set, the default
-   * trigger-refocus is cancelled and this callback fires instead — used by
-   * QuickAdd chips to bounce focus back to the dialog's main input.
-   */
+  /** Intercepts Radix's focus-restore on close: when set, the default trigger-refocus is cancelled
+   * and this fires instead (QuickAdd chips bounce focus back to the dialog's main input). */
   onCloseAutoFocus?: () => void;
   children: (opts: { query: string; close: () => void; clearQuery: () => void }) => ReactNode;
 }
@@ -104,8 +100,8 @@ export function SearchablePopoverItem({
   children: ReactNode;
   className?: string;
   onClick: () => void;
-  /** Marks the current value. `data-selected` is also what a list scrolls to
-   *  when it opens, so pass it even where the styling is not wanted. */
+  /** Marks the current value. `data-selected` is also what a list scrolls to when it opens, so pass
+   *  it even where the styling is not wanted. */
   selected?: boolean;
 }) {
   return (

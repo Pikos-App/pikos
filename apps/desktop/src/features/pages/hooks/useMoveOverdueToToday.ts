@@ -1,17 +1,11 @@
-// "Move to today" on the Today view's Overdue section header.
+// "Move to today" on the Today view's Overdue header. core's `planMoveOverdueToToday` owns the
+// shift and exclusions; this is the write half, run through the same `scheduleOnce` as every drag and
+// date-picker edit so rollback and recurring-anchor resolution match. Writes are awaited one at a
+// time: each also reads the page's schedule rows back, and concurrent readers are the WAL contention
+// the bulk status toggle had to serialise away.
 //
-// Nothing here decides dates — core's `planMoveOverdueToToday` owns the shift
-// and the exclusions. This hook is the write half: it runs the plan through the
-// same `scheduleOnce` every drag and date-picker edit goes through, so the
-// optimistic apply / rollback and the recurring-anchor resolution behave exactly
-// as they do for a single reschedule. Writes are awaited one at a time rather
-// than fired concurrently: `scheduleOnce` queues per page, but each one also
-// reads the page's schedule rows back, and a burst of concurrent readers is the
-// same WAL contention the bulk status toggle had to serialise away.
-//
-// Undo composes with the existing toast: the plan carries each page's previous
-// start/end, so undo is the same loop with those values, under one toast id.
-// There is no confirmation step — a move is reversible, cheap, and visible.
+// Undo is the same loop with the plan's previous start/end, under one toast id. There is no
+// confirmation: a move is reversible, cheap and visible.
 
 import type { PageSummary } from "@pikos/core";
 import { moveOverdueToTodayLabel, planMoveOverdueToToday } from "@pikos/core";
@@ -40,7 +34,6 @@ export function useMoveOverdueToToday() {
     }
   }
 
-  /** Reschedules the movable pages of the Overdue section onto today. */
   function moveOverdueToToday(overduePages: PageSummary[]): void {
     const plan = planMoveOverdueToToday(overduePages);
     const label = moveOverdueToTodayLabel(plan);

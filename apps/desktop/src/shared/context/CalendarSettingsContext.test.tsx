@@ -109,7 +109,7 @@ describe("collapse bands", () => {
 
   it("setTopHour clamps to legal range", () => {
     const { result } = setup();
-    act(() => result.current.setTopHour(30)); // > MAX_TOP_HOUR
+    act(() => result.current.setTopHour(30));
     expect(result.current.collapse.topHour).toBe(12);
     act(() => result.current.setTopHour(-5));
     expect(result.current.collapse.topHour).toBe(0);
@@ -120,19 +120,17 @@ describe("collapse bands", () => {
   it("setBottomHour clamps relative to topHour", () => {
     const { result } = setup();
     act(() => result.current.setTopHour(10));
-    act(() => result.current.setBottomHour(8)); // would be < topHour
-    expect(result.current.collapse.bottomHour).toBe(12); // clamped to MIN_BOTTOM_HOUR
+    act(() => result.current.setBottomHour(8));
+    expect(result.current.collapse.bottomHour).toBe(12);
   });
 
   it("geometry reflects collapsed state", () => {
     const { result } = setup();
-    // default: both collapsed at 6 and 22 → top=40, mid=16h, bottom=40
     expect(result.current.geometry.topBandHeight).toBe(40);
     expect(result.current.geometry.bottomBandHeight).toBe(40);
     expect(result.current.geometry.middleHeight).toBe(16 * 64);
 
     act(() => result.current.setTopCollapsed(false));
-    // top expanded → topBandHeight = 6 * hourHeight
     expect(result.current.geometry.topBandHeight).toBe(6 * 64);
   });
 
@@ -179,10 +177,9 @@ describe("text size", () => {
     expect(result.current.metrics.hourHeight).toBeGreaterThan(atDefault);
   });
 
-  // Density and text size are separate settings that move the same thing, so they
-  // multiply rather than compete: the hour grows by exactly the factor the text
-  // does. Before, the text size only lifted an hour that was too short for it,
-  // which let the type outgrow the block holding it at every other size.
+  // Density and text size are separate settings that move the same thing, so they multiply rather
+  // than compete: the hour grows by exactly the factor the text does. Lifting only an hour that
+  // was too short for the text would let the type outgrow the block at every other size.
   it("scales any density by the text size, in proportion", () => {
     const { result } = setup();
     act(() => result.current.setDensity(88));

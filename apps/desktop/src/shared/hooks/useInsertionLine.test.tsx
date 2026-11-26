@@ -1,8 +1,3 @@
-// useInsertionLine — given a list of ids, returns the id before which the
-// insertion line should render during a drag, or null (after-last), or
-// undefined (no line). The hook subscribes to dnd-kit drag events; we mock
-// useDndMonitor to drive those events directly.
-
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -52,7 +47,6 @@ describe("useInsertionLine — no-line cases", () => {
   it("returns undefined when dragging but not over anything", () => {
     const { result } = renderHook(() => useInsertionLine(["a", "b", "c"]));
     act(() => fireStart("a"));
-    // overId is null at this point — no line.
     expect(result.current).toBeUndefined();
   });
 
@@ -67,7 +61,7 @@ describe("useInsertionLine — no-line cases", () => {
 
   it("returns undefined when active item is not in the list", () => {
     const { result } = renderHook(() => useInsertionLine(["a", "b", "c"]));
-    act(() => fireStart("z")); // foreign list
+    act(() => fireStart("z"));
     act(() => fireOver("b"));
     expect(result.current).toBeUndefined();
   });
@@ -141,7 +135,6 @@ describe("useInsertionLine — lifecycle", () => {
     act(() => fireStart("a"));
     act(() => fireOver("b"));
     expect(result.current).toBe("c");
-    // New drag starts; overId must be reset, not stale.
     act(() => fireStart("c"));
     expect(result.current).toBeUndefined();
   });

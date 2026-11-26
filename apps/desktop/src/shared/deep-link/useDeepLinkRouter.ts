@@ -1,6 +1,3 @@
-// Listens for pikos:// URLs emitted from the Rust deep-link handler and
-// dispatches them through the UIContext. Mount once at the app shell.
-
 import { listen } from "@tauri-apps/api/event";
 import { getHours, getMinutes } from "date-fns";
 import { useEffect, useRef } from "react";
@@ -19,8 +16,7 @@ const DEEP_LINK_EVENT = "pikos://open-url";
 export function useDeepLinkRouter() {
   const ui: Targets = { ...useUI(), ...useCalendarDate() };
 
-  // Latest ui is stashed in a ref so the listener subscription stays
-  // mounted for the whole app lifetime instead of being torn down each render.
+  // A ref, so the listener subscription stays mounted instead of being torn down each render.
   const uiRef = useRef(ui);
   useEffect(() => {
     uiRef.current = ui;
@@ -79,10 +75,8 @@ function dispatch(ui: Targets, action: DeepLinkAction) {
       ui.setActiveViewId(action.viewId);
       return;
     case "calendar": {
-      // Notification click: reveal the calendar at the current time. Close
-      // Settings first so the panel is actually visible (a reminder can fire
-      // while the user sits in Settings). Scroll an hour above "now" so the
-      // now-line — and any block firing shortly after — has context above it.
+      // Notification click: reveal the calendar at the current time. Close Settings first (a reminder
+      // can fire while it is open) and scroll an hour above "now" so the now-line has context above it.
       const now = new Date();
       ui.setSettingsOpen(false);
       ui.setReferenceDate(now);

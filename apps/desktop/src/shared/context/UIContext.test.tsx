@@ -11,8 +11,6 @@ import { usePages } from "./PagesContext";
 import { useUI } from "./UIContext";
 import { useWorkspace } from "./WorkspaceContext";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function setup() {
   return renderHookWithProviders(() => useUI());
 }
@@ -114,8 +112,6 @@ describe("once a workspace with folders and pages loads", () => {
   });
 });
 
-// ─── setActivePage ──────────────────────────────────────────────────────────
-
 describe("setActivePage", () => {
   it("accepts null to clear", () => {
     const { result } = setup();
@@ -137,8 +133,6 @@ describe("setActivePage", () => {
     expect(result.current.activePageId).toBe("page-456");
   });
 });
-
-// ─── setRightPanel — smart panel switching ──────────────────────────────────
 
 describe("setRightPanel — smart panel switching", () => {
   it("switching to calendar saves current page and clears activePageId", () => {
@@ -169,9 +163,7 @@ describe("setRightPanel — smart panel switching", () => {
 
     act(() => result.current.setActivePage("page-1"));
     act(() => result.current.setRightPanel("calendar"));
-    // Now activePageId is null, lastEditorPageId is "page-1"
     act(() => result.current.setRightPanel("calendar"));
-    // Should not save null over "page-1"
     expect(result.current.lastEditorPageId).toBe("page-1");
   });
 
@@ -180,18 +172,14 @@ describe("setRightPanel — smart panel switching", () => {
 
     act(() => result.current.setActivePage("page-1"));
     act(() => result.current.setRightPanel("editor"));
-    // No change
     expect(result.current.activePageId).toBe("page-1");
   });
 });
-
-// ─── openPage ─────────────────────────────────────────────────────────────────
 
 describe("openPage", () => {
   it("sets activePageId and switches to editor panel atomically", () => {
     const { result } = setup();
 
-    // Start on calendar
     act(() => result.current.setRightPanel("calendar"));
     expect(result.current.rightPanel).toBe("calendar");
 
@@ -246,8 +234,6 @@ describe("stepHistory", () => {
   });
 });
 
-// ─── getSortMode / setSortMode ──────────────────────────────────────────────
-
 describe("sort modes", () => {
   it("defaults to 'manual' for unknown viewId", () => {
     const { result } = setup();
@@ -258,11 +244,9 @@ describe("sort modes", () => {
     const { result } = setup();
     act(() => result.current.setSortMode("inbox", "date"));
     expect(result.current.getSortMode("inbox")).toBe("date");
-    expect(result.current.getSortMode("today")).toBe("manual"); // other views unaffected
+    expect(result.current.getSortMode("today")).toBe("manual");
   });
 });
-
-// ─── sidebarCollapsed ──────────────────────────────────────────────────────
 
 describe("sidebarCollapsed", () => {
   it("defaults to false", () => {
@@ -276,8 +260,6 @@ describe("sidebarCollapsed", () => {
     expect(result.current.sidebarCollapsed).toBe(true);
   });
 });
-
-// ─── openDialog ─────────────────────────────────────────────────────────────
 
 describe("openDialog", () => {
   it("defaults to null", () => {
@@ -309,8 +291,6 @@ describe("openDialog", () => {
   });
 });
 
-// ─── referenceDate ──────────────────────────────────────────────────────────
-
 describe("referenceDate", () => {
   const setup = () => renderHookWithProviders(() => useCalendarDate());
 
@@ -328,11 +308,8 @@ describe("referenceDate", () => {
   });
 });
 
-// ─── useUI outside provider ─────────────────────────────────────────────────
-
 describe("useUI outside provider", () => {
   it("throws when used outside UIProvider", () => {
-    // Suppress console.error from React for the expected error
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => renderHook(() => useUI())).toThrow("useUI must be used within <UIProvider>");
     spy.mockRestore();

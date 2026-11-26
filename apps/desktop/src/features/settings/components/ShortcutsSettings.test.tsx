@@ -1,7 +1,3 @@
-// The list is derived, so the thing worth pinning is the derivation: a binding
-// registered anywhere in the app shows up here, under its own group, and keeps
-// showing up after the component that registered it unmounts.
-
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 

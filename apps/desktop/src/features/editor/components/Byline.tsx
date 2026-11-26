@@ -98,11 +98,9 @@ export function Byline({
       };
 
   return (
-    // Wraps rather than clips. Every chip used to shrink together inside an
-    // overflow-hidden row, so at a large interface size the labels went and the
-    // folder — the one a person turning the text up most needs — went first. Source
-    // order is the ranking: status, folder and date hold the first line, and tags
-    // are what moves down.
+    // Wraps rather than clips: with every chip shrinking inside an overflow-hidden row, a large
+    // interface size dropped the folder first. Source order is the ranking: status, folder and date
+    // hold the first line, tags move down.
     <div className="type-ui-sm flex flex-wrap items-center gap-ui-md pt-2 pb-4 text-subtle">
       <PageMetadataChips
         groups={[
@@ -123,11 +121,9 @@ export function Byline({
             boxed: true,
             chips: [
               scheduleChip,
-              // A timed page reminds on a lead time; an all-day page has no start
-              // time to count back from, so its dropdown offers the day-before
-              // anchor instead (see notifications/scheduler's day-before arm).
-              // Reminders stay user-editable on every synced event, one-off or
-              // recurring, since synced occurrences now fire per-occurrence.
+              // A timed page reminds on a lead time; an all-day page offers the day-before anchor (see
+              // notifications/scheduler's day-before arm). Reminders stay editable on every synced event, since
+              // synced occurrences fire per occurrence.
               !!page.scheduledStart && {
                 kind: "reminder",
                 props: { allDay: !isTimedIso(page.scheduledStart), pageId: page.id },

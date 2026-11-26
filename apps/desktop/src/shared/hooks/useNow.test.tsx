@@ -8,7 +8,6 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
-  // The clock is one for the app, so a reader left mounted would carry it into the next test.
   cleanup();
   vi.useRealTimers();
 });
@@ -55,8 +54,8 @@ describe("useNow", () => {
   });
 
   it("is current as soon as a hidden Activity shows it again", () => {
-    // The calendar sits in a hidden Activity while the editor shows, which stops its
-    // timer and listeners, so the focus that brings the window back reaches nothing.
+    // The calendar sits in a hidden Activity, which stops its timer and listeners, so the focus that
+    // brings the window back reaches nothing.
     vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
     const { container, rerender } = render(
       <Activity mode="visible">
@@ -79,7 +78,6 @@ describe("useNow", () => {
   });
 
   it("is current within seconds when a timer stalled, as through the Mac's sleep", async () => {
-    // A sleeping Mac pauses timers, so one set for the next minute fires that much late.
     vi.setSystemTime(new Date("2026-03-31T12:00:30.000"));
     const { result } = renderHook(() => useNow());
 

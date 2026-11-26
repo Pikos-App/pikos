@@ -1,7 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** What the bench build's Rust side reports: the scratch workspace to open, and how long the
- *  process has been running. */
 export interface BenchSession {
   db: string;
   /** The areas to time; every area when null. */
@@ -29,7 +27,6 @@ export interface BenchMemory {
   windowCandidates: number;
 }
 
-/** The steps of a launch, each as milliseconds since the process started. */
 export type LaunchStage =
   | "connected"
   | "documentReady"
@@ -39,13 +36,11 @@ export type LaunchStage =
   | "webviewStart"
   | "workspaceRequested";
 
-/** Adds to `performance.now()` to give milliseconds since the process started. */
 let uptimeOffset = 0;
 const stages: Partial<Record<LaunchStage, number>> = {};
 let firstRow: Promise<void> = Promise.resolve();
 let session: BenchSession | null = null;
 
-/** The session `startLaunch` read, for the runner's options. */
 export function benchOptions(): Pick<BenchSession, "only" | "samples"> {
   return { only: session?.only ?? null, samples: session?.samples ?? null };
 }
@@ -74,7 +69,6 @@ export function markStage(stage: LaunchStage) {
   stages[stage] = performance.now() + uptimeOffset;
 }
 
-/** The launch's steps once its first row is drawn. */
 export async function launchStages(): Promise<Partial<Record<LaunchStage, number>>> {
   await firstRow;
   const navigation = performance.getEntriesByType("navigation")[0] as
@@ -97,7 +91,6 @@ export function benchMemory(): Promise<BenchMemory> {
   return invoke<BenchMemory>("bench_memory");
 }
 
-/** Hand the results to Rust, which writes them where the benchmark script asked and quits. */
 export function benchFinish(results: unknown): Promise<void> {
   return invoke<void>("bench_finish", { results });
 }

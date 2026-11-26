@@ -1,10 +1,6 @@
-// useHeightResize — vertical analog of usePanelResize. Covers clamping,
-// persistence, and listener cleanup. The drag handle moves on the Y axis;
-// height grows when the pointer moves down.
-//
-// Pointer events, not mouse events: the hook takes pointer capture on the
-// handle and listens there, so the test dispatches at that element. jsdom has
-// no pointer capture — src/test/setup.ts stands the three methods in.
+// Pointer events, not mouse events: the hook takes pointer capture on the handle, so the
+// test dispatches there. jsdom has no pointer capture; src/test/setup.ts stands the three
+// methods in.
 
 import { act, renderHook } from "@testing-library/react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -16,7 +12,6 @@ const POINTER_ID = 1;
 let handle: HTMLElement;
 
 afterEach(() => {
-  // Drain any leaked drag listeners from a prior test.
   handle?.dispatchEvent(pointer("pointerup"));
   localStorage.clear();
   vi.restoreAllMocks();

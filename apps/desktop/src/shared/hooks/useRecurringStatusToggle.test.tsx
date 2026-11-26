@@ -1,8 +1,6 @@
-// useRecurringStatusToggle — the shared router that decides how a status toggle
-// dispatches: un-check of a done clone first, then a recurring tick to the gap
-// dialog, then a plain non-recurring update. A branch reorder here silently
-// mis-routes a synced completion (the bug this hook was extracted to prevent), so
-// each arm is pinned.
+// The shared router that decides how a status toggle dispatches: un-check of a done clone first,
+// then a recurring tick to the gap dialog, then a plain non-recurring update. A branch reorder
+// here would silently mis-route a synced completion, so each arm is pinned.
 
 import type { PageRecurrenceRule, PageStatus, PageSummary, PageUpdate } from "@pikos/core";
 import { renderHook } from "@testing-library/react";
@@ -66,7 +64,7 @@ describe("useRecurringStatusToggle", () => {
   });
 
   it("routes a non-recurring page through a plain updatePage", () => {
-    mocks.recurrenceRules = [ruleFor("other")]; // rule exists, but not for p1
+    mocks.recurrenceRules = [ruleFor("other")];
 
     toggle()(PAGE, "done");
 
@@ -90,7 +88,7 @@ describe("useRecurringStatusToggle", () => {
 
   it("suppresses all fallthrough when the un-check handler takes it", () => {
     mocks.maybeUncompleteRecurringClone.mockReturnValue(true);
-    mocks.recurrenceRules = [ruleFor("p1")]; // recurring, yet nothing below must fire
+    mocks.recurrenceRules = [ruleFor("p1")];
 
     toggle()(PAGE, "not_started");
 

@@ -61,7 +61,6 @@ export function FindContentPopover({ editor, scroller }: FindContentPopoverProps
 
   const clamped = totalMatches > 0 ? activeIndex % totalMatches : 0;
 
-  // Called from event handlers only — never from effects or render.
   function syncDecorations(q: string, idx: number) {
     if (editor.isDestroyed) return;
     drawMatches(q, idx);

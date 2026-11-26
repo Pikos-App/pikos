@@ -1,9 +1,7 @@
-// CalendarDnDContext — imperative bridge between page-list drag and the
-// calendar grid's ghost preview. WeekGrid registers a function that maps
-// cursor coords to a drop slot (and updates its own ghost state). The page
-// list's drag handler calls it on every mousemove. Lives outside UIContext
-// because the imperative-ref pattern is calendar-specific noise for the rest
-// of the UI.
+// Imperative bridge between page-list drag and the calendar grid's ghost preview. WeekGrid
+// registers a function that maps cursor coords to a drop slot (and updates its own ghost state);
+// the page list's drag handler calls it on every mousemove. Lives outside UIContext because the
+// imperative-ref pattern is calendar-specific noise for the rest of the UI.
 
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
@@ -17,7 +15,6 @@ export type ExternalDragUpdater = (
 ) => { start: string } | null;
 
 export interface CalendarDnDContextValue {
-  /** True while a page-list item is being dragged over the calendar panel. */
   isDraggingOverCalendar: boolean;
   setIsDraggingOverCalendar: (v: boolean) => void;
   registerExternalDragUpdater: (fn: ExternalDragUpdater | null) => void;

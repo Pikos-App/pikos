@@ -1,6 +1,5 @@
-// Roving-tabIndex ARIA toolbar: one button has tabIndex=0 at a time,
-// ArrowLeft/Right moves focus within the group, Tab exits.
-// Callers set initial tabIndex on each child button (first=0, rest=-1).
+// Roving-tabIndex ARIA toolbar. Callers set the initial tabIndex on each child button (first=0,
+// rest=-1).
 
 import { useRef } from "react";
 import type React from "react";

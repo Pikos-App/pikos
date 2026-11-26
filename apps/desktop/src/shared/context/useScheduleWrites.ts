@@ -1,12 +1,9 @@
-// useScheduleWrites — the one-off schedule block on a page: put it somewhere, or
-// take it away. Both are optimistic and both run on the page's mutation queue,
-// because a drop and a debounced field write for the same page must not
-// interleave.
+// The one-off schedule block on a page. Writes run on the page's mutation queue, because a drop
+// and a debounced field write for the same page must not interleave.
 //
-// The complication is that the same gesture also moves a RECURRING series'
-// anchor. scheduleOnce therefore resolves the move through the rule first (core:
-// resolveAnchorMove), patches page and rule together, and then adopts the head
-// the backend recompute derives — the local snap cannot see set-excluded dates.
+// The same gesture also moves a RECURRING series' anchor, so scheduleOnce resolves the move
+// through the rule first (core: resolveAnchorMove), patches page and rule together, then adopts
+// the head the backend recompute derives: the local snap cannot see set-excluded dates.
 
 import type { PageRecurrenceRule, PageSummary, StorageAdapter } from "@pikos/core";
 import {
@@ -20,9 +17,7 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { OptimisticWrite } from "./usePageWriteQueue";
 
 export interface ScheduleWrites {
-  /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
-  /** Create or update the one-off schedule block for a page. */
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
 }
 
@@ -45,17 +40,13 @@ export function useScheduleWrites({
 }): ScheduleWrites {
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
     const snapshot = pagesRef.current.find((p) => p.id === pageId);
-    // Recurring head: capture the rule snapshot so we can shift the rule's
-    // anchor in lockstep with the head's denorm. Without this, dragging the
-    // head from Mon to Wed leaves rule.scheduledStart pointed at Mon — the
-    // calendar then keeps emitting Mon-based virtuals (and any past dates
-    // before the new head linger), making the series feel detached from the
-    // user's most recent action.
+    // Recurring head: capture the rule snapshot so the rule's anchor shifts in lockstep with the
+    // head's denorm. Otherwise dragging the head from Mon to Wed leaves rule.scheduledStart at
+    // Mon, and the calendar keeps emitting Mon-based virtuals.
     const ruleSnapshot = recurrenceRulesRef.current.find((r) => r.pageId === pageId);
-    // Where the drop actually lands once the rule has had its say: a weekly
-    // BYDAY realigned to the moved weekday, and an off-pattern date snapped onto
-    // a day the rule yields. Both must settle BEFORE the optimistic update, else
-    // the next recompute silently reverts the dragged position.
+    // Where the drop lands once the rule has had its say (weekly BYDAY realigned, an off-pattern date
+    // snapped onto a day the rule yields). Both must settle BEFORE the optimistic update, or the next
+    // recompute silently reverts the dragged position.
     const move = resolveAnchorMove(ruleSnapshot, start, end);
     const { end: snappedEnd, start: snappedStart } = move;
 
@@ -107,10 +98,8 @@ export function useScheduleWrites({
         }
         if (ruleSnapshot) {
           await adapter.updateRecurrenceRule(ruleSnapshot.id, anchorMoveUpdate(ruleSnapshot, move));
-          // The rule update recomputes pages.scheduled_start backend-side (the
-          // derivation owns the recurring head). Adopt that result so a drop onto
-          // a set-excluded date — which the local snap can't detect — converges to
-          // the head the backend actually derived.
+          // The backend owns the recurring head: adopt its recompute so a drop onto a set-excluded date,
+          // which the local snap can't detect, converges to the derived head.
           await patchRecomputedHead(pageId);
         }
       },

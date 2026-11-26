@@ -1,14 +1,12 @@
 // Carries the app's optimistic edits into the page store as pending writes, one per write, so the
 // lists, the calendar and the editor show an edit from the store rather than from the in-memory
-// list. Edits are recorded where the write paths already make them: every change a write's
-// optimistic step makes to the in-memory list is diffed into the store, so no write path had to
-// be rewritten. A write settles its entries when it does: confirmed with the row as the database
-// now has it, or dropped on failure.
+// list. Every change a write's optimistic step makes to the in-memory list is diffed into the
+// store. A write settles its entries when it does: confirmed with the row as the database now has
+// it, or dropped on failure.
 
 import type { PageStore, PageSummary } from "@pikos/core";
 
 export class WriteMirror {
-  /** Write ids recorded by the optimistic step running now; null outside one. */
   private recording: number[] | null = null;
   private pageOf = new Map<number, string>();
 
@@ -17,7 +15,6 @@ export class WriteMirror {
     private readonly read: (ids: string[]) => Promise<PageSummary[]>
   ) {}
 
-  /** Run a write's optimistic step, recording what it changes. Returns the writes it made. */
   capture(apply: () => void): number[] {
     const outer = this.recording;
     const writes: number[] = [];
@@ -31,8 +28,7 @@ export class WriteMirror {
   }
 
   /** The page list went from `prev` to `next` with the store as its only copy: an edit inside a
-   *  write's `capture`, else the app's own settled copy (a write's echo or its follow-up, a
-   *  rollback), adopted. */
+   *  write's `capture`, else the app's own settled copy (an echo, a follow-up, a rollback). */
   apply(prev: PageSummary[], next: PageSummary[]): void {
     if (this.recording) {
       this.changed(prev, next);
@@ -84,12 +80,10 @@ export class WriteMirror {
     this.record(writes, id, this.store.write(id, fields));
   }
 
-  /** A row the database just returned for a write, held as confirmed. */
   confirmRow(row: PageSummary): void {
     this.store.confirm([row]);
   }
 
-  /** The writes landed: settle each with its page as the database now has it. */
   async confirm(writes: number[]): Promise<void> {
     if (writes.length === 0) return;
     const ids = [...new Set(writes.flatMap((w) => this.pageOf.get(w) ?? []))];
@@ -107,8 +101,7 @@ export class WriteMirror {
     }
   }
 
-  /** The writes failed: drop their entries, or with `keep` hold them on screen, as for typing the
-   *  editor still shows. */
+  /** The writes failed: drop their entries, or with `keep` hold them on screen so typing still shows. */
   fail(writes: number[], keep = false): void {
     for (const write of writes) {
       this.store.settle(write, { keep, kind: "failed" });

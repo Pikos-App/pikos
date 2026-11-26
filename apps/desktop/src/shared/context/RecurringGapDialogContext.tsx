@@ -1,13 +1,7 @@
-// RecurringGapDialogContext — the scope prompt every recurring gesture funnels
-// through. The gesture already carries the intent (tick = complete, delete =
-// dismiss); the dialog only asks how far it reaches: just this occurrence, or
-// everything still open before today. No backlog → no dialog, and the gesture
-// commits immediately.
-//
-// Both origins route here. What differs is which occurrence a gesture names: a
-// native series funnels every tick to its head (the oldest open occurrence),
-// while a synced-origin series ticks the instance the user pointed at — its
-// virtuals and moved blocks carry their own `originalDate`.
+// The gesture already carries the intent (tick = complete, delete = dismiss); the dialog only
+// asks how far it reaches: just this occurrence, or everything still open before today. No
+// backlog means no dialog. A native series funnels every tick to its head (the oldest open
+// occurrence), while a synced-origin series ticks the instance the user pointed at.
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary } from "@pikos/core";
 import {
@@ -24,32 +18,24 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
-/** Which gesture opened the dialog — it decides the copy and the write, never
- *  the scope question itself. */
+/** Which gesture opened the dialog: it decides the copy and the write, never the scope question. */
 export type GapKind = "complete" | "delete";
-/** The gestured occurrence alone, or it plus everything open before today. */
 export type GapScope = "one" | "all";
 
 interface PendingGap {
   kind: GapKind;
-  /** The occurrence the gesture named — the series head, or a rendered occurrence. */
   target: PageSummary;
   pageTitle: string;
   occurrenceDate: string;
-  /** Open occurrence dates before today, excluding the gestured one. */
   missedDates: string[];
   /** An active mirror is read-first: a delete here removes the local copy only. */
   syncedActive: boolean;
 }
 
 export interface RecurringGapDialogContextValue {
-  /** Tick on any recurring entry point — head, synced virtual, or moved block. */
   requestComplete: (page: PageSummary) => void;
-  /** Delete on a rendered occurrence. Whole-series delete does not come here. */
   requestDelete: (page: PageSummary) => void;
-  /** Skip the one date a series row names, with Undo, never asking about a backlog. */
   skipDate: (page: PageSummary) => void;
-  /** Internal dialog state — read by the mounted RecurringGapDialog. */
   pending: PendingGap | null;
   confirm: (scope: GapScope) => void;
   cancel: () => void;
@@ -66,9 +52,8 @@ export function useRecurringGapDialog(): RecurringGapDialogContextValue {
 }
 
 /**
- * Dates already taken out of the series: rule EXDATEs ∪ completed ∪ skipped.
- * Day-keyed, because a synced timed exdate is stored as full wall-clock while
- * occurrences match on the day alone (see `dateKey`).
+ * Dates already taken out of the series: rule EXDATEs, completed and skipped. Day-keyed, because a
+ * synced timed exdate is stored as full wall-clock while occurrences match on the day alone.
  */
 function occurrenceExclusions(rule: PageRecurrenceRule, head: PageSummary | undefined): string[] {
   return [
@@ -79,14 +64,10 @@ function occurrenceExclusions(rule: PageRecurrenceRule, head: PageSummary | unde
 }
 
 /**
- * Open occurrences from the head up to (not including) today, minus the one the
- * gesture named. The head is the oldest open occurrence, so it bounds the search
- * — and it is itself part of the backlog whenever the gesture pointed elsewhere,
- * which is why the window opens a millisecond before its day rather than at the
- * head's own instant.
- *
- * So the dialog calls these days "other", never "earlier": a tick lands on the
- * head, and every day left in this set is later than it.
+ * Open occurrences from the head up to (not including) today, minus the one the gesture named. The
+ * head is itself part of the backlog whenever the gesture pointed elsewhere, so the window opens a
+ * millisecond before its day rather than at the head's own instant. The dialog calls these days
+ * "other", never "earlier": a tick lands on the head, so every day left is later than it.
  */
 function missedBefore(
   rule: PageRecurrenceRule,
@@ -122,9 +103,8 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
   const lookup = usePageLookup();
   const [pending, setPending] = useState<PendingGap | null>(null);
 
-  /** A moved occurrence is an override row, not a gap: its original date is
-   *  excluded from the head's derivation, so it is neither open nor missed.
-   *  Synced-origin series only — a native move re-homes via a clone + EXDATE. */
+  /** A moved occurrence is an override row, not a gap: its original date is excluded from the
+   *  head's derivation. Synced-origin series only; a native move re-homes via a clone + EXDATE. */
   async function withoutMovedOccurrences(ruleId: string, dates: string[]): Promise<string[]> {
     const overrides: PageSchedule[] = await listOverridesForRules([ruleId]);
     const moved = new Set(
@@ -136,17 +116,15 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
   async function open(kind: GapKind, page: PageSummary): Promise<void> {
     const head = lookup(page.id);
     const rule = recurrenceRules.find((r) => r.pageId === page.id);
-    // Not a recurring series — the caller is wrong to route here. A tick still
-    // reaches the writer (which rejects it loudly); a dismissal has no series to
-    // write against and there is nothing to salvage.
+    // Not a recurring series, so the caller is wrong to route here. A tick still reaches the writer
+    // (which rejects it loudly); a dismissal has nothing to write against.
     if (!rule) {
       if (kind === "complete") void completeRecurringPage(page.id);
       return;
     }
     const gesturedDate = occurrenceDateOf(page) ?? dateKey(head?.scheduledStart ?? "");
 
-    // The dialog resolves a backlog, so only a gesture inside the backlog opens
-    // it: ticking next week's occurrence has nothing to do with last week's.
+    // Only a gesture inside the backlog opens the dialog.
     if (!gesturedDate || gesturedDate >= formatDateOnly(new Date())) return run(kind, page, "one");
 
     const candidates = missedBefore(rule, head, gesturedDate);
@@ -174,7 +152,6 @@ export function RecurringGapDialogProvider({ children }: { children: ReactNode }
   ): Promise<void> {
     if (kind === "delete") return dismiss(page, scope, missedDates);
 
-    // A synced-origin occurrence names itself; a head lets the backend derive it.
     const occurrence = occurrenceDateOf(page);
     const result =
       occurrence && page.scheduledStart

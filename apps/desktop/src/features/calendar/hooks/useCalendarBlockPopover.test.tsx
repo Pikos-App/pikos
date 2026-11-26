@@ -1,8 +1,3 @@
-// useCalendarBlockPopover — popover state + click-vs-double-click discrimination
-// for calendar blocks. Verifies: auto-open latching, force-close when right
-// panel is not calendar, click-delay open, double-click within delay,
-// drag-suppression, and timer cleanup on unmount.
-
 import { CLICK_DELAY } from "@pikos/core";
 import { act } from "@testing-library/react";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -127,7 +122,6 @@ describe("useCalendarBlockPopover — click discrimination", () => {
     act(() => result.current.handleClick(makeClickEvent()));
     expect(onDoubleClick).toHaveBeenCalledTimes(1);
 
-    // Advance well past CLICK_DELAY — popover should still be closed.
     await act(() => vi.advanceTimersByTime(CLICK_DELAY * 2));
     expect(result.current.popoverOpen).toBe(false);
   });
@@ -141,7 +135,6 @@ describe("useCalendarBlockPopover — click discrimination", () => {
     expect(result.current.popoverOpen).toBe(true);
     expect(onDoubleClick).not.toHaveBeenCalled();
 
-    // Close popover, then click again — onDoubleClick should still not fire.
     act(() => result.current.handlePopoverOpenChange(false));
     act(() => result.current.handleClick(makeClickEvent()));
     await act(() => vi.advanceTimersByTime(CLICK_DELAY));
@@ -176,7 +169,6 @@ describe("useCalendarBlockPopover — drag suppression", () => {
     releasePointer();
     act(() => result.current.handleClick(makeClickEvent()));
 
-    // No timer was queued; advancing time does not open the popover.
     await act(() => vi.advanceTimersByTime(CLICK_DELAY * 2));
     expect(result.current.popoverOpen).toBe(false);
     expect(onDoubleClick).not.toHaveBeenCalled();
@@ -259,7 +251,6 @@ describe("useCalendarBlockPopover — timer cleanup", () => {
     act(() => result.current.handleClick(makeClickEvent()));
     unmount();
 
-    // Past CLICK_DELAY: no errors, no double-fire.
     expect(() => vi.advanceTimersByTime(CLICK_DELAY * 2)).not.toThrow();
   });
 });

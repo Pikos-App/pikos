@@ -5,9 +5,8 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 
 /**
- * The shared recurring-aware status toggle. Centralised so a change to how a
- * completion is dispatched can't half-land across call sites — the divergence
- * that produced the synced-completion mis-route.
+ * The shared recurring-aware status toggle, centralised so a change to how a completion is
+ * dispatched can't half-land across call sites.
  */
 export function useRecurringStatusToggle(): (page: PageSummary, nextStatus: PageStatus) => void {
   const { maybeUncompleteRecurringClone, recurrenceRules, uncompleteRecurringOrFlip, updatePage } =

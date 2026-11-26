@@ -8,8 +8,8 @@ import { RecurrencePopover } from "./RecurrencePopover";
 
 afterEach(cleanup);
 
-// A Monday anchor keeps "on Fridays" / "on the 15th" off the generated presets.
-// It is also July's *first* Monday, so the by-position preset reads "1st Mon".
+// A Monday anchor keeps "on Fridays" / "on the 15th" off the presets and is July's first Monday,
+// so the by-position preset reads "1st Mon".
 const ANCHOR = "2026-07-06T09:00:00";
 // July 2026's last Monday — in the final seven days, so the ordinal is -1, not 4.
 const LAST_MONDAY = "2026-07-27T09:00:00";
@@ -58,8 +58,7 @@ describe("RecurrencePopover freq re-click", () => {
     renderPopover(MONTHLY_ON_FRIDAYS, onChange);
 
     openFreqMenu();
-    // Two "Month" buttons now: the menu trigger and the menu option. The option
-    // is the last in DOM order (nested portal appended after the trigger).
+    // Two "Month" buttons: the menu trigger and the option, which is last in DOM order.
     const monthButtons = screen.getAllByRole("button", { name: "Month" });
     const menuOption = monthButtons[monthButtons.length - 1];
     if (!menuOption) throw new Error("freq menu did not render a Month option");
@@ -196,8 +195,7 @@ describe("RecurrencePopover Ends editor", () => {
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYMONTHDAY=15"));
   });
 
-  // The Ends handler dropping BYSETPOS is what motivated locking it in the first place;
-  // unlocking is only safe while this holds.
+  // The Ends handler dropping BYSETPOS motivated locking it; unlocking is only safe while this holds.
   it("keeps a BYSETPOS position when the end condition changes", () => {
     const onChange = vi.fn();
     renderPopover(THIRD_FRIDAY_BYSETPOS, onChange);
@@ -219,10 +217,8 @@ describe("RecurrencePopover Ends editor", () => {
   });
 });
 
-// A read-only chip is still a button, and a button's cursor is a pointer unless it is
-// told otherwise — which on a calendar-owned page is the surface advertising an edit
-// it will refuse. The only way to learn the field was locked was to click and watch
-// nothing happen.
+// A read-only chip is still a button with a pointer cursor, which on a calendar-owned page
+// advertises an edit it will refuse.
 describe("read-only", () => {
   it("does not offer a pointer on a chip that refuses the edit", () => {
     render(

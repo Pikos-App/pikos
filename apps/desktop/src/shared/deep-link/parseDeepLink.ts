@@ -1,5 +1,3 @@
-// Parse pikos:// URLs into a typed action.
-//
 // Supported shapes:
 //   pikos://page/<uuid>            → navigate to a page
 //   pikos://today                  → smart view "Today"
@@ -11,7 +9,6 @@
 //
 // The staging build registers `pikos-staging://` instead, with the same shapes, so a link
 // meant for the installed app never opens staging. Unknown or malformed URLs return null.
-// The router treats null as a no-op.
 
 import type { SmartViewId } from "@pikos/core";
 
@@ -33,9 +30,8 @@ export function parseDeepLink(raw: string): DeepLinkAction | null {
   }
   if (url.protocol !== "pikos:" && url.protocol !== "pikos-staging:") return null;
 
-  // URL.host is empty for `pikos://today` on some implementations and `today`
-  // on others (host parsing differs across spec variants). Normalise by
-  // joining host + pathname and trimming separators.
+  // URL.host is empty for `pikos://today` on some implementations and `today` on others, so join
+  // host + pathname and trim separators.
   const path = `${url.host}${url.pathname}`.replace(/^\/+|\/+$/g, "");
   const segments = path.split("/").filter(Boolean);
   const [head, ...rest] = segments;

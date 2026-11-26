@@ -1,22 +1,13 @@
 import { createDocumentExtensions } from "@pikos/editor-schema";
-// An imported document must already be in the form the editor would produce.
-//
-// It was not. The import path assembled its own Tiptap extension list, which
-// had drifted from production — it omitted TabIndent, so imported documents
-// carried no `indent` attribute while every document the editor writes carries
-// `indent: 0` on each paragraph and heading. Opening an imported page and
-// typing a single character normalised the whole document, turning the first
-// keystroke into a full-document rewrite.
-//
-// Harmless enough on one machine. With a second client syncing, a first
-// keystroke that rewrites every block is a needlessly large change to
-// reconcile, and one whose cause is invisible at the point it happens.
+// An imported document must already be in the form the editor would produce. The import path once
+// assembled its own extension list that omitted TabIndent, so imports lacked the `indent: 0` every
+// edited document carries and the first keystroke rewrote the whole document, a needlessly large
+// change to reconcile with a second client syncing.
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 
 import { convertMarkdownToTiptap } from "./hooks/useImport";
 
-/** An editor with the production document schema. */
 function editor(): Editor {
   return new Editor({
     content: "",
@@ -24,7 +15,6 @@ function editor(): Editor {
   });
 }
 
-/** What the editor would store for this document. */
 function canonical(json: unknown): unknown {
   const e = editor();
   e.commands.setContent(json as object);
@@ -49,9 +39,8 @@ describe("imported documents are already canonical", () => {
 
   it.each(samples)("%s", (_name, markdown) => {
     const imported = JSON.parse(convertMarkdownToTiptap(markdown));
-    // Round-tripping through the editor must be a no-op. If it is not, the
-    // import path and the editor disagree about the document's shape, and the
-    // user's first edit will silently rewrite whatever differs.
+    // Round-tripping through the editor must be a no-op; otherwise the first edit silently rewrites
+    // whatever differs.
     expect(imported).toEqual(canonical(imported));
   });
 });

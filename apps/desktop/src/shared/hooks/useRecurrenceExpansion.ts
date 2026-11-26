@@ -20,23 +20,15 @@ type ListOverrides = (ruleIds: string[]) => Promise<PageSchedule[]>;
 
 interface ExpansionLoadParams {
   recurrenceRules: PageRecurrenceRule[];
-  /** The days currently visible in the week grid. */
   days: Date[];
-  /** Fetch the given rules' materialised override rows, regardless of where each
-   *  was moved. Keyed by rule (not range) so an override moved out of the visible
-   *  week still excludes its original slot — a range fetch misses it entirely. */
+  /** Keyed by rule, not range, so an override moved out of the visible week still excludes its original slot. */
   listOverridesForRules: ListOverrides;
-  /** Batched raw rrule expansion via the Rust engine (rule EXDATEs applied;
-   * completed/skip union NOT applied — that stays here, client-side). */
+  /** Batched raw expansion via the Rust engine: rule EXDATEs applied, completed/skip union not. */
   expandRecurrenceRange: ExpandRange;
-  /** Refetch trigger for an override row that moved in place. Such a move leaves
-   *  the range and the rule set identical, so nothing else below would refire. */
+  /** Refetch trigger for an override row that moved in place, which leaves the range and rule set identical. */
   overridesVersion?: number;
-  /** Days expanded beyond each side of `days`, so a step to the next or previous range
-   *  shows its occurrences at once instead of fetching them after the first paint. */
   margin?: number;
-  /** A hold that outlives the component, so a remount draws the occurrences it last showed in its
-   *  first frame instead of a round trip after the grid. Without one, each mount starts empty. */
+  /** Outlives the component, so a remount draws the occurrences it last showed in its first frame. */
   hold?: ExpansionHold | null;
 }
 
@@ -44,7 +36,6 @@ interface UseRecurrenceExpansionParams extends ExpansionLoadParams {
   pages: PageSummary[];
 }
 
-/** Raw occurrences by rule for `start` to `end`, expanded for `rulesKey`. */
 interface HeldExpansion {
   byRule: Map<string, RawOccurrence[]>;
   end: string;
@@ -55,8 +46,7 @@ interface HeldExpansion {
 const holds = (held: HeldExpansion | null, rulesKey: string, start: string, end: string) =>
   held !== null && held.rulesKey === rulesKey && held.start <= start && held.end >= end;
 
-/** The part of a held expansion from `start` to `end`. The engine places an occurrence in a
- *  range by its start, and local ISO strings order as their instants do. */
+/** The engine places an occurrence in a range by its start; local ISO strings order as their instants do. */
 function slice(held: HeldExpansion, start: string, end: string): Map<string, RawOccurrence[]> {
   if (held.start === start && held.end === end) return held.byRule;
   const out = new Map<string, RawOccurrence[]>();
@@ -78,13 +68,11 @@ const sameOccurrences = (a: RawOccurrence[], b: RawOccurrence[]) =>
       o.originalDate === b[i]!.originalDate
   );
 
-/** Identity over every field a block reads, not just the id: an in-place move keeps the row id. */
 const scheduleIdentity = (s: PageSchedule): string =>
   `${s.id}:${s.ruleId ?? ""}:${s.originalDate ?? ""}:${s.scheduledStart}:${s.scheduledEnd ?? ""}`;
 
 const NO_SCHEDULES: PageSchedule[] = [];
 
-/** One kind of fetch where only the latest started may land. */
 class LatestRequest {
   private inFlight: string | null = null;
   private token = 0;
@@ -106,11 +94,11 @@ class LatestRequest {
 
 /**
  * The expansion and override rows a surface holds, kept outside React state: a refill of the
- * margin re-renders nothing unless the occurrences on screen changed, where a state update
- * re-rendered a whole week to show the same blocks.
+ * margin re-renders nothing unless the occurrences on screen changed, where a state update would
+ * re-render a whole week to show the same blocks.
  *
  * Each fetch is skipped while the same one is in flight and dropped when a newer one supersedes
- * it, across every caller: the calendar's preload and the calendar itself fill one hold.
+ * it, across every caller.
  */
 export class ExpansionHold {
   private held: HeldExpansion | null = null;
@@ -129,7 +117,6 @@ export class ExpansionHold {
     return holds(this.held, rulesKey, start, end);
   }
 
-  /** Everything held, margin included; a new map each time the hold is refilled. */
   window = (): Map<string, RawOccurrence[]> | null => this.held?.byRule ?? null;
 
   overrides = (): PageSchedule[] => this.schedules;
@@ -182,8 +169,6 @@ export class ExpansionHold {
     for (const listener of this.listeners) listener();
   }
 
-  /** Occurrences from `start` to `end`, or the last held while that range loads; the same map
-   *  while its contents are. */
   read(rulesKey: string, start: string, end: string): Map<string, RawOccurrence[]> | null {
     if (!this.held) return null;
     const next = this.holds(rulesKey, start, end) ? slice(this.held, start, end) : this.held.byRule;
@@ -203,16 +188,13 @@ export class ExpansionHold {
 }
 
 /** Each series' occurrences as built, by head object: an occurrence keeps its object while its head
- *  and its times do, so a re-render, or a step to a week prepared while idle, reuses the times
- *  layout already parsed for it. A changed head is a new object and starts afresh. */
+ *  and times do, so a re-render reuses the layout already parsed for it. */
 const builtOccurrences = new WeakMap<PageSummary, Map<string, VirtualOccurrence>>();
-/** Occurrences kept per head before its map starts over, bounding a long scroll through years. */
 const KEPT_PER_HEAD = 400;
-/** How long after a week is shown its neighbours are prepared, where idle callbacks don't exist:
- *  past the frame being waited on, and well inside the time it takes to reach for the next step. */
+/** Delay before neighbours are prepared where idle callbacks don't exist: past the frame being
+ *  waited on, well inside the time it takes to reach for the next step. */
 const IDLE_FALLBACK_MS = 100;
 
-/** Run `work` once nothing is waiting on the main thread. */
 function whenIdle(work: () => void): () => void {
   if (typeof requestIdleCallback === "function") {
     const id = requestIdleCallback(work, { timeout: 1000 });
@@ -222,8 +204,7 @@ function whenIdle(work: () => void): () => void {
   return () => clearTimeout(id);
 }
 
-/** Day-keyed union of a series' completed and skipped occurrence dates. A synced
- * timed entry is stored as full wall-clock, so it must be day-keyed to match the
+/** A synced timed entry is stored as full wall-clock, so it must be day-keyed to match the
  * day-only occurrence key (see dateKey). */
 function completedOrSkippedKeys(page: PageSummary): Set<string> {
   return new Set(
@@ -233,7 +214,6 @@ function completedOrSkippedKeys(page: PageSummary): Set<string> {
   );
 }
 
-/** The first page with each id, the one `pages.find` would return. */
 function indexById(pages: PageSummary[]): Map<string, PageSummary> {
   const byId = new Map<string, PageSummary>();
   for (const p of pages) {
@@ -253,13 +233,11 @@ function overridesByRule(overrideSchedules: PageSchedule[]): Map<string, PageSch
   return byRule;
 }
 
-/** Applies the client-side exclusion union (completed ∪ skip ∪ materialised
- * overrides), the own-date head suppression, and a synced series' render floor
- * to a rule's raw occurrences, shaping each survivor into a VirtualOccurrence.
+/** Applies the exclusion union (completed, skip, materialised overrides), the own-date head
+ * suppression, and a synced series' render floor to a rule's raw occurrences.
  *
- * The floor is the only bound on how far back expansion reaches — the range
- * alone would paint a synced series into any past week the user navigates to.
- * See `PageSummary.syncedSince`. */
+ * The floor is the only bound on how far back expansion reaches: the range alone would paint a
+ * synced series into any past week. See `PageSummary.syncedSince`. */
 function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
@@ -270,10 +248,9 @@ function toVirtuals(
   for (const s of ruleOverrides) {
     if (s.originalDate) excluded.add(dateKey(s.originalDate));
   }
-  // Only the head's own date is suppressed (the head block already renders it).
-  // Other pre-head dates need no filter: a head move shifts the rule anchor so
-  // vacated dates stop being emitted, and completion/skip lands them in the
-  // exclusion union above. A date that's neither is a genuine open gap and stays visible.
+  // Only the head's own date is suppressed. A head move shifts the rule anchor so vacated dates stop
+  // being emitted, and completion/skip lands in the exclusion union, so any other date is a
+  // genuine open gap and stays visible.
   const headDate = page.scheduledStart?.slice(0, 10);
   let built = builtOccurrences.get(page);
   if (!built || built.size > KEPT_PER_HEAD) {
@@ -303,28 +280,20 @@ function toVirtuals(
   return out;
 }
 
-/** A moved synced occurrence, shaped from its series page + the override row's
- * schedule. Deliberately not a `VirtualOccurrence` (no `isVirtual`), so it
- * renders the page's own treatment — checkbox, sync icon, popover — instead of
- * the recurring glyph; it reads as a real, completable event. `originalDate`
- * (day-key) is the *original* occurrence for the completion key and reminder
- * derivation, not the day it moved to. */
+/** Deliberately not a `VirtualOccurrence` (no `isVirtual`), so it renders the page's own
+ * treatment instead of the recurring glyph. `originalDate` (day-key) is the *original*
+ * occurrence for the completion key and reminder derivation, not the day it moved to. */
 type OverrideBlock = PageSummary & { originalDate: string };
 
-/** Shapes each synced override row into a completable block at its moved time,
- * carrying the page's own lock state — locked while actively synced, unlocked
- * once detached, since a detached series is the user's.
+/** Locked while actively synced, unlocked once detached, since a detached series is the user's.
  *
- * Gated on sync *origin*, not lock state: only a synced series has override rows
- * at all (a native reschedule re-homes via a clone + exdate and never writes
- * one), so `syncState` is the predicate that matches the invariant. Gating on
- * `scheduleLocked` — which is `sync_state = 'active'` alone — dropped a detached
- * series' moved instance from the calendar entirely, because `toVirtuals` goes on
- * suppressing its original slot regardless of lock state.
+ * Gated on sync *origin*, not lock state: only a synced series has override rows (a native
+ * reschedule re-homes via a clone + exdate), and `scheduleLocked` is `sync_state = 'active'`
+ * alone, so gating on it would drop a detached series' moved instance entirely while `toVirtuals`
+ * still suppresses its original slot.
  *
- * Excludes an override whose original occurrence is already completed or skipped
- * (the done clone renders instead — a rendered override beside it would double
- * the slot). */
+ * Excludes an override whose original occurrence is completed or skipped: the done clone renders
+ * instead, and an override beside it would double the slot. */
 function toOverrideBlocks(
   rules: PageRecurrenceRule[],
   pageById: Map<string, PageSummary>,
@@ -353,8 +322,6 @@ function toOverrideBlocks(
   return out;
 }
 
-/** Fetches a surface's override rows and its expansion into `expansion`, and says which range and
- *  rule set it reads them for. */
 function useExpansionLoads(
   {
     days,
@@ -374,8 +341,8 @@ function useExpansionLoads(
   const fetchStart = rangeStartDate ? formatDateOnly(addDays(rangeStartDate, -margin)) : null;
   const fetchEnd = rangeEndDate ? formatDateOnly(addDays(rangeEndDate, margin)) : null;
   const ruleCount = recurrenceRules.length;
-  // Stable key over the fields that change a rule's raw expansion, so the IPC
-  // effect refires on a rule edit/add/remove but not on unrelated page changes.
+  // Stable key over the fields that change a rule's raw expansion, so a rule edit refires the IPC
+  // effect but unrelated page changes don't.
   const rulesKey = recurrenceRules
     .map(
       (r) =>
@@ -383,9 +350,8 @@ function useExpansionLoads(
     )
     .join("|");
 
-  // Fetch depends only on the rule set (position-independent), so `rulesKey`
-  // drives it. Range stays in the deps as a cheap refetch-on-nav safety net for
-  // an override changed out-of-band since the last rule edit — one batched call.
+  // Fetch depends only on the rule set; range stays in the deps as a cheap refetch-on-nav safety
+  // net for an override changed out-of-band.
   useEffect(() => {
     if (!expansion || !startStr || !endStr || ruleCount === 0) return;
 
@@ -406,30 +372,22 @@ function useExpansionLoads(
   return { endStr, rulesKey, startStr };
 }
 
-/** Fills `hold` for a surface that is mounted but hidden, where its own effects don't run, so it
- *  first shows with its occurrences already drawn. */
 export function usePreloadRecurrenceExpansion(params: ExpansionLoadParams): void {
   useExpansionLoads(params, params.hold ?? null);
 }
 
 /**
- * Returns pages merged with virtual rrule occurrences for the visible range, so
- * a surface renders both identically — the calendar grid over its week, the
- * Today list over the one day it shows. Expansion runs in the Rust engine over
- * IPC (stale-while-revalidate); the completed/skip exclusion union and the head
- * suppression stay synchronous and client-side, so a completion reflects on the
- * next render without waiting for a round-trip. Virtual occurrences carry
- * `isVirtual: true` for downstream identification.
+ * Returns pages merged with virtual rrule occurrences for the visible range. The exclusion union
+ * and head suppression stay synchronous and client-side, so a completion shows on the next
+ * render without a round-trip. Virtual occurrences carry `isVirtual: true`.
  */
 export function useRecurrenceExpansion(
   params: UseRecurrenceExpansionParams
 ): (PageSummary | VirtualOccurrence)[] {
   const { days, hold, margin = 0, pages, recurrenceRules } = params;
 
-  // Empty until the first IPC batch resolves. Kept across a range change
-  // (stale-while-revalidate) so an overlapping or day-step nav keeps showing
-  // virtuals while the next batch is in flight; a jump past the margin still
-  // renders without them for a frame (accepted).
+  // Kept across a range change so a day-step nav keeps showing virtuals while the next batch is in
+  // flight; a jump past the margin renders without them for a frame.
   const [ownHold] = useState(() => new ExpansionHold());
   const expansion = hold ?? ownHold;
   const { endStr, rulesKey, startStr } = useExpansionLoads(params, expansion);
@@ -440,8 +398,6 @@ export function useRecurrenceExpansion(
   const heldWindow = useSyncExternalStore(expansion.subscribe, expansion.window);
   const overrideSchedules = useSyncExternalStore(expansion.subscribe, expansion.overrides);
 
-  // With a margin, the weeks either side are built and their times parsed while idle, so a step
-  // to one lays out occurrences it has already met.
   useEffect(() => {
     if (margin === 0 || !heldWindow) return;
     return whenIdle(() => {
@@ -456,11 +412,9 @@ export function useRecurrenceExpansion(
     });
   }, [heldWindow, pages]);
 
-  // Suppress a recurring head block when its own date is completed or skipped. The
-  // head only stays on such a date when nothing after it is open: a series ticked
-  // through to its end, or an out-of-envelope rule recompute can't advance. Drawn,
-  // it renders next to its done clone, or where the person dismissed the meeting.
-  // Computed before the empty-rules early return so it's hidden before rules load.
+  // The head only stays on a completed or skipped date when nothing after it is open (a series
+  // ticked to its end, or a rule the recompute can't advance); drawn, it would sit beside its done
+  // clone. Computed before the empty-rules early return so it's hidden before rules load.
   const headSpent = (p: PageSummary): boolean => {
     const baseDate = p.scheduledStart?.slice(0, 10);
     return !!(baseDate && completedOrSkippedKeys(p).has(baseDate));
@@ -471,9 +425,6 @@ export function useRecurrenceExpansion(
 
   if (!days[0] || !days[days.length - 1]) return visiblePages;
 
-  // Before the first batch resolves: render pages only for this frame; virtuals
-  // appear once the batch lands (a one-frame cold-mount cost vs the old
-  // synchronous expansion).
   if (rawExpansion === null) return visiblePages;
 
   const pageById = indexById(pages);
@@ -482,15 +433,13 @@ export function useRecurrenceExpansion(
   for (const rule of recurrenceRules) {
     const page = pageById.get(rule.pageId);
     if (!page) continue;
-    // The batch omits a rule the engine rejects (out-of-envelope) — such a
-    // series renders no virtuals; there is no second engine to fall back to.
+    // The batch omits a rule the engine rejects: that series renders no virtuals, and there is no
+    // second engine to fall back to.
     const raw = rawExpansion.get(rule.id);
     if (!raw) continue;
     allVirtual.push(...toVirtuals(raw, page, rule, ruleOverrides.get(rule.id) ?? []));
   }
 
-  // A synced override's original slot is already excluded from the virtuals
-  // above; render the moved instance at its new slot beside them.
   const overrideBlocks = toOverrideBlocks(recurrenceRules, pageById, overrideSchedules);
 
   if (allVirtual.length === 0 && overrideBlocks.length === 0) return visiblePages;

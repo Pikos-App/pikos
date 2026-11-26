@@ -1,7 +1,6 @@
-// The two pieces of quick-add that reach past the page row itself: the reminder
-// rows a parsed lead writes, and the body a "//" separator fills in. Both are
-// asserted against the adapter, because that is where they land — the dialog
-// closes immediately and has no state left to inspect.
+// The quick-add pieces that reach past the page row: the reminder rows a parsed lead writes, and
+// the body a "//" separator fills in. Asserted against the adapter, since the dialog closes at once
+// and has no state left to inspect.
 
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -30,7 +29,6 @@ function Harness() {
   );
 }
 
-/** Opens the dialog, types `text`, and commits it with Enter. */
 async function quickAdd(text: string) {
   renderWithProviders(
     <AppSettingsProvider>
@@ -80,7 +78,6 @@ describe("QuickAddDialog — parsed reminders", () => {
     await quickAdd("Call mom remind 30m before");
 
     await waitFor(() => expect(createPage).toHaveBeenCalledOnce());
-    // The words stayed in the title, exactly as the parser left them.
     expect(createPage.mock.calls[0]![0].title).toBe("Call mom remind 30m before");
     expect(createReminder).not.toHaveBeenCalled();
   });
