@@ -85,7 +85,9 @@ impl CalendarProvider for Scripted {
         _since: Option<SyncToken>,
     ) -> AppResult<SyncDelta> {
         if self.rejected {
-            return Err(AppError::Invalid("the calendar refused the credentials".into()));
+            return Err(AppError::Invalid(
+                "the calendar refused the credentials".into(),
+            ));
         }
         Ok(self
             .deltas
