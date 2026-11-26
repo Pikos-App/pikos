@@ -821,16 +821,17 @@ reconciler does when the _provider_ changes something, and the account-level ope
 the Calendar Sync panel. Origin columns don't fit account ops, so that table is per
 provider.
 
-| Upstream event arrives                                  | Native | Synced                                                                          | Detached    | CLI | iOS                              | iCloud                                  |
-| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------- | ----------- | --- | -------------------------------- | --------------------------------------- |
-| Edit (title / time / location)                          | —      | ✅ mirror updates in place ⁶⁹                                                   | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
-| Rewrite of a series' rule                               | —      | ✅ completed/skip sets survive ⁷¹                                               | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Cancel of one instance                                  | —      | ✅ EXDATE — the slot empties ⁷²                                                 | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Delete of the event / series                            | —      | ⚠️ detach if owned, else hard-delete ⁷²                                         | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
-| A series that ended before the sync window, a week back | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷²  | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| A series edited "this and following"                    | —      | ✅ ticks and skips from that day on follow the rest, when it keeps the title ⁷¹ | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| A copy of one instance at its own time                  | —      | ✅ no override row, so one block ⁴⁴                                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
-| Description change                                      | —      | ⚠️ silent refresh vs notice ⁷³                                                  | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
+| Upstream event arrives                                          | Native | Synced                                                                          | Detached    | CLI | iOS                              | iCloud                                  |
+| --------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------- | ----------- | --- | -------------------------------- | --------------------------------------- |
+| Edit (title / time / location)                                  | —      | ✅ mirror updates in place ⁶⁹                                                   | — frozen ⁷⁰ | —   | ✅ on the next manual sync       | — each device polls its own             |
+| Rewrite of a series' rule                                       | —      | ✅ completed/skip sets survive ⁷¹                                               | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Cancel of one instance                                          | —      | ✅ EXDATE — the slot empties ⁷²                                                 | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Delete of the event / series                                    | —      | ⚠️ detach if owned, else hard-delete ⁷²                                         | — ⁷⁰        | —   | ⚠️ same, on the next manual sync | ⚠️ an owned page detaches, then travels |
+| A series that ended before the sync window, a week back         | —      | ✅ not mirrored; one already stored goes on the next pass as a delete would ⁷²  | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A one-off over before the sync window, sent by a resumed cursor | —      | ✅ no new page; one already stored still updates ⁷²                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A series edited "this and following"                            | —      | ✅ ticks and skips from that day on follow the rest, when it keeps the title ⁷¹ | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| A copy of one instance at its own time                          | —      | ✅ no override row, so one block ⁴⁴                                             | — ⁷⁰        | —   | ✅ same                          | — each device polls its own             |
+| Description change                                              | —      | ⚠️ silent refresh vs notice ⁷³                                                  | — ⁷⁰        | —   | ⚠️ same                          | — each device polls its own             |
 
 ⁶⁸ `pikos mcp` speaks Model Context Protocol on stdio so an agent can drive the workspace:
 search / read / list / create / update pages, set status, complete (one occurrence of a
@@ -857,7 +858,11 @@ ticks stay on the ended page.
 ⁷² The wire shape is identical for "one instance cancelled" and "event deleted"; the recurrence
 ref discriminates (`RECURRENCE-ID` / `recurringEventId` present → EXDATE on the series; absent
 → lifecycle removal). Ownership = completed, `user_modified`, or user content: owned detaches
-in place, a bare mirror hard-deletes.
+in place, a bare mirror hard-deletes. Neither provider's incremental cursor is windowed, so
+after a long gap a resumed one can send events of any age that changed upstream: Google did,
+for a work calendar re-authorised after two weeks, with one-offs from a year back. A one-off
+over before the window gets no page from an incremental pass. A full enumerate's own query is
+windowed already.
 ⁷³ A Google description saved as HTML reads as the text Google shows for it; plain text is
 kept as written. Each web address in a seeded body is a link. A seeded body the user never
 edited refreshes silently (hash match on `content_text`); an

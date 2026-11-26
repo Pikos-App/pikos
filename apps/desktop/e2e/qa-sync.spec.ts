@@ -506,6 +506,38 @@ appTest(
 );
 
 appTest(
+  "a resumed sync brings no page for a one-off that was over before the window",
+  { tag: ["@SYNC-39"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge's scripted calendar server");
+    await seedSynced(app);
+    const t = (days: number, hm: string) => stamp(app, days, hm);
+    // What Google handed back after a re-authorisation: an event from over a year ago that
+    // it reported as changed, beside one still ahead.
+    await upstream(app, "upstream_sync", {
+      calendar: "Personal",
+      events: [
+        {
+          end: await t(-400, "10:00"),
+          start: await t(-400, "09:00"),
+          timezone: "UTC",
+          title: "Planning from last year",
+        },
+        {
+          end: await t(1, "10:00"),
+          start: await t(1, "09:00"),
+          timezone: "UTC",
+          title: "Planning tomorrow",
+        },
+      ],
+    });
+    await openCalendarFolder(app, "Personal");
+    await expect(rows(app, "Planning tomorrow")).toHaveCount(1);
+    await expect(rows(app, "Planning from last year")).toHaveCount(0);
+  }
+);
+
+appTest(
   "a synced virtual resolves alone, and a moved instance is removed from Pikos alone",
   { tag: ["@SYNC-20"] },
   async ({ app }) => {

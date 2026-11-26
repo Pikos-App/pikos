@@ -4626,6 +4626,81 @@ async fn a_series_whose_last_meeting_opens_the_window_still_syncs() {
     );
 }
 
+/// A one-off `days` from today, an hour long, in UTC.
+fn one_off_on(days: i64, etag: &str) -> UpsertItem {
+    let day = (chrono::Local::now() + chrono::Duration::days(days)).format("%Y-%m-%d");
+    single(
+        core("/one-off.ics", "uid-one-off", etag, "Quarterly planning"),
+        timed(
+            &format!("{day}T09:00:00"),
+            Some(&format!("{day}T10:00:00")),
+            "UTC",
+        ),
+    )
+}
+
+// qa: SYNC-39:1
+#[tokio::test]
+async fn a_one_off_over_before_the_window_gets_no_page_from_a_resumed_cursor() {
+    let pool = setup().await;
+    let outcome = reconcile(&pool, &ctx_now(), &delta(vec![one_off_on(-400, "v1")]))
+        .await
+        .unwrap();
+    assert_eq!(outcome.applied, 0);
+    assert_eq!(page_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn a_full_enumerate_mirrors_the_one_offs_its_own_query_returned() {
+    // The provider's query is windowed already, so whatever it sends is in reach.
+    let pool = setup().await;
+    let full = SyncDelta {
+        full_enumerate: true,
+        ..delta(vec![one_off_on(-400, "v1")])
+    };
+    reconcile(&pool, &ctx_now(), &full).await.unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+#[tokio::test]
+async fn a_one_off_inside_the_window_still_gets_its_page() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx_now(), &delta(vec![one_off_on(-2, "v1")]))
+        .await
+        .unwrap();
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+// qa: SYNC-39:2
+#[tokio::test]
+async fn a_stored_one_off_that_has_since_aged_out_still_takes_a_change() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![one_off_on(-30, "v1")]))
+        .await
+        .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    let renamed = match one_off_on(-30, "v2") {
+        UpsertItem::Event(ev) => UpsertItem::Event(EventUpsert {
+            core: core(
+                "/one-off.ics",
+                "uid-one-off",
+                "v2",
+                "Quarterly planning (moved room)",
+            ),
+            ..ev
+        }),
+        UpsertItem::Occurrence(_) => unreachable!(),
+    };
+    reconcile(&pool, &ctx_now(), &delta(vec![renamed]))
+        .await
+        .unwrap();
+    assert_eq!(
+        page_title(&pool, &page_id).await,
+        "Quarterly planning (moved room)"
+    );
+}
+
 // qa: SYNC-31:3
 #[tokio::test]
 async fn ended_series_stored_by_an_earlier_build_go_on_the_next_pass() {

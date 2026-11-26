@@ -98,7 +98,7 @@ pub async fn reconcile(
     let mut written = Vec::new();
     for item in &delta.upserts {
         if let UpsertItem::Event(ev) = item {
-            if let Some(page_id) = apply_event(&mut tx, ctx, ev).await? {
+            if let Some(page_id) = apply_event(&mut tx, ctx, ev, delta.full_enumerate).await? {
                 outcome.applied += 1;
                 written.push(page_id);
             }
@@ -133,6 +133,7 @@ async fn apply_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     ev: &EventUpsert,
+    full_enumerate: bool,
 ) -> AppResult<Option<String>> {
     let mut existing = sqlx::query_as::<_, (String, String, Option<String>, String, bool)>(
         "SELECT ps.id, ps.page_id, ps.etag, ps.sync_state, p.deleted_at IS NOT NULL
@@ -172,6 +173,11 @@ async fn apply_event(
             }
             _ => Ok(None),
         };
+    }
+
+    // A full enumerate is already windowed by the provider's own query.
+    if !full_enumerate && existing.is_none() && one_off_ended_before_window(ev, ctx.window_start) {
+        return Ok(None);
     }
 
     let now = now_iso();
@@ -418,6 +424,23 @@ async fn move_occurring_dates(
         }
     }
     Ok(moved)
+}
+
+/// Whether a one-off event was over before `window`, the first day the sync reaches.
+///
+/// Neither provider's incremental cursor is windowed, so a resumed one hands over every
+/// event changed upstream since it was stored, of any age, where a full enumerate asks
+/// only from the window on. After a re-authorisation two weeks on, Google sent a work
+/// calendar's one-offs from a year and more back, and each became an open page at its
+/// own date. Only a new page is refused. One already stored
+/// was mirrored while it was in reach, and still takes the change.
+fn one_off_ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
+    if ev.recurrence.is_some() {
+        return false;
+    }
+    let last = ev.schedule.end.as_deref().unwrap_or(&ev.schedule.start);
+    let last = date_key(last);
+    last.len() == 8 && last < window.format("%Y%m%d").to_string()
 }
 
 /// Whether a series ran out before `window`, the first day the sync reaches: no occurrence
