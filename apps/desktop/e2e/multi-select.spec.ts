@@ -9,58 +9,45 @@ async function createPages(app: Page, titles: string[]) {
   }
 }
 
-// ─── Cmd+Click ─────────────────────────────────────────────────────────────
+appTest("multi-select pages with Cmd+Click", { tag: ["@LIST-09:12"] }, async ({ app }) => {
+  await createPages(app, ["alpha page", "beta page", "gamma page"]);
 
-appTest(
-  "multi-select pages with Cmd+Click",
-  { tag: ["@LIST-09:12"] },
-  async ({ app }) => {
-    await createPages(app, ["alpha page", "beta page", "gamma page"]);
+  const list = app.locator("[data-page-list-item]");
+  const alpha = list.filter({ hasText: "alpha page" });
+  const beta = list.filter({ hasText: "beta page" });
+  const gamma = list.filter({ hasText: "gamma page" });
 
-    const list = app.locator("[data-page-list-item]");
-    const alpha = list.filter({ hasText: "alpha page" });
-    const beta = list.filter({ hasText: "beta page" });
-    const gamma = list.filter({ hasText: "gamma page" });
+  await alpha.click();
+  await expect(alpha).toHaveAttribute("data-active", "true");
 
-    await alpha.click();
-    await expect(alpha).toHaveAttribute("data-active", "true");
+  await beta.click({ modifiers: ["Meta"] });
+  await expect(beta).toHaveAttribute("data-selected", "true");
 
-    await beta.click({ modifiers: ["Meta"] });
-    await expect(beta).toHaveAttribute("data-selected", "true");
+  await gamma.click({ modifiers: ["Meta"] });
+  await expect(gamma).toHaveAttribute("data-selected", "true");
 
-    await gamma.click({ modifiers: ["Meta"] });
-    await expect(gamma).toHaveAttribute("data-selected", "true");
+  await beta.click({ modifiers: ["Meta"] });
+  await expect(beta).not.toHaveAttribute("data-selected", "true");
+  await expect(gamma).toHaveAttribute("data-selected", "true");
+});
 
-    await beta.click({ modifiers: ["Meta"] });
-    await expect(beta).not.toHaveAttribute("data-selected", "true");
-    await expect(gamma).toHaveAttribute("data-selected", "true");
-  }
-);
+appTest("multi-select range with Shift+Click", { tag: ["@LIST-09:12"] }, async ({ app }) => {
+  await createPages(app, ["range-a", "range-b", "range-c", "range-d"]);
 
-// ─── Shift+Click range ─────────────────────────────────────────────────────
+  const list = app.locator("[data-page-list-item]");
+  const rangeA = list.filter({ hasText: "range-a" });
+  const rangeB = list.filter({ hasText: "range-b" });
+  const rangeC = list.filter({ hasText: "range-c" });
+  const rangeD = list.filter({ hasText: "range-d" });
 
-appTest(
-  "multi-select range with Shift+Click",
-  { tag: ["@LIST-09:12"] },
-  async ({ app }) => {
-    await createPages(app, ["range-a", "range-b", "range-c", "range-d"]);
+  await rangeA.click();
+  await rangeC.click({ modifiers: ["Shift"] });
 
-    const list = app.locator("[data-page-list-item]");
-    const rangeA = list.filter({ hasText: "range-a" });
-    const rangeB = list.filter({ hasText: "range-b" });
-    const rangeC = list.filter({ hasText: "range-c" });
-    const rangeD = list.filter({ hasText: "range-d" });
-
-    // Plain click sets the range anchor; Shift+Click extends a→c.
-    await rangeA.click();
-    await rangeC.click({ modifiers: ["Shift"] });
-
-    await expect(rangeA).toHaveAttribute("data-selected", "true");
-    await expect(rangeB).toHaveAttribute("data-selected", "true");
-    await expect(rangeC).toHaveAttribute("data-selected", "true");
-    await expect(rangeD).not.toHaveAttribute("data-selected");
-  }
-);
+  await expect(rangeA).toHaveAttribute("data-selected", "true");
+  await expect(rangeB).toHaveAttribute("data-selected", "true");
+  await expect(rangeC).toHaveAttribute("data-selected", "true");
+  await expect(rangeD).not.toHaveAttribute("data-selected");
+});
 
 appTest(
   "Shift+Click in a folder ranges from the last Cmd-clicked page, not the open one",
@@ -106,29 +93,23 @@ appTest(
   }
 );
 
-// ─── Escape clears selection ───────────────────────────────────────────────
+appTest("Escape clears multi-selection", { tag: ["@LIST-09:12"] }, async ({ app }) => {
+  await createPages(app, ["esc-page-1", "esc-page-2"]);
 
-appTest(
-  "Escape clears multi-selection",
-  { tag: ["@LIST-09:12"] },
-  async ({ app }) => {
-    await createPages(app, ["esc-page-1", "esc-page-2"]);
+  const list = app.locator("[data-page-list-item]");
+  const page1 = list.filter({ hasText: "esc-page-1" });
+  const page2 = list.filter({ hasText: "esc-page-2" });
 
-    const list = app.locator("[data-page-list-item]");
-    const page1 = list.filter({ hasText: "esc-page-1" });
-    const page2 = list.filter({ hasText: "esc-page-2" });
+  await page1.click();
+  await page2.click({ modifiers: ["Shift"] });
+  await expect(page1).toHaveAttribute("data-selected", "true");
+  await expect(page2).toHaveAttribute("data-selected", "true");
 
-    await page1.click();
-    await page2.click({ modifiers: ["Shift"] });
-    await expect(page1).toHaveAttribute("data-selected", "true");
-    await expect(page2).toHaveAttribute("data-selected", "true");
+  await app.keyboard.press("Escape");
 
-    await app.keyboard.press("Escape");
-
-    await expect(page1).not.toHaveAttribute("data-selected");
-    await expect(page2).not.toHaveAttribute("data-selected");
-  }
-);
+  await expect(page1).not.toHaveAttribute("data-selected");
+  await expect(page2).not.toHaveAttribute("data-selected");
+});
 
 appTest(
   "Cmd+Click keeps every page it adds selected",
@@ -167,8 +148,6 @@ appTest(
   }
 );
 
-// ─── Cmd+A selects all visible ─────────────────────────────────────────────
-
 appTest("Cmd+A selects all visible pages", async ({ app }) => {
   await createPages(app, ["sel-all-1", "sel-all-2", "sel-all-3"]);
 
@@ -180,8 +159,6 @@ appTest("Cmd+A selects all visible pages", async ({ app }) => {
   await expect(items).toHaveCount(3);
 });
 
-// ─── Cmd+A then Space toggles all selected ────────────────────────────────
-
 appTest(
   "Cmd+A then Space marks all selected pages as completed",
   { tag: ["@LIST-09:12"] },
@@ -192,8 +169,6 @@ appTest(
     const list = app.locator("[data-page-list-item]");
     const selected = app.locator("[data-page-list-item][data-selected=true]");
 
-    // Drop focus to <body> — this is the regression scenario where the inline
-    // onKeyDown handler used to miss Space because the list panel wasn't focused.
     await app.locator("body").click({ position: { x: 0, y: 0 } });
     await app.keyboard.press(mod("Mod+a"));
 
@@ -201,19 +176,14 @@ appTest(
 
     await app.keyboard.press("Space");
 
-    // All three pages should leave the visible (non-completed) list.
     for (const title of titles) {
       await expect(list.filter({ hasText: title })).not.toBeVisible();
     }
 
-    // Selection should have been cleared by the toggle.
     await expect(selected).toHaveCount(0);
 
-    // ...and every page is actually COMPLETED, not merely hidden — all three
-    // surface in the Completed accordion with a "Mark not done" checkbox. This is
-    // the core "complete ALL" guarantee: the bug dropped some completions to a
-    // write-write race so they silently stayed open (QA §4). The bulk write does
-    // every flip in one transaction, so none are left behind.
+    // Every page is COMPLETED, not just hidden: all three show in the Completed accordion.
+    // The bulk write flips them in one transaction, so none stay open.
     await app.getByRole("button", { exact: true, name: "Completed" }).click();
     for (const title of titles) {
       const item = list.filter({ hasText: title });
@@ -223,93 +193,63 @@ appTest(
   }
 );
 
-// ─── Cmd+A → Space completes all even with a folder row focused ─────────────
-//
-// The real user flow: click a folder in the sidebar, Cmd+A, Space. The folder
-// row is role="button", so clicking it leaves focus there — and Space's `when`
-// gate used to stand down for any focused interactive control, letting the
-// folder row swallow the key (its own Enter/Space re-selects the folder) so
-// nothing completed. Cmd+A now moves focus onto the (non-interactive) list, so
-// the selection owns Space. The `body`-click test above sidesteps this by
-// blurring first; this one keeps the folder focused on purpose.
+appTest("Cmd+A then Space completes all with the folder row focused", async ({ app }) => {
+  await createFolder(app, "Bulk QA");
+  const titles = ["folder-bulk-1", "folder-bulk-2", "folder-bulk-3"];
+  await createPages(app, titles);
 
-appTest(
-  "Cmd+A then Space completes all with the folder row focused",
-  async ({ app }) => {
-    await createFolder(app, "Bulk QA");
-    const titles = ["folder-bulk-1", "folder-bulk-2", "folder-bulk-3"];
-    await createPages(app, titles);
+  const list = app.locator("[data-page-list-item]");
+  const selected = app.locator("[data-page-list-item][data-selected=true]");
 
-    const list = app.locator("[data-page-list-item]");
-    const selected = app.locator("[data-page-list-item][data-selected=true]");
+  // Focus on the folder row (role="button") must not swallow Space: Cmd+A moves focus onto
+  // the list, so the selection owns the key.
+  await app
+    .getByRole("group", { name: "Views and folders" })
+    .getByRole("button", { exact: true, name: "Bulk QA" })
+    .click();
 
-    // Click the folder row so focus lands on it (role="button") — the exact
-    // condition that used to eat Space.
-    await app
-      .getByRole("group", { name: "Views and folders" })
-      .getByRole("button", { exact: true, name: "Bulk QA" })
-      .click();
+  await app.keyboard.press(mod("Mod+a"));
+  await expect(selected).toHaveCount(3);
 
-    await app.keyboard.press(mod("Mod+a"));
-    await expect(selected).toHaveCount(3);
+  await app.keyboard.press("Space");
 
-    await app.keyboard.press("Space");
-
-    // All three leave the active list and land in Completed — none swallowed.
-    for (const title of titles) {
-      await expect(list.filter({ hasText: title })).not.toBeVisible();
-    }
-    await expect(selected).toHaveCount(0);
+  for (const title of titles) {
+    await expect(list.filter({ hasText: title })).not.toBeVisible();
   }
-);
+  await expect(selected).toHaveCount(0);
+});
 
-// ─── Bulk complete partitions recurring pages out of the flip ──────────────
-//
-// A multi-selection can mix plain and recurring pages. Recurring completion
-// clones the head + advances it (completeRecurringPage) — it must NOT be a
-// plain status flip, which would mark the head done and corrupt the series.
-// This guards `toggleSelected`'s partition end to end: plain pages flow through
-// the transactional bulk write; the recurring head advances and stays open.
+appTest("Cmd+A then Space completes plain pages but advances a recurring one", async ({ app }) => {
+  await createPages(app, ["bulk-plain-1", "bulk-plain-2"]);
 
-appTest(
-  "Cmd+A then Space completes plain pages but advances a recurring one",
-  async ({ app }) => {
-    await createPages(app, ["bulk-plain-1", "bulk-plain-2"]);
+  // A daily series anchored today has no missed-day gap, so completion skips the dialog.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+    timeout: 2000,
+  });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
 
-    // A daily recurring head, anchored today → no missed-day gap, so completion
-    // fast-paths (no dialog). Mirrors recurring.spec's quick-add setup.
-    await app.keyboard.press(mod("Mod+n"));
-    const dialog = app.getByRole("dialog", { name: "Quick add" });
-    await expect(dialog).toBeVisible();
-    await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
-    await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
-      timeout: 2000,
-    });
-    await app.keyboard.press("Enter");
-    await expect(dialog).not.toBeVisible();
+  const list = app.locator("[data-page-list-item]");
+  const selected = app.locator("[data-page-list-item][data-selected=true]");
 
-    const list = app.locator("[data-page-list-item]");
-    const selected = app.locator("[data-page-list-item][data-selected=true]");
+  await app.locator("body").click({ position: { x: 0, y: 0 } });
+  await app.keyboard.press(mod("Mod+a"));
+  await expect(selected).toHaveCount(3);
 
-    await app.locator("body").click({ position: { x: 0, y: 0 } });
-    await app.keyboard.press(mod("Mod+a"));
-    await expect(selected).toHaveCount(3);
+  await app.keyboard.press("Space");
 
-    await app.keyboard.press("Space");
+  await expect(list.filter({ hasText: "bulk-plain-1" })).not.toBeVisible();
+  await expect(list.filter({ hasText: "bulk-plain-2" })).not.toBeVisible();
 
-    await expect(list.filter({ hasText: "bulk-plain-1" })).not.toBeVisible();
-    await expect(list.filter({ hasText: "bulk-plain-2" })).not.toBeVisible();
-
-    // The recurring head was NOT plain-completed: it advances to the next
-    // occurrence and stays OPEN in the list. A regression that lumped recurring
-    // pages into the bulk status flip would mark it done and remove it here.
-    const standup = list.filter({ hasText: "standup" });
-    await expect(standup).toHaveCount(1);
-    await expect(standup.getByRole("checkbox", { name: /Mark done/i })).toBeVisible();
-  }
-);
-
-// ─── Cmd+Backspace bulk delete ─────────────────────────────────────────────
+  // Recurring completion advances the head and keeps it open; a plain status flip would corrupt the series.
+  const standup = list.filter({ hasText: "standup" });
+  await expect(standup).toHaveCount(1);
+  await expect(standup.getByRole("checkbox", { name: /Mark done/i })).toBeVisible();
+});
 
 appTest(
   "bulk delete selected pages with Cmd+Backspace",
@@ -333,34 +273,26 @@ appTest(
   }
 );
 
-// ─── Plain click clears selection ──────────────────────────────────────────
+appTest("plain click clears multi-selection", { tag: ["@LIST-09:12"] }, async ({ app }) => {
+  await createPages(app, ["clear-sel-1", "clear-sel-2", "clear-sel-3"]);
 
-appTest(
-  "plain click clears multi-selection",
-  { tag: ["@LIST-09:12"] },
-  async ({ app }) => {
-    await createPages(app, ["clear-sel-1", "clear-sel-2", "clear-sel-3"]);
+  const list = app.locator("[data-page-list-item]");
+  const page1 = list.filter({ hasText: "clear-sel-1" });
+  const page2 = list.filter({ hasText: "clear-sel-2" });
+  const page3 = list.filter({ hasText: "clear-sel-3" });
 
-    const list = app.locator("[data-page-list-item]");
-    const page1 = list.filter({ hasText: "clear-sel-1" });
-    const page2 = list.filter({ hasText: "clear-sel-2" });
-    const page3 = list.filter({ hasText: "clear-sel-3" });
+  await page1.click();
+  await page3.click({ modifiers: ["Shift"] });
+  await expect(page1).toHaveAttribute("data-selected", "true");
+  await expect(page2).toHaveAttribute("data-selected", "true");
+  await expect(page3).toHaveAttribute("data-selected", "true");
 
-    await page1.click();
-    await page3.click({ modifiers: ["Shift"] });
-    await expect(page1).toHaveAttribute("data-selected", "true");
-    await expect(page2).toHaveAttribute("data-selected", "true");
-    await expect(page3).toHaveAttribute("data-selected", "true");
-
-    await page2.click();
-    await expect(page1).not.toHaveAttribute("data-selected");
-    await expect(page2).not.toHaveAttribute("data-selected");
-    await expect(page3).not.toHaveAttribute("data-selected");
-    await expect(page2).toHaveAttribute("data-active", "true");
-  }
-);
-
-// ─── Clicking into editor clears selection ─────────────────────────────────
+  await page2.click();
+  await expect(page1).not.toHaveAttribute("data-selected");
+  await expect(page2).not.toHaveAttribute("data-selected");
+  await expect(page3).not.toHaveAttribute("data-selected");
+  await expect(page2).toHaveAttribute("data-active", "true");
+});
 
 appTest("clicking into editor clears multi-selection", async ({ app }) => {
   await createPages(app, ["editor-clr-1", "editor-clr-2"]);
@@ -369,7 +301,6 @@ appTest("clicking into editor clears multi-selection", async ({ app }) => {
   const page1 = list.filter({ hasText: "editor-clr-1" });
   const page2 = list.filter({ hasText: "editor-clr-2" });
 
-  // Select page1 (activates it + opens editor), then Shift+Click page2
   await page1.click();
   await page2.click({ modifiers: ["Shift"] });
   await expect(page1).toHaveAttribute("data-selected", "true");

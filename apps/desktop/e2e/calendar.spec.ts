@@ -1,34 +1,17 @@
-// E2E tests for the calendar create-via-popover flow.
-// Clicking an empty calendar slot creates a page and auto-opens its metadata
-// popover. Enter commits the title (defaulting to "Untitled"), Escape or
-// outside-click discards the page if still untitled, or keeps it if titled.
-// Runs against MockStorageAdapter (VITE_TEST_MODE=true).
-
 import type { Page } from "@playwright/test";
 
-import {
-  test as appTest,
-  createFolder,
-  expect,
-  mod,
-  openCalendarMode,
-  quickAdd,
-} from "./fixtures";
+import { test as appTest, createFolder, expect, mod, openCalendarMode, quickAdd } from "./fixtures";
 
-/** The last visible all-day column — always >= today within the current week,
- * so the page's denormalised scheduledStart isn't stripped by the
- * "next upcoming" filter on past schedules. */
+/** The last visible all-day column, always >= today within the current week, so the page's
+ * denormalised scheduledStart isn't stripped by the "next upcoming" filter on past schedules. */
 function lastAllDayColumn(app: Page) {
   return app.locator('[aria-label^="All-day events,"]').last();
 }
 
-/** Bars are rendered in a sibling overlay — not inside the column's DOM —
- * so assertions scope to the calendar region instead of the column. */
+/** Bars render in a sibling overlay, not inside the column's DOM, so assertions scope to the calendar region. */
 function calendarRegion(app: Page) {
   return app.getByRole("region", { name: "Week calendar" });
 }
-
-// ─── Popover opens on create ────────────────────────────────────────────────
 
 appTest("calendar click auto-opens the metadata popover @smoke", async ({ app }) => {
   await openCalendarMode(app);
@@ -38,23 +21,17 @@ appTest("calendar click auto-opens the metadata popover @smoke", async ({ app })
   await expect(titleInput).toBeFocused();
 });
 
-// ─── Enter commits ──────────────────────────────────────────────────────────
+appTest("Enter commits typed title and closes popover", { tag: ["@CAL-04:4"] }, async ({ app }) => {
+  await openCalendarMode(app);
+  await lastAllDayColumn(app).click();
 
-appTest(
-  "Enter commits typed title and closes popover",
-  { tag: ["@CAL-04:4"] },
-  async ({ app }) => {
-    await openCalendarMode(app);
-    await lastAllDayColumn(app).click();
+  const titleInput = app.getByPlaceholder("Untitled");
+  await titleInput.fill("Release planning");
+  await app.keyboard.press("Enter");
 
-    const titleInput = app.getByPlaceholder("Untitled");
-    await titleInput.fill("Release planning");
-    await app.keyboard.press("Enter");
-
-    await expect(titleInput).not.toBeVisible();
-    await expect(calendarRegion(app).getByText("Release planning")).toBeVisible();
-  }
-);
+  await expect(titleInput).not.toBeVisible();
+  await expect(calendarRegion(app).getByText("Release planning")).toBeVisible();
+});
 
 appTest("Enter on empty title saves page as Untitled", async ({ app }) => {
   await openCalendarMode(app);
@@ -65,31 +42,24 @@ appTest("Enter on empty title saves page as Untitled", async ({ app }) => {
   await app.keyboard.press("Enter");
 
   await expect(titleInput).not.toBeVisible();
-  // A bar remains (title persisted as "Untitled") — wait past the deferred
-  // delete check to ensure it's not removed.
+  // A bar remains; wait past the deferred delete check to confirm it isn't removed.
   await app.waitForTimeout(100);
   await expect(calendarRegion(app).getByRole("button", { name: "Untitled" })).toBeVisible();
 });
 
-// ─── Escape discards untitled, keeps titled ─────────────────────────────────
+appTest("Escape on empty title deletes the page", { tag: ["@CAL-04:4"] }, async ({ app }) => {
+  await openCalendarMode(app);
+  await lastAllDayColumn(app).click();
 
-appTest(
-  "Escape on empty title deletes the page",
-  { tag: ["@CAL-04:4"] },
-  async ({ app }) => {
-    await openCalendarMode(app);
-    await lastAllDayColumn(app).click();
+  const titleInput = app.getByPlaceholder("Untitled");
+  await expect(titleInput).toBeFocused();
+  await app.keyboard.press("Escape");
 
-    const titleInput = app.getByPlaceholder("Untitled");
-    await expect(titleInput).toBeFocused();
-    await app.keyboard.press("Escape");
-
-    await expect(titleInput).not.toBeVisible();
-    // Deferred delete (setTimeout 0) — give it time to run.
-    await app.waitForTimeout(100);
-    await expect(calendarRegion(app).getByRole("button", { name: "Untitled" })).toHaveCount(0);
-  }
-);
+  await expect(titleInput).not.toBeVisible();
+  // Deferred delete (setTimeout 0): give it time to run.
+  await app.waitForTimeout(100);
+  await expect(calendarRegion(app).getByRole("button", { name: "Untitled" })).toHaveCount(0);
+});
 
 appTest("Escape with typed title keeps the page", async ({ app }) => {
   await openCalendarMode(app);
@@ -104,8 +74,6 @@ appTest("Escape with typed title keeps the page", async ({ app }) => {
   await expect(calendarRegion(app).getByText("Keep me")).toBeVisible();
 });
 
-// ─── Outside click ──────────────────────────────────────────────────────────
-
 appTest(
   "outside click on empty popover deletes the page",
   { tag: ["@CAL-04:4"] },
@@ -114,7 +82,6 @@ appTest(
     await lastAllDayColumn(app).click();
     await expect(app.getByPlaceholder("Untitled")).toBeFocused();
 
-    // Click outside the popover — on the week calendar header area.
     await calendarRegion(app).click({ position: { x: 5, y: 5 } });
 
     await expect(app.getByPlaceholder("Untitled")).not.toBeVisible();
@@ -140,8 +107,6 @@ appTest(
   }
 );
 
-// ─── Multi-day all-day events ──────────────────────────────────────────────
-
 async function centerOf(locator: ReturnType<Page["locator"]>) {
   const box = await locator.boundingBox();
   if (!box) throw new Error("Expected a visible element with a bounding box");
@@ -151,8 +116,7 @@ async function centerOf(locator: ReturnType<Page["locator"]>) {
 appTest("drag across all-day columns creates a multi-day span", async ({ app }) => {
   await openCalendarMode(app);
 
-  // Pick two adjacent columns — both in visible range. Use the last two so the
-  // span starts today-or-later (past-only spans exercise different denorm paths).
+  // Last two columns, so the span starts today-or-later (past-only spans exercise different denorm paths).
   const cols = app.locator('[aria-label^="All-day events,"]');
   const colCount = await cols.count();
   const startCol = cols.nth(colCount - 2);
@@ -161,8 +125,6 @@ appTest("drag across all-day columns creates a multi-day span", async ({ app }) 
   const startAt = await centerOf(startCol);
   const endAt = await centerOf(endCol);
 
-  // Drag across the two columns. Intermediate mousemoves ensure the handler
-  // receives incremental idx updates instead of a single jump.
   await app.mouse.move(startAt.x, startAt.y);
   await app.mouse.down();
   const midX = (startAt.x + endAt.x) / 2;
@@ -170,15 +132,13 @@ appTest("drag across all-day columns creates a multi-day span", async ({ app }) 
   await app.mouse.move(endAt.x, endAt.y, { steps: 5 });
   await app.mouse.up();
 
-  // The metadata popover auto-opens on the first-day chip only. Type a title
-  // so the page persists past handleAutoOpenConsumed's empty-title check.
+  // Type a title so the page persists past handleAutoOpenConsumed's empty-title check.
   const titleInput = app.getByPlaceholder("Untitled");
   await expect(titleInput).toBeFocused();
   await titleInput.fill("Offsite");
   await app.keyboard.press("Enter");
 
-  // The event renders as a single bar spanning both columns. Scope to the
-  // calendar region — the sidebar page list also shows an "Offsite" entry.
+  // Scoped to the calendar region: the sidebar page list also shows an "Offsite" entry.
   const calendarChips = app
     .getByRole("region", { name: "Week calendar" })
     .getByRole("button", { name: "Offsite" });
@@ -189,7 +149,6 @@ appTest("drag right edge of multi-day chip extends the span", async ({ app }) =>
   await openCalendarMode(app);
   const calendar = app.getByRole("region", { name: "Week calendar" });
 
-  // Seed: create a 2-day span across the last two columns.
   const cols = app.locator('[aria-label^="All-day events,"]');
   const colCount = await cols.count();
   if (colCount < 3) return; // narrow layout — skip
@@ -211,8 +170,6 @@ appTest("drag right edge of multi-day chip extends the span", async ({ app }) =>
   const chips = calendar.getByRole("button", { name: "Conference" });
   await expect(chips).toHaveCount(1);
 
-  // The single bar carries its right-edge resize handle at the right of the
-  // whole span. Grab it and drag to the last visible column.
   const chipBox = await chips.first().boundingBox();
   if (!chipBox) throw new Error("chip missing");
   const endAt = await centerOf(endCol);
@@ -224,7 +181,6 @@ appTest("drag right edge of multi-day chip extends the span", async ({ app }) =>
   await app.mouse.move(endAt.x, endAt.y, { steps: 10 });
   await app.mouse.up();
 
-  // Still one bar — but now its bounding box covers 3 columns instead of 2.
   await expect(chips).toHaveCount(1);
   const extendedBox = await chips.first().boundingBox();
   if (!extendedBox) throw new Error("chip missing after resize");
@@ -244,42 +200,35 @@ appTest("all-day chip renders at its declared bar height", async ({ app }) => {
   await expect(chip).toBeVisible();
   const box = await chip.boundingBox();
   if (!box) throw new Error("chip missing");
-  // ALL_DAY_BAR_HEIGHT, which the absolute row pitch is derived from. Asserted in
-  // a real browser because the height arrives as a Tailwind utility: declare the
-  // class somewhere Tailwind does not scan and it silently generates no rule,
-  // leaving the chip to collapse to its text height with the class still on it.
+  // 19 is ALL_DAY_BAR_HEIGHT, which the row pitch derives from. Asserted in a real browser: a Tailwind
+  // class declared where it isn't scanned generates no rule, so the chip collapses to its text height.
   expect(box.height).toBe(19);
 });
 
-appTest(
-  "drag bottom edge of a timed block resizes without moving it",
-  async ({ app }) => {
-    await quickAdd(app, "Standup today 10am");
-    await openCalendarMode(app);
+appTest("drag bottom edge of a timed block resizes without moving it", async ({ app }) => {
+  await quickAdd(app, "Standup today 10am");
+  await openCalendarMode(app);
 
-    const block = app.locator("[data-cal-page-id]").filter({ hasText: "Standup" }).first();
-    await expect(block).toBeVisible();
-    // The grid opens scrolled to an hour before now, so a fixed 10am block sits
-    // above the viewport for most of the day and the press below lands at a
-    // negative y. toBeVisible() does not catch it — the block is rendered and
-    // unclipped, just outside the scroll port.
-    await block.scrollIntoViewIfNeeded();
-    const before = await block.boundingBox();
-    if (!before) throw new Error("block missing");
+  const block = app.locator("[data-cal-page-id]").filter({ hasText: "Standup" }).first();
+  await expect(block).toBeVisible();
+  // The grid opens scrolled to an hour before now, so a fixed 10am block sits above the viewport for most
+  // of the day and the press lands at a negative y; toBeVisible() doesn't catch that.
+  await block.scrollIntoViewIfNeeded();
+  const before = await block.boundingBox();
+  if (!before) throw new Error("block missing");
 
-    await app.mouse.move(before.x + before.width / 2, before.y + before.height - 2);
-    await app.mouse.down();
-    await app.mouse.move(before.x + before.width / 2, before.y + before.height + 60, { steps: 10 });
-    await app.mouse.up();
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height - 2);
+  await app.mouse.down();
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height + 60, { steps: 10 });
+  await app.mouse.up();
 
-    const after = await block.boundingBox();
-    if (!after) throw new Error("block missing after resize");
-    // Grew downward and kept its start: a handle press that also armed the
-    // block's move drag would slide the top edge instead.
-    expect(after.height).toBeGreaterThan(before.height);
-    expect(Math.abs(after.y - before.y)).toBeLessThan(4);
-  }
-);
+  const after = await block.boundingBox();
+  if (!after) throw new Error("block missing after resize");
+  // Grew downward and kept its start: a handle press that also armed the
+  // block's move drag would slide the top edge instead.
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(4);
+});
 
 appTest(
   "click Ends preset inside date picker extends single-day to multi-day",
@@ -288,11 +237,9 @@ appTest(
     await openCalendarMode(app);
     const calendar = app.getByRole("region", { name: "Week calendar" });
 
-    // Anchor on the THIRD-to-last column so a 3-day span still fits in view.
     const cols = app.locator('[aria-label^="All-day events,"]');
     const colCount = await cols.count();
-    // Asserted rather than skipped: this test takes a QA row, and a skip passes
-    // having proved nothing.
+    // Asserted, not skipped: a skip would pass having proved nothing.
     expect(colCount).toBeGreaterThanOrEqual(3);
     const startCol = cols.nth(colCount - 3);
     await startCol.click();
@@ -312,12 +259,10 @@ appTest(
     const dateTrigger = app.getByRole("button", { name: /^Scheduled: / });
     await dateTrigger.click();
 
-    // The "3d" preset sets end = start + 2 days.
     const ends3d = app.getByRole("button", { name: "Ends in 3d" });
     await expect(ends3d).toBeVisible();
     await ends3d.click();
 
-    // Still one bar, but its bounding box now spans 3 columns wide.
     await expect(chips).toHaveCount(1);
     const extendedBox = await chips.first().boundingBox();
     if (!extendedBox) throw new Error("chip missing after extend");
@@ -325,13 +270,10 @@ appTest(
   }
 );
 
-// ─── Drag preserves multi-day duration ─────────────────────────────────────
-
 appTest("dragging a multi-day chip preserves its duration", async ({ app }) => {
   await openCalendarMode(app);
   const calendar = app.getByRole("region", { name: "Week calendar" });
 
-  // Seed a 2-day span across the last two columns.
   const cols = app.locator('[aria-label^="All-day events,"]');
   const colCount = await cols.count();
   if (colCount < 4) return;
@@ -353,103 +295,74 @@ appTest("dragging a multi-day chip preserves its duration", async ({ app }) => {
   const initialBox = await chips.first().boundingBox();
   if (!initialBox) throw new Error("chip missing");
 
-  // Drag the bar leftward by two columns. The drop should preserve the 2-day
-  // span, not collapse it to a single-day event (regression guard for the
-  // shiftAllDayEnd logic in handleAllDayChipDragStart).
+  // The drop must preserve the 2-day span, not collapse it to a single day.
   const dropCol = cols.nth(colCount - 4);
   const fromAt = await centerOf(chips.first());
   const toAt = await centerOf(dropCol);
 
   await app.mouse.move(fromAt.x, fromAt.y);
   await app.mouse.down();
-  // Past the chip's drag-threshold, then onto the target column. Keep Y inside
-  // the all-day zone so the drop branch is the all-day reschedule, not timed.
+  // Keep Y inside the all-day zone so the drop is the all-day reschedule, not timed.
   await app.mouse.move(fromAt.x - 20, fromAt.y, { steps: 4 });
   await app.mouse.move(toAt.x, toAt.y, { steps: 8 });
   await app.mouse.up();
 
-  // Still one bar with its 2-column width preserved. A bare
-  // `onReschedule(start, undefined)` would have shrunk the bar.
+  // Width preserved; a bare `onReschedule(start, undefined)` would shrink the bar.
   await expect(chips).toHaveCount(1);
   const movedBox = await chips.first().boundingBox();
   if (!movedBox) throw new Error("chip missing after drag");
   expect(Math.abs(movedBox.width - initialBox.width)).toBeLessThan(2);
 });
 
-// ─── Cross-week continuation renders the title ──────────────────────────────
+appTest("multi-week event continues into the next week with checkbox + title", async ({ app }) => {
+  await openCalendarMode(app);
+  const calendar = app.getByRole("region", { name: "Week calendar" });
 
-appTest(
-  "multi-week event continues into the next week with checkbox + title",
-  async ({ app }) => {
-    await openCalendarMode(app);
-    const calendar = app.getByRole("region", { name: "Week calendar" });
+  const lastCol = lastAllDayColumn(app);
+  await lastCol.click();
+  const titleInput = app.getByPlaceholder("Untitled");
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill("Conference");
+  await app.keyboard.press("Enter");
 
-    // Create a single-day chip on the LAST visible column, then extend it via
-    // the date picker so the span crosses into next week.
-    const lastCol = lastAllDayColumn(app);
-    await lastCol.click();
-    const titleInput = app.getByPlaceholder("Untitled");
-    await expect(titleInput).toBeFocused();
-    await titleInput.fill("Conference");
-    await app.keyboard.press("Enter");
+  const chips = calendar.getByRole("button", { name: "Conference" });
+  await expect(chips).toHaveCount(1);
 
-    const chips = calendar.getByRole("button", { name: "Conference" });
-    await expect(chips).toHaveCount(1);
+  await chips.first().click();
+  await app.getByRole("button", { name: /^Scheduled: / }).click();
+  await app.getByRole("button", { name: "Ends in 3d" }).click();
+  // Dismiss the date picker and popover so they don't trap focus during navigation.
+  await app.keyboard.press("Escape");
+  await app.keyboard.press("Escape");
 
-    await chips.first().click();
-    await app.getByRole("button", { name: /^Scheduled: / }).click();
-    // 3-day preset: start + 2 days. Anchored on the last visible column, the
-    // tail two days fall in the following week.
-    await app.getByRole("button", { name: "Ends in 3d" }).click();
-    // Dismiss the date picker + popover so they don't trap focus during nav.
-    await app.keyboard.press("Escape");
-    await app.keyboard.press("Escape");
+  // Scope to the aria-label icon button: two buttons share the name "Next week".
+  await app.locator('button[aria-label="Next week"]').click();
 
-    // Navigate to the next week. Two buttons in the DOM share the accessible
-    // name "Next week" (the calendar header icon button and a date-picker nav
-    // button); scope to the aria-label-bearing icon button explicitly.
-    await app.locator('button[aria-label="Next week"]').click();
+  // The visual-start chip re-renders the title although the event started before the view (TickTick-style boundary).
+  const continuationChips = calendar.getByRole("button", { name: "Conference" });
+  await expect(continuationChips.first()).toBeVisible();
+  await expect(continuationChips.first()).toContainText("Conference");
+});
 
-    // The continuation chips now occupy the start of this week. The visual-
-    // start chip (column 0) should re-render the title even though the event
-    // started before the view — that's the TickTick-style boundary behavior.
-    const continuationChips = calendar.getByRole("button", { name: "Conference" });
-    await expect(continuationChips.first()).toBeVisible();
-    await expect(continuationChips.first()).toContainText("Conference");
-  }
-);
+appTest("collapsed top/bottom bands render labelled chevrons by default", async ({ app }) => {
+  await openCalendarMode(app);
 
-// ─── Collapsible time bands ────────────────────────────────────────────────
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
+  await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).toBeVisible();
+});
 
-appTest(
-  "collapsed top/bottom bands render labelled chevrons by default",
-  async ({ app }) => {
-    await openCalendarMode(app);
+appTest("clicking a band expands it; clicking the chevron collapses again", async ({ app }) => {
+  await openCalendarMode(app);
 
-    // Defaults: top collapsed at 6 AM, bottom collapsed at 10 PM. Each band is
-    // a single button labelled "Expand <start> to <end>".
-    await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
-    await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).toBeVisible();
-  }
-);
+  const topBand = app.getByRole("button", { name: "Expand 12 AM to 6 AM" });
+  await topBand.click();
+  await expect(topBand).not.toBeVisible();
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
+  await expect(app.getByRole("separator", { name: "Adjust top collapse boundary" })).toBeVisible();
 
-appTest(
-  "clicking a band expands it; clicking the chevron collapses again",
-  async ({ app }) => {
-    await openCalendarMode(app);
-
-    const topBand = app.getByRole("button", { name: "Expand 12 AM to 6 AM" });
-    await topBand.click();
-    await expect(topBand).not.toBeVisible();
-    await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
-    await expect(
-      app.getByRole("separator", { name: "Adjust top collapse boundary" })
-    ).toBeVisible();
-
-    await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
-    await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
-  }
-);
+  await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
+});
 
 appTest("collapse state persists across reload", async ({ app }) => {
   await openCalendarMode(app);
@@ -458,8 +371,7 @@ appTest("collapse state persists across reload", async ({ app }) => {
   await expect(app.getByRole("button", { name: "Collapse 10 PM to 12 AM" })).toBeVisible();
 
   await app.reload();
-  // Re-wait for workspace mount after reload — interactions fired while the
-  // app shell is still booting can be dropped before any handler is mounted.
+  // Re-wait for workspace mount after reload: interactions while the shell boots can be dropped.
   await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
   await openCalendarMode(app);
 
@@ -467,183 +379,137 @@ appTest("collapse state persists across reload", async ({ app }) => {
   await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).not.toBeVisible();
 });
 
-appTest(
-  "clicking a day-column's band overlay also expands the band",
-  async ({ app }) => {
-    await openCalendarMode(app);
+appTest("clicking a day-column's band overlay also expands the band", async ({ app }) => {
+  await openCalendarMode(app);
 
-    // Each day column renders its own band-overlay button (one per visible day),
-    // so users can click the empty band area in any column — not just the gutter
-    // chevron — to expand it. They share an aria-label, so target the first.
-    const columnBand = app.getByRole("button", { name: "Expand collapsed early-morning hours" });
-    await expect(columnBand.first()).toBeVisible();
-    await columnBand.first().click();
+  // Each day column renders its own band-overlay button, all sharing an aria-label, so target the first.
+  const columnBand = app.getByRole("button", { name: "Expand collapsed early-morning hours" });
+  await expect(columnBand.first()).toBeVisible();
+  await columnBand.first().click();
 
-    // Expansion is global state, so the gutter's collapsed chevron disappears,
-    // every column's band-overlay button is gone, and the gutter exposes the
-    // collapse target instead.
-    await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).not.toBeVisible();
-    await expect(columnBand).toHaveCount(0);
-    await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
-  }
-);
+  // Expansion is global: every column's overlay button is gone and the gutter exposes the collapse target.
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).not.toBeVisible();
+  await expect(columnBand).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
+});
 
-appTest(
-  "dragging the top-boundary handle moves the band's hour",
-  async ({ app }) => {
-    await openCalendarMode(app);
+appTest("dragging the top-boundary handle moves the band's hour", async ({ app }) => {
+  await openCalendarMode(app);
 
-    // Expand the top band to surface its boundary drag handle.
-    await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
-    const handle = app.getByRole("separator", { name: "Adjust top collapse boundary" });
-    await expect(handle).toBeVisible();
+  await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+  const handle = app.getByRole("separator", { name: "Adjust top collapse boundary" });
+  await expect(handle).toBeVisible();
 
-    const handleBox = await handle.boundingBox();
-    if (!handleBox) throw new Error("boundary handle missing");
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("boundary handle missing");
 
-    // Drag down — far enough that even a fit-to-viewport stretched hour height
-    // rounds to at least one whole hour. TimeGutter's drag handler snaps to
-    // whole hours and clamps to the legal range, so the boundary lands on a
-    // discrete hour boundary.
-    const startX = handleBox.x + handleBox.width / 2;
-    const startY = handleBox.y + handleBox.height / 2;
-    await app.mouse.move(startX, startY);
-    await app.mouse.down();
-    await app.mouse.move(startX, startY + 240, { steps: 8 });
-    await app.mouse.up();
+  // Drag far enough that a fit-to-viewport hour height still rounds to at least one whole hour.
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX, startY + 240, { steps: 8 });
+  await app.mouse.up();
 
-    // The gutter's collapse button now reflects the new boundary — anything
-    // strictly past 6 AM is acceptable; pixel ratio depends on density.
-    await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).not.toBeVisible();
-    await expect(app.getByRole("button", { name: /^Collapse 12 AM to (?!6 AM)\d/ })).toBeVisible();
-  }
-);
+  // Anything strictly past 6 AM passes; pixel ratio depends on density.
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).not.toBeVisible();
+  await expect(app.getByRole("button", { name: /^Collapse 12 AM to (?!6 AM)\d/ })).toBeVisible();
+});
 
-// ─── Timed event: create via grid click + drag to reschedule across days ────
-//
-// All-day creation is well covered above. The TIMED grid surface needs its
-// own coverage: a regression that broke timed-grid mousedown wiring would
-// silently fall through to the all-day branch, and a regression in
-// scheduleOnce(start, end) for timed drops would shrink or relocate the chip.
+// Timed-grid mousedown wiring and scheduleOnce(start, end) need their own coverage: regressions fall
+// through to the all-day branch or shrink the chip.
 
-appTest(
-  "create timed event via grid click then drag to a different day",
-  async ({ app }) => {
-    await openCalendarMode(app);
-    const calendar = calendarRegion(app);
+appTest("create timed event via grid click then drag to a different day", async ({ app }) => {
+  await openCalendarMode(app);
+  const calendar = calendarRegion(app);
 
-    // Expand the top band so the timed grid covers [0, 24) — easier to land
-    // a click that creates an event in the visible range.
-    await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
-    await app.locator('[aria-label="Time grid"]').evaluate((el) => {
-      el.scrollTop = 0;
-    });
+  await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+  await app.locator('[aria-label="Time grid"]').evaluate((el) => {
+    el.scrollTop = 0;
+  });
 
-    // Click into the timed grid below the SECOND-to-last all-day column
-    // (we want at least one column to the right for the drag target).
-    const cols = app.locator('[aria-label^="All-day events,"]');
-    const colCount = await cols.count();
-    if (colCount < 2) return; // narrow layout — skip
-    const sourceAllDay = cols.nth(colCount - 2);
-    const targetAllDay = cols.nth(colCount - 1);
+  // One column to the right is needed as the drag target.
+  const cols = app.locator('[aria-label^="All-day events,"]');
+  const colCount = await cols.count();
+  if (colCount < 2) return; // narrow layout — skip
+  const sourceAllDay = cols.nth(colCount - 2);
+  const targetAllDay = cols.nth(colCount - 1);
 
-    const sourceBox = await sourceAllDay.boundingBox();
-    const targetBox = await targetAllDay.boundingBox();
-    if (!sourceBox || !targetBox) throw new Error("column box missing");
+  const sourceBox = await sourceAllDay.boundingBox();
+  const targetBox = await targetAllDay.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error("column box missing");
 
-    const sourceClickX = sourceBox.x + sourceBox.width / 2;
-    const sourceClickY = sourceBox.y + sourceBox.height + 24; // just below the all-day row, inside the timed grid
-    await app.mouse.click(sourceClickX, sourceClickY);
+  const sourceClickX = sourceBox.x + sourceBox.width / 2;
+  const sourceClickY = sourceBox.y + sourceBox.height + 24; // just below the all-day row, inside the timed grid
+  await app.mouse.click(sourceClickX, sourceClickY);
 
-    const titleInput = app.getByPlaceholder("Untitled");
-    await expect(titleInput).toBeFocused();
-    await titleInput.fill("standup");
-    await app.keyboard.press("Enter");
+  const titleInput = app.getByPlaceholder("Untitled");
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill("standup");
+  await app.keyboard.press("Enter");
 
-    const chips = calendar.getByRole("button", { name: "standup" });
-    await expect(chips).toHaveCount(1);
-    const chipBeforeBox = await chips.first().boundingBox();
-    if (!chipBeforeBox) throw new Error("chip missing after create");
+  const chips = calendar.getByRole("button", { name: "standup" });
+  await expect(chips).toHaveCount(1);
+  const chipBeforeBox = await chips.first().boundingBox();
+  if (!chipBeforeBox) throw new Error("chip missing after create");
 
-    // Drag the chip horizontally to the next day's column (same Y so the
-    // hour stays roughly constant). Cross the dnd-kit activation distance
-    // before moving onto the target.
-    const fromX = chipBeforeBox.x + chipBeforeBox.width / 2;
-    const fromY = chipBeforeBox.y + chipBeforeBox.height / 2;
-    const toX = targetBox.x + targetBox.width / 2;
+  // Cross the dnd-kit activation distance before moving onto the target.
+  const fromX = chipBeforeBox.x + chipBeforeBox.width / 2;
+  const fromY = chipBeforeBox.y + chipBeforeBox.height / 2;
+  const toX = targetBox.x + targetBox.width / 2;
 
-    await app.mouse.move(fromX, fromY);
-    await app.mouse.down();
-    await app.mouse.move(fromX + 16, fromY, { steps: 4 });
-    await app.mouse.move(toX, fromY, { steps: 10 });
-    await app.mouse.up();
+  await app.mouse.move(fromX, fromY);
+  await app.mouse.down();
+  await app.mouse.move(fromX + 16, fromY, { steps: 4 });
+  await app.mouse.move(toX, fromY, { steps: 10 });
+  await app.mouse.up();
 
-    // Still one chip — moved, not duplicated. The new bounding box is
-    // shifted right by approximately one column width.
-    await expect(chips).toHaveCount(1);
-    const chipAfterBox = await chips.first().boundingBox();
-    if (!chipAfterBox) throw new Error("chip missing after drag");
-    expect(chipAfterBox.x).toBeGreaterThan(chipBeforeBox.x);
-  }
-);
+  await expect(chips).toHaveCount(1);
+  const chipAfterBox = await chips.first().boundingBox();
+  if (!chipAfterBox) throw new Error("chip missing after drag");
+  expect(chipAfterBox.x).toBeGreaterThan(chipBeforeBox.x);
+});
 
-appTest(
-  "events in a collapsed band render as a clickable +N more pill",
-  async ({ app }) => {
-    await openCalendarMode(app);
-    const calendar = calendarRegion(app);
+appTest("events in a collapsed band render as a clickable +N more pill", async ({ app }) => {
+  await openCalendarMode(app);
+  const calendar = calendarRegion(app);
 
-    // Expand the top band so we can drop a timed event inside [0am, 6am).
-    await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+  await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
 
-    // Scroll the timed grid to the very top so a click near the top of the
-    // visible grid lands at midnight, not at the smart-start scroll position.
-    await app.locator('[aria-label="Time grid"]').evaluate((el) => {
-      el.scrollTop = 0;
-    });
+  // Scroll to the top so a click near it lands at midnight, not at the smart-start position.
+  await app.locator('[aria-label="Time grid"]').evaluate((el) => {
+    el.scrollTop = 0;
+  });
 
-    // Click ~12 px into the timed grid for the last visible day column. With
-    // the top band expanded and scrollTop=0, this lands inside [0, 1) AM.
-    const cols = app.locator('[aria-label^="All-day events,"]');
-    const colCount = await cols.count();
-    const targetAllDay = cols.nth(colCount - 1);
-    const allDayBox = await targetAllDay.boundingBox();
-    if (!allDayBox) throw new Error("all-day column missing");
-    const timedX = allDayBox.x + allDayBox.width / 2;
-    const timedY = allDayBox.y + allDayBox.height + 12;
-    await app.mouse.click(timedX, timedY);
+  const cols = app.locator('[aria-label^="All-day events,"]');
+  const colCount = await cols.count();
+  const targetAllDay = cols.nth(colCount - 1);
+  const allDayBox = await targetAllDay.boundingBox();
+  if (!allDayBox) throw new Error("all-day column missing");
+  const timedX = allDayBox.x + allDayBox.width / 2;
+  const timedY = allDayBox.y + allDayBox.height + 12;
+  await app.mouse.click(timedX, timedY);
 
-    const titleInput = app.getByPlaceholder("Untitled");
-    await expect(titleInput).toBeFocused();
-    await titleInput.fill("Early bird");
-    await app.keyboard.press("Enter");
-    await expect(calendar.getByText("Early bird").first()).toBeVisible();
+  const titleInput = app.getByPlaceholder("Untitled");
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill("Early bird");
+  await app.keyboard.press("Enter");
+  await expect(calendar.getByText("Early bird").first()).toBeVisible();
 
-    // Re-collapse the top band. The event now falls inside the collapsed band
-    // so it should be replaced by a +N more pill instead of rendering directly.
-    await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
-    const pill = calendar.getByRole("button", { name: /\d+ more events?/ });
-    await expect(pill.first()).toBeVisible();
+  // The event now sits inside the collapsed band, so it becomes a +N more pill.
+  await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
+  const pill = calendar.getByRole("button", { name: /\d+ more events?/ });
+  await expect(pill.first()).toBeVisible();
 
-    // Clicking the pill opens a popover listing the hidden events by title.
-    await pill.first().click();
-    await expect(app.getByRole("button", { name: /Early bird/ }).first()).toBeVisible();
-  }
-);
-
-// ─── "Jump to current week" button mirrors the `t` keyboard shortcut ───────
-//
-// Counterpart to keyboard.spec.ts's `t` test. The button is disabled while
-// the visible week IS the current week, and re-enables once the user pages
-// away — clicking it returns to the current week.
+  await pill.first().click();
+  await expect(app.getByRole("button", { name: /Early bird/ }).first()).toBeVisible();
+});
 
 appTest("Jump to current week button returns to today's week", async ({ app }) => {
   await openCalendarMode(app);
   const heading = app.getByRole("heading", { name: "Visible week" });
   const initialLabel = await heading.textContent();
 
-  // The button is disabled on the current week — that's the "already here"
-  // affordance that signals state without needing a separate label.
   const todayBtn = app.getByRole("button", { name: "Jump to current week" });
   await expect(todayBtn).toBeDisabled();
 
@@ -659,15 +525,9 @@ appTest("Jump to current week button returns to today's week", async ({ app }) =
   await expect(todayBtn).toBeDisabled();
 });
 
-// ─── Restoring is not creating ──────────────────────────────────────────────
-
-/** Restoring a page must not look like making one.
- *
- *  The auto-open above is keyed on the created page's id, and the block clears
- *  that claim by reporting its popover closed. Deleting the page from inside that
- *  very popover unmounts the block before it can, so the id stayed pointed at a
- *  page now sitting in the trash — and restoring it matched again, reopening the
- *  naming popover with the empty-title cleanup still wired to dismissing it. */
+/** Restoring a page must not look like making one. Deleting from inside the auto-open popover
+ *  unmounts the block before it clears its claim on the page id, so a restore would match again and
+ *  reopen the naming popover. */
 appTest("a page restored from the trash opens no popover", async ({ app }) => {
   await openCalendarMode(app);
   await lastAllDayColumn(app).click();

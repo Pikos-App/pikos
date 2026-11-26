@@ -1,8 +1,3 @@
-// E2E for month view: switching shapes from the calendar header, seeing a
-// seeded event land in its day cell, and clicking that chip through to the same
-// metadata popover the week grid opens.
-// Runs against MockStorageAdapter (VITE_TEST_MODE=true).
-
 import type { Page } from "@playwright/test";
 
 import { test as appTest, expect, openCalendarMode, quickAdd } from "./fixtures";
@@ -36,8 +31,7 @@ appTest("month view shows a seeded event and opens its popover", async ({ app })
   const chip = monthRegion(app).getByRole("button", { name: "Board review" });
   await expect(chip.first()).toBeVisible();
 
-  // Single click routes through the shared block-popover hook — same popover
-  // the week grid opens, so the title input is the thing that appears.
+  // The shared block-popover hook opens the week grid's popover, so the title input appears.
   await chip.first().click();
   await expect(app.getByPlaceholder("Untitled")).toHaveValue("Board review");
 });
@@ -64,22 +58,19 @@ appTest("month view never widens the window", async ({ app }) => {
   expect(scroll).toBe(client);
 });
 
-appTest(
-  "month view header navigates by month and back to today",
-  async ({ app }) => {
-    await openCalendarMode(app);
-    await switchToMonth(app);
+appTest("month view header navigates by month and back to today", async ({ app }) => {
+  await openCalendarMode(app);
+  await switchToMonth(app);
 
-    const label = app.getByRole("heading", { name: "Visible month" });
-    const current = await label.textContent();
+  const label = app.getByRole("heading", { name: "Visible month" });
+  const current = await label.textContent();
 
-    await app.getByRole("button", { name: "Next month" }).click();
-    await expect(label).not.toHaveText(current ?? "");
+  await app.getByRole("button", { name: "Next month" }).click();
+  await expect(label).not.toHaveText(current ?? "");
 
-    await app.getByRole("button", { name: "Jump to current month" }).click();
-    await expect(label).toHaveText(current ?? "");
-  }
-);
+  await app.getByRole("button", { name: "Jump to current month" }).click();
+  await expect(label).toHaveText(current ?? "");
+});
 
 appTest("clicking a month day cell returns to the time grid", async ({ app }) => {
   await openCalendarMode(app);

@@ -1,7 +1,7 @@
 import { test as appTest, expect, quickAdd } from "./fixtures";
 
-// The golden flow is one journey, so it is one test with a step per row
-// (PKOS-0120): each row starts from the state the one before it left.
+// The golden flow is one journey, so it is one test with a step per row:
+// each row starts from the state the one before it left.
 
 const TITLE = "Draft agenda for the offsite";
 const BODY = ["Open with the numbers", "Then the hiring plan", "Close on the roadmap"];

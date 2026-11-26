@@ -1,27 +1,16 @@
 #!/usr/bin/env bash
-# Builds the @pikos/recurrence-wasm package from the Rust recurrence engine.
+# Builds @pikos/recurrence-wasm from the Rust recurrence engine, via Docker only (no local Rust
+# toolchain or wasm-bindgen CLI):
+#   crates/pikos-recurrence -> crates/pikos-recurrence-wasm -> packages/recurrence-wasm/pkg
 #
-# Pipeline:
-#   crates/pikos-recurrence        (engine)
-#   └─ crates/pikos-recurrence-wasm (wasm-bindgen bindings)
-#      └─ packages/recurrence-wasm/pkg (generated JS glue + embedded wasm)
+# pkg/ is committed so JS-only development never needs Rust. Re-run and commit it whenever the
+# engine or bindings change.
 #
-# The generated pkg/ is COMMITTED so JS-only development (vite, vitest,
-# esbuild) never needs a Rust toolchain. Re-run this script whenever the
-# engine or bindings change, and commit the regenerated pkg/.
-#
-# Requirements: Docker. No local Rust toolchain, and no wasm-bindgen CLI.
-#
-# The compile runs inside a pinned Linux image because rustc's wasm output
-# depends on the HOST it runs on, which no compiler flag can pin away. Measured
-# on rustc 1.93.1 (same commit, same LLVM 21.1.8, codegen-units=1, fat LTO):
-# aarch64-apple-darwin emits 269,840 bytes and x86_64-unknown-linux-gnu emits
-# 269,030 — same exports, same strings, 810 bytes of different codegen. Each
-# host is perfectly reproducible with itself, so the artifact only round-trips
-# if every machine compiles on the same one. An earlier version of this script
-# pinned rustc and remapped paths and built natively; those pins are still here
-# and still necessary, but they cannot reach the host, so the committed pkg was
-# only ever reproducible on the Mac that produced it.
+# The compile runs in a pinned Linux image because rustc's wasm output depends on the host it
+# runs on, which no flag can pin away: the same commit and toolchain gave 269,840 bytes on
+# aarch64-apple-darwin and 269,030 on x86_64-linux. Each host reproduces itself, so the artifact
+# only round-trips if every machine compiles on the same one. The rustc pin and path remaps
+# below still matter for that.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -29,8 +18,8 @@ cd "$(dirname "$0")/.."
 PKG_DIR="packages/recurrence-wasm/pkg"
 WASM_BINDGEN_PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
 
-# Tracking `stable` would go red the day rustc bumps: its version moves codegen
-# and the panic line tables. The image tag pins toolchain and host in one value.
+# `stable` would go red the day rustc bumps, since its version moves codegen and panic line
+# tables. The image tag pins toolchain and host together.
 RUSTC_PIN="1.93.1"
 BUILD_IMAGE="rust:${RUSTC_PIN}-slim"
 BUILD_PLATFORM="linux/amd64"
@@ -84,8 +73,7 @@ docker run --rm \
     chown -R "$HOST_OWNER" "$PKG_DIR"
   '
 
-# Embed the wasm as base64 so consumers initialize synchronously at import time
-# with zero bundler config. Host-side: a pure function of bytes already fixed.
+# Embed the wasm as base64 so consumers initialize synchronously with zero bundler config.
 node - "$PKG_DIR" <<'EOF'
 const fs = require("fs");
 const path = require("path");

@@ -55,19 +55,24 @@ appTest(
       }
     );
 
-    await appTest.step("SRCH-01 a description match shows the description highlighted", async () => {
-      await quickAdd(app, "budget plan");
-      await openEditorForPage(app, "budget plan");
-      await app.getByRole("button", { name: "Page description" }).click();
-      await app.getByRole("textbox", { name: "Page description" }).fill("Review the harbour lease");
-      await app.keyboard.press("Enter");
-      await search(app, "harbour");
-      const row = result(app, "budget plan");
-      await expect(row).toContainText("Review the");
-      await expect(row.locator("mark")).toHaveText(["harbour"]);
-      await app.keyboard.press("Escape");
-      await search(app, "zeppelin");
-    });
+    await appTest.step(
+      "SRCH-01 a description match shows the description highlighted",
+      async () => {
+        await quickAdd(app, "budget plan");
+        await openEditorForPage(app, "budget plan");
+        await app.getByRole("button", { name: "Page description" }).click();
+        await app
+          .getByRole("textbox", { name: "Page description" })
+          .fill("Review the harbour lease");
+        await app.keyboard.press("Enter");
+        await search(app, "harbour");
+        const row = result(app, "budget plan");
+        await expect(row).toContainText("Review the");
+        await expect(row.locator("mark")).toHaveText(["harbour"]);
+        await app.keyboard.press("Escape");
+        await search(app, "zeppelin");
+      }
+    );
 
     await appTest.step("SRCH-01 choosing a result opens it", async () => {
       await result(app, "summer travel").click();
@@ -434,21 +439,30 @@ appTest(
     const commandLabels = async (palette: ReturnType<typeof paletteOf>) =>
       (await palette.getByRole("button").allInnerTexts()).map((text) => text.split("\n")[0]!);
 
-    await appTest.step("SRCH-07 a label or word starting with the letters ranks first", async () => {
-      const palette = await search(app, ">si");
-      const labels = await commandLabels(palette);
-      const startsWord = (label: string) =>
-        label.toLowerCase().split(" ").some((word) => word.startsWith("si"));
-      const firstOther = labels.findIndex((label) => !startsWord(label));
-      expect(labels.filter(startsWord).length).toBeGreaterThan(0);
-      expect(firstOther).toBeGreaterThan(0);
-      expect(labels.slice(firstOther).some(startsWord)).toBe(false);
-    });
+    await appTest.step(
+      "SRCH-07 a label or word starting with the letters ranks first",
+      async () => {
+        const palette = await search(app, ">si");
+        const labels = await commandLabels(palette);
+        const startsWord = (label: string) =>
+          label
+            .toLowerCase()
+            .split(" ")
+            .some((word) => word.startsWith("si"));
+        const firstOther = labels.findIndex((label) => !startsWord(label));
+        expect(labels.filter(startsWord).length).toBeGreaterThan(0);
+        expect(firstOther).toBeGreaterThan(0);
+        expect(labels.slice(firstOther).some(startsWord)).toBe(false);
+      }
+    );
 
     await appTest.step("SRCH-07 the matched letters are marked", async () => {
       const first = paletteOf(app).getByRole("button").first();
       const label = (await first.innerText()).split("\n")[0]!;
-      const at = label.toLowerCase().split(" ").findIndex((word) => word.startsWith("si"));
+      const at = label
+        .toLowerCase()
+        .split(" ")
+        .findIndex((word) => word.startsWith("si"));
       const word = label.split(" ")[at]!;
       await expect(first.locator("mark")).toHaveText([word[0]!, word[1]!]);
       await app.keyboard.press("Escape");

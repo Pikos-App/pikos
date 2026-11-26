@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local mirror of .github/workflows/_validate.yml (blocking steps only).
-# Run before cutting a release — release.sh calls this so the tag pipeline
-# doesn't have to re-run validation in CI. Also exposed as `pnpm preflight`.
-#
-# Ordered cheapest-/most-likely-to-fail first so it fails fast.
+# Local mirror of .github/workflows/_validate.yml (blocking steps only), also `pnpm preflight`.
+# Run before cutting a release; release.sh calls it so the tag pipeline doesn't re-validate.
+# Cheapest and likeliest to fail first.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_TAURI="$ROOT/apps/desktop/src-tauri"
@@ -16,7 +14,6 @@ RESET='\033[0m'
 
 step() { printf "\n${BOLD}▶ %s${RESET}${DIM} %s${RESET}\n" "$1" "$2"; }
 
-# ── verify job ────────────────────────────────────────────────────────────────
 step "verify" "typecheck + lint + prettier + depcruise + unit tests"
 pnpm verify
 
@@ -29,11 +26,9 @@ pnpm audit:source
 step "js audit" "shipped dependencies against scripts/js-audit-accepted.json"
 node "$ROOT/scripts/check-js-audit.mjs"
 
-# ── bindings job ──────────────────────────────────────────────────────────────
-# packages/core/src/generated is committed, so it drifts the moment a pikos-db
-# wire struct changes without a regeneration — with every gate above still green,
-# because both sides typecheck fine in isolation. First of the two cargo steps:
-# it builds pikos-db natively, which warms the cache the rust steps below reuse.
+# packages/core/src/generated is committed, so it drifts when a pikos-db wire struct changes
+# without a regeneration, with every gate above green since both sides typecheck alone. It builds
+# pikos-db natively, warming the cache the rust steps reuse.
 step "bindings freshness" "committed core/generated matches pikos-db"
 "$ROOT/scripts/gen-ts-bindings.sh" >/dev/null
 if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; then
@@ -41,13 +36,11 @@ if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; th
   exit 1
 fi
 
-# app.css is the same arrangement one tier up: its token blocks are rendered from
-# packages/ui/src/tokens.ts, and a stale block is a wrong color in the shipped
-# build that no typecheck can see. Cheap enough to sit next to the bindings gate.
+# app.css's token blocks are rendered from packages/ui/src/tokens.ts, and a stale block is a wrong
+# color in the shipped build that no typecheck can see.
 step "token freshness" "committed app.css matches packages/ui tokens"
 "$ROOT/scripts/check-ui-tokens.sh"
 
-# ── rust job ──────────────────────────────────────────────────────────────────
 step "wasm freshness" "committed recurrence pkg matches its crate"
 "$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
 if [ -n "$(git -C "$ROOT" status --porcelain packages/recurrence-wasm/pkg)" ]; then
@@ -55,9 +48,8 @@ if [ -n "$(git -C "$ROOT" status --porcelain packages/recurrence-wasm/pkg)" ]; t
   exit 1
 fi
 
-# Two Cargo trees. The root workspace is `crates/*` and *excludes*
-# apps/desktop/src-tauri, so `--all` inside src-tauri covers that crate alone —
-# gating only there leaves pikos-db, -cli, -calendar-sync and -recurrence unchecked.
+# The root workspace is `crates/*` and excludes apps/desktop/src-tauri, so `--all` inside
+# src-tauri covers that crate alone and would leave the others unchecked.
 step "cargo fmt --check" "workspace + desktop"
 (cd "$ROOT" && cargo fmt --all --check)
 (cd "$SRC_TAURI" && cargo fmt --check)
@@ -78,9 +70,8 @@ step "cargo clippy (desktop)" "zero warnings"
 step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
 
-# Needs cargo-audit installed; CI caches it. Skipped rather than failed when it is
-# absent, because a missing tool is not a finding and this script is also the
-# pre-release gate on a machine that may never have installed it.
+# Skipped rather than failed when cargo-audit is absent: a missing tool is not a finding, and this
+# is also the pre-release gate on machines that may never have installed it.
 if command -v cargo-audit &>/dev/null; then
   step "cargo audit" "workspace + desktop, each against its own .cargo/audit.toml"
   (cd "$ROOT" && cargo audit)
@@ -89,7 +80,6 @@ else
   step "cargo audit" "skipped — cargo-audit not installed"
 fi
 
-# ── e2e job (slowest — last) ──────────────────────────────────────────────────
 step "e2e" "Playwright, as CI splits it: the real writer, then the mock-only tests"
 pnpm --filter @pikos/desktop test:e2e:bridge
 pnpm --filter @pikos/desktop exec playwright test --project=e2e --grep @mock-only

@@ -638,26 +638,26 @@ appTest(
   "at text size 28 a narrow block's time ends in an ellipsis inside the block",
   { tag: ["@CAL-25"] },
   async ({ app }) => {
-  await quickAdd(app, "Planning today at 10am for 2h");
-  await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: /^Calendar text size:/ }).click();
-  await app.getByRole("button", { exact: true, name: "28" }).click();
-  await expect(app.getByRole("button", { name: "Calendar text size: 28" })).toBeVisible();
-  await app.keyboard.press("Escape");
-  await openCalendarMode(app);
-  await app.setViewportSize({ height: 720, width: 1000 });
-  const block = calendarOf(app).getByRole("button", { name: /^Planning, 10/ });
-  const time = block.getByText(/^10.*–/);
-  await gutterLabel(app, 10).scrollIntoViewIfNeeded();
-  await expect(time).toBeVisible();
+    await quickAdd(app, "Planning today at 10am for 2h");
+    await app.getByRole("button", { name: "Open settings" }).click();
+    await app.getByRole("button", { name: /^Calendar text size:/ }).click();
+    await app.getByRole("button", { exact: true, name: "28" }).click();
+    await expect(app.getByRole("button", { name: "Calendar text size: 28" })).toBeVisible();
+    await app.keyboard.press("Escape");
+    await openCalendarMode(app);
+    await app.setViewportSize({ height: 720, width: 1000 });
+    const block = calendarOf(app).getByRole("button", { name: /^Planning, 10/ });
+    const time = block.getByText(/^10.*–/);
+    await gutterLabel(app, 10).scrollIntoViewIfNeeded();
+    await expect(time).toBeVisible();
 
-  const blockBox = await block.boundingBox();
-  const timeBox = await time.boundingBox();
-  if (!blockBox || !timeBox) throw new Error("block or its time is not drawn");
+    const blockBox = await block.boundingBox();
+    const timeBox = await time.boundingBox();
+    if (!blockBox || !timeBox) throw new Error("block or its time is not drawn");
 
-  expect(timeBox.x + timeBox.width).toBeLessThanOrEqual(blockBox.x + blockBox.width);
-  expect(await time.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
-  expect(await time.evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
+    expect(timeBox.x + timeBox.width).toBeLessThanOrEqual(blockBox.x + blockBox.width);
+    expect(await time.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    expect(await time.evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
   }
 );
 
@@ -769,13 +769,16 @@ appTest(
     await nameTitle(app, "Standup tomorrow #work !high ~Team every weekday");
     const blocks = calendarOf(app).getByRole("button", { name: /^Standup tomorrow, 2/ });
 
-    await appTest.step("CAL-27 it's titled Standup tomorrow, on its slot's day and time", async () => {
-      await expect(blocks.first()).toBeVisible();
-      const x = await centerX(blocks.first());
-      const column = await wednesday.boundingBox();
-      expect(x).toBeGreaterThan(column!.x);
-      expect(x).toBeLessThan(column!.x + column!.width);
-    });
+    await appTest.step(
+      "CAL-27 it's titled Standup tomorrow, on its slot's day and time",
+      async () => {
+        await expect(blocks.first()).toBeVisible();
+        const x = await centerX(blocks.first());
+        const column = await wednesday.boundingBox();
+        expect(x).toBeGreaterThan(column!.x);
+        expect(x).toBeLessThan(column!.x + column!.width);
+      }
+    );
 
     await appTest.step("CAL-27 it repeats every weekday from its slot", async () => {
       await expect(blocks).toHaveCount(3);
@@ -900,7 +903,8 @@ appTest(
   "the all-day strip grows with the calendar text size, and a dragged height shows the same rows",
   { tag: ["@CAL-22"] },
   async ({ app }) => {
-    for (const title of ["Alpha day", "Bravo day", "Charlie day"]) await quickAdd(app, `${title} today`);
+    for (const title of ["Alpha day", "Bravo day", "Charlie day"])
+      await quickAdd(app, `${title} today`);
     await openCalendarMode(app);
     const strip = calendarOf(app).getByRole("group", { name: "All-day events" });
     const handle = calendarOf(app).getByRole("separator", { name: "Resize all-day section" });
@@ -919,7 +923,11 @@ appTest(
     }
     async function dragHandle(dy: number) {
       const box = (await handle.boundingBox())!;
-      await drag(app, { x: box.x + box.width / 2, y: box.y + 1 }, { x: box.x + box.width / 2, y: box.y + 1 + dy });
+      await drag(
+        app,
+        { x: box.x + box.width / 2, y: box.y + 1 },
+        { x: box.x + box.width / 2, y: box.y + 1 + dy }
+      );
     }
 
     await dragHandle(-400);
@@ -928,11 +936,14 @@ appTest(
     const tallest = await stripHeight();
     await expect.poll(rowsShown).toBe(3);
 
-    await appTest.step("CAL-22 at the largest text size every all-day row still shows", async () => {
-      await setCalendarTextSize(app, 28);
-      await expect.poll(stripHeight).toBeGreaterThan(tallest);
-      await expect.poll(rowsShown).toBe(3);
-    });
+    await appTest.step(
+      "CAL-22 at the largest text size every all-day row still shows",
+      async () => {
+        await setCalendarTextSize(app, 28);
+        await expect.poll(stripHeight).toBeGreaterThan(tallest);
+        await expect.poll(rowsShown).toBe(3);
+      }
+    );
 
     await appTest.step("CAL-22 its drag limits grow with it", async () => {
       await dragHandle(600);
@@ -941,20 +952,23 @@ appTest(
       expect(await stripHeight()).toBeGreaterThan(smallest);
     });
 
-    await appTest.step("CAL-22 a height dragged at one size shows the same rows at another", async () => {
-      await dragHandle(600);
-      const bottoms: number[] = [];
-      for (const bar of bars) {
-        const b = (await bar.boundingBox())!;
-        bottoms.push(b.y + b.height);
+    await appTest.step(
+      "CAL-22 a height dragged at one size shows the same rows at another",
+      async () => {
+        await dragHandle(600);
+        const bottoms: number[] = [];
+        for (const bar of bars) {
+          const b = (await bar.boundingBox())!;
+          bottoms.push(b.y + b.height);
+        }
+        bottoms.sort((a, b) => a - b);
+        const box = (await strip.boundingBox())!;
+        await dragHandle((bottoms[1]! + bottoms[2]!) / 2 - (box.y + box.height));
+        await expect.poll(rowsShown).toBe(2);
+        await setCalendarTextSize(app, 14);
+        await expect.poll(rowsShown).toBe(2);
       }
-      bottoms.sort((a, b) => a - b);
-      const box = (await strip.boundingBox())!;
-      await dragHandle((bottoms[1]! + bottoms[2]!) / 2 - (box.y + box.height));
-      await expect.poll(rowsShown).toBe(2);
-      await setCalendarTextSize(app, 14);
-      await expect.poll(rowsShown).toBe(2);
-    });
+    );
   }
 );
 
@@ -985,12 +999,15 @@ appTest(
       expect(Math.abs(syncBox.y - (coffeeBox.y + coffeeBox.height))).toBeLessThan(2);
     });
 
-    await appTest.step("CAL-23 a short block drops its time line, then cuts its title", async () => {
-      await expect(sync.getByText("Sync", { exact: true })).toBeVisible();
-      await expect(sync.getByText(/–/)).toHaveCount(0);
-      const title = (await coffee.getByText("Coffee", { exact: true }).boundingBox())!;
-      expect(title.y + title.height).toBeGreaterThan(coffeeBox.y + coffeeBox.height);
-    });
+    await appTest.step(
+      "CAL-23 a short block drops its time line, then cuts its title",
+      async () => {
+        await expect(sync.getByText("Sync", { exact: true })).toBeVisible();
+        await expect(sync.getByText(/–/)).toHaveCount(0);
+        const title = (await coffee.getByText("Coffee", { exact: true }).boundingBox())!;
+        expect(title.y + title.height).toBeGreaterThan(coffeeBox.y + coffeeBox.height);
+      }
+    );
   }
 );
 
@@ -1008,20 +1025,23 @@ appTest(
       ["compact", 40, "2"],
       ["spacious", 88, "6"],
     ] as const) {
-      await appTest.step(`CAL-24 ${preset} keeps ${height}px an hour and reads as step ${step}`, async () => {
-        await app.evaluate((stored) => {
-          localStorage.setItem("pikos:calendarDensity", JSON.stringify(stored));
-        }, preset);
-        await app.reload();
-        await openCalendarMode(app);
-        await expect.poll(async () => Math.round(await hourPitch())).toBe(height);
-        await app.getByRole("button", { name: "Open settings" }).click();
-        await expect(density.getByRole("button", { exact: true, name: step })).toHaveAttribute(
-          "aria-pressed",
-          "true"
-        );
-        await app.keyboard.press("Escape");
-      });
+      await appTest.step(
+        `CAL-24 ${preset} keeps ${height}px an hour and reads as step ${step}`,
+        async () => {
+          await app.evaluate((stored) => {
+            localStorage.setItem("pikos:calendarDensity", JSON.stringify(stored));
+          }, preset);
+          await app.reload();
+          await openCalendarMode(app);
+          await expect.poll(async () => Math.round(await hourPitch())).toBe(height);
+          await app.getByRole("button", { name: "Open settings" }).click();
+          await expect(density.getByRole("button", { exact: true, name: step })).toHaveAttribute(
+            "aria-pressed",
+            "true"
+          );
+          await app.keyboard.press("Escape");
+        }
+      );
     }
   }
 );
@@ -1126,16 +1146,21 @@ appTest(
     // in the day, as it does at the current time, and the edge fell off screen.
     await gutterLabel(app, 21).scrollIntoViewIfNeeded();
 
-    await appTest.step("CAL-26 on the week grid and as an all-day bar it's at full strength", async () => {
-      await expect(block).toBeVisible();
-      expect(await opacity(block)).toBe("1");
-      expect(await opacity(bar)).toBe("1");
-      expect(await resizeCursorAtBottom(block)).toBe(true);
-    });
+    await appTest.step(
+      "CAL-26 on the week grid and as an all-day bar it's at full strength",
+      async () => {
+        await expect(block).toBeVisible();
+        expect(await opacity(block)).toBe("1");
+        expect(await opacity(bar)).toBe("1");
+        expect(await resizeCursorAtBottom(block)).toBe(true);
+      }
+    );
 
     await appTest.step("CAL-26 a synced page keeps its sync icon and no drag handles", async () => {
       await synced.scrollIntoViewIfNeeded();
-      await expect(synced.getByRole("img", { name: "Synced from external calendar" })).toBeVisible();
+      await expect(
+        synced.getByRole("img", { name: "Synced from external calendar" })
+      ).toBeVisible();
       expect(await resizeCursorAtBottom(synced)).toBe(false);
     });
 

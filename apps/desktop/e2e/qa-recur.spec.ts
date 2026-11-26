@@ -860,8 +860,8 @@ appTest(
     );
 
     await appTest.step("RECUR-10 a pre-0.4.0 completion unticks as a plain page", async () => {
-      // The pre-0.4.0 shape: the day excluded from the rule and a done copy, with no
-      // completed-set row linking the two. Nothing in the app makes one any more.
+      // A legacy shape: the day excluded from the rule and a done copy, with no
+      // completed-set row linking the two.
       const today = await app.evaluate(() => {
         const d = new Date();
         const pad = (n: number) => String(n).padStart(2, "0");

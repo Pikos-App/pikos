@@ -153,11 +153,14 @@ appTest(
       await expect(app.getByRole("main", { name: "Workspace" })).toHaveCount(0);
     });
 
-    await appTest.step("EXP-15 it offers Show me the backups and the snapshots to restore", async () => {
-      await expect(app.getByRole("button", { name: "Show me the backups" })).toBeVisible();
-      await expect(app.getByText("Before an import")).toBeVisible();
-      await expect(app.getByRole("button", { name: /^Restore the backup from / })).toHaveCount(1);
-    });
+    await appTest.step(
+      "EXP-15 it offers Show me the backups and the snapshots to restore",
+      async () => {
+        await expect(app.getByRole("button", { name: "Show me the backups" })).toBeVisible();
+        await expect(app.getByText("Before an import")).toBeVisible();
+        await expect(app.getByRole("button", { name: /^Restore the backup from / })).toHaveCount(1);
+      }
+    );
   }
 );
 

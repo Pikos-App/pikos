@@ -22,7 +22,6 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 def uid() -> str:
     return str(uuid.uuid4())
@@ -37,13 +36,10 @@ def tiptap(text: str) -> str:
         "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}]
     })
 
-# ── page catalogue ────────────────────────────────────────────────────────────
 # Each entry: (title, subtitle, start_local, end_local, status, priority, tags)
-# start/end are local wall-clock times in America/Los_Angeles (Pacific).
 # The 2:00–2:59 AM window on March 8 is the DST gap (those times don't exist).
 
 PAGES = [
-    # ── Saturday March 7 — normal PST ─────────────────────────────────────────
     (
         "Pre-DST planning session",
         "Review tasks before clocks change",
@@ -81,7 +77,6 @@ PAGES = [
         "not_started", 0, ["personal"],
     ),
 
-    # ── DST transition zone — March 8 around 2 AM ─────────────────────────────
     # 2:00–2:59 AM does not exist (clocks skip to 3:00 AM).
     # We include pages bracketing the gap so the UI can be tested.
     (
@@ -109,7 +104,6 @@ PAGES = [
         "not_started", 2, ["dst", "edge-case"],
     ),
 
-    # ── Sunday March 8 — PDT day, morning / afternoon ─────────────────────────
     (
         "Sunday morning run",
         "Shorter sleep thanks to DST — go anyway",
@@ -141,7 +135,6 @@ PAGES = [
         "not_started", 3, ["review", "dst"],
     ),
 
-    # ── All-day events for both days ──────────────────────────────────────────
     (
         "March 7 — Last day of EST",
         "All-day marker for day before spring forward",
@@ -155,7 +148,6 @@ PAGES = [
         "not_started", 0, ["dst", "marker"],
     ),
 
-    # ── Monday March 9 — first full day on EDT ────────────────────────────────
     (
         "Monday standup — first day fully on PDT",
         "Confirm recurring meetings didn't drift",
@@ -169,7 +161,6 @@ PAGES = [
         "not_started", 2, ["dst", "qa"],
     ),
 
-    # ── A few completed/in-progress pages for status variety ──────────────────
     (
         "Pre-flight: bump app version to 0.1.1",
         "Done before DST weekend",
@@ -186,7 +177,6 @@ PAGES = [
 
 TIMEZONE = "America/Los_Angeles"
 
-# ── database helpers ──────────────────────────────────────────────────────────
 
 def insert_page(cur, folder_id: Optional[str], title: str, subtitle: str,
                 content_text: str, status: str, priority: int, tags: list,
@@ -250,14 +240,12 @@ def get_or_create_folder(cur, name: str, color: str = "#6366f1") -> str:
     return folder_id
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
 
 def default_db_path() -> str:
     if sys.platform == "darwin":
         return os.path.expanduser(
             "~/Library/Application Support/com.pikos.app/default.sqlite"
         )
-    # Linux (and anything else)
     return os.path.expanduser(
         "~/.local/share/com.pikos.app/default.sqlite"
     )
@@ -271,7 +259,6 @@ def seed(db_path: str) -> None:
     con = sqlite3.connect(db_path)
     cur = con.cursor()
 
-    # Apply migrations if tables don't exist
     migration_path = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -281,8 +268,6 @@ def seed(db_path: str) -> None:
     if os.path.exists(migration_path):
         with open(migration_path) as f:
             sql = f.read()
-        # SQLite Python can't executescript with WAL pragma inline; split on ";"
-        # executescript commits any pending transaction first — that's fine here.
         con.executescript(sql)
         print(f"  Applied migration: {migration_path}")
     else:

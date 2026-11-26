@@ -3,18 +3,7 @@
  * once per theme. Seeded by `marketing-sync`: the marketing week with nothing
  * connected, and a CalDAV server whose "Team" calendar brings meetings in when enabled.
  *
- * Narrative:
- *   1. The framed week of native tasks, cursor parked off-screen. This first frame is
- *      the thumbnail and the poster.
- *   2. Settings → Calendar sync → Add account → CalDAV; type the server, username and
- *      a masked password; Connect.
- *   3. The discovered calendars appear; switch Team on and close settings.
- *   4. The Team meetings sit in the week beside the tasks, in the calendar's colour.
- *   5. Double-click "Customer call" → its page opens; type two lines of notes.
- *   6. Back to the calendar, cursor parked, a closing hold.
- *
- * Usage:
- *   pnpm record:calendar-sync
+ * The first frame is the thumbnail and the poster.
  */
 
 import { expect, test } from "@playwright/test";

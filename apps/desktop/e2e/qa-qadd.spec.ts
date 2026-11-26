@@ -185,9 +185,10 @@ appTest(
         "ask about the crown"
       );
       const menu = await openReminders(app);
-      await expect(
-        menu.getByRole("menuitemcheckbox", { name: "30 min before" })
-      ).toHaveAttribute("aria-checked", "true");
+      await expect(menu.getByRole("menuitemcheckbox", { name: "30 min before" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
     });
   }
 );
@@ -246,16 +247,19 @@ appTest(
       await app.keyboard.press("Escape");
     });
 
-    await appTest.step("QADD-06 Shift+Enter adds and opens the page, ready to type its body", async () => {
-      await typeQuickAdd(app, "third thing");
-      await app.keyboard.press("Shift+Enter");
-      await expect(dialog).not.toBeVisible();
-      await expect(app.getByLabel("Page title")).toHaveText("third thing");
-      const body = app.getByRole("textbox", { name: "Page content" });
-      await expect(body).toBeFocused();
-      await app.keyboard.type("first words");
-      await expect(body).toContainText("first words");
-    });
+    await appTest.step(
+      "QADD-06 Shift+Enter adds and opens the page, ready to type its body",
+      async () => {
+        await typeQuickAdd(app, "third thing");
+        await app.keyboard.press("Shift+Enter");
+        await expect(dialog).not.toBeVisible();
+        await expect(app.getByLabel("Page title")).toHaveText("third thing");
+        const body = app.getByRole("textbox", { name: "Page content" });
+        await expect(body).toBeFocused();
+        await app.keyboard.type("first words");
+        await expect(body).toContainText("first words");
+      }
+    );
 
     await appTest.step("QADD-06 Cmd+T schedules for today", async () => {
       await typeQuickAdd(app, "fourth thing");
@@ -290,7 +294,9 @@ appTest(
 
     await appTest.step('QADD-08 "m/w/f" is three separate pages', async () => {
       const dialog = await typeQuickAdd(app, "gym m/w/f");
-      await expect(dialog.getByRole("button", { name: /Recurrence: 3 occurrences/i })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /Recurrence: 3 occurrences/i })
+      ).toBeVisible();
       await app.keyboard.press("Enter");
       await expect(row(app, "gym")).toHaveCount(3);
     });
@@ -398,17 +404,20 @@ appTest(
       expect(drawn.runs.map((run) => run.text).join(" ")).toBe(line);
     });
 
-    await appTest.step("QADD-12 date and time, priority, tag, folder and note are coloured", async () => {
-      const { runs } = await drawnColours(app);
-      const colourOf = (word: string) =>
-        runs.find((run) => run.text.split(" ").includes(word))?.colour;
-      for (const word of ["tomorrow", "3pm", "!high", "#health", "~work", "//", "forms"]) {
-        expect(colourOf(word), word).toBeDefined();
-        expect(colourOf(word), word).not.toBe(plain);
+    await appTest.step(
+      "QADD-12 date and time, priority, tag, folder and note are coloured",
+      async () => {
+        const { runs } = await drawnColours(app);
+        const colourOf = (word: string) =>
+          runs.find((run) => run.text.split(" ").includes(word))?.colour;
+        for (const word of ["tomorrow", "3pm", "!high", "#health", "~work", "//", "forms"]) {
+          expect(colourOf(word), word).toBeDefined();
+          expect(colourOf(word), word).not.toBe(plain);
+        }
+        expect(colourOf("Call")).toBe(plain);
+        expect(colourOf("dentist")).toBe(plain);
       }
-      expect(colourOf("Call")).toBe(plain);
-      expect(colourOf("dentist")).toBe(plain);
-    });
+    );
   }
 );
 

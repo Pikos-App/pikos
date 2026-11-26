@@ -17,7 +17,9 @@ appTest(
     });
 
     await appTest.step("INST-05 the welcome page is open in the editor", async () => {
-      await expect(app.getByRole("button", { name: "Page title" })).toHaveText("Welcome to Pikos 👋");
+      await expect(app.getByRole("button", { name: "Page title" })).toHaveText(
+        "Welcome to Pikos 👋"
+      );
     });
 
     await appTest.step("INST-05 How it works shows a tag, a priority and its Quick Add line", async () => {

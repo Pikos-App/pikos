@@ -1,74 +1,49 @@
-// E2E coverage for keyboard-only flows. The product target is a power-user
-// app — every core path must be reachable without a mouse. This spec walks
-// the full golden path (create → search → open → edit → save → revisit) plus
-// the headline navigation shortcuts (Cmd+Shift+C, arrow-keys-in-calendar,
-// t-jumps-to-today, Cmd+,) without a single click. A regression here means
-// the keyboard layer dropped a binding or focus management broke.
+// Keyboard-only flows: every core path must be reachable without a mouse.
 
 import type { Page } from "@playwright/test";
 
 import { test as appTest, createFolder, expect, mod, quickAdd } from "./fixtures";
 
-// ─── Full golden path: create → search → edit → revisit ─────────────────────
-//
-// Mouse-free: Cmd+N opens Quick Add; Enter creates the page; Cmd+K + arrows
-// + Enter opens it; the editor focuses and the body is edited via typing;
-// Cmd+W clears the active page; Cmd+K + Enter reopens the page and the body
-// content is still there (autosave round-tripped through the in-memory
-// adapter).
+appTest("create → search → open → edit → revisit, keyboard only", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const quickAdd = app.getByRole("dialog", { name: "Quick add" });
+  await expect(quickAdd).toBeVisible();
+  await expect(app.getByRole("textbox", { name: "Quick add input" })).toBeFocused();
+  await app.keyboard.type("keyboard target");
+  await app.keyboard.press("Enter");
+  await expect(quickAdd).not.toBeVisible();
 
-appTest(
-  "create → search → open → edit → revisit, keyboard only",
-  async ({ app }) => {
-    await app.keyboard.press(mod("Mod+n"));
-    const quickAdd = app.getByRole("dialog", { name: "Quick add" });
-    await expect(quickAdd).toBeVisible();
-    await expect(app.getByRole("textbox", { name: "Quick add input" })).toBeFocused();
-    await app.keyboard.type("keyboard target");
-    await app.keyboard.press("Enter");
-    await expect(quickAdd).not.toBeVisible();
+  await app.keyboard.press(mod("Mod+k"));
+  const palette = app.getByRole("dialog", { name: "Search pages" });
+  await expect(palette).toBeVisible();
+  await app.keyboard.type("keyboard target");
+  await expect(palette.getByText("keyboard target")).toBeVisible();
+  await app.keyboard.press("Enter");
+  await expect(palette).not.toBeVisible();
 
-    await app.keyboard.press(mod("Mod+k"));
-    const palette = app.getByRole("dialog", { name: "Search pages" });
-    await expect(palette).toBeVisible();
-    await app.keyboard.type("keyboard target");
-    await expect(palette.getByText("keyboard target")).toBeVisible();
-    await app.keyboard.press("Enter");
-    await expect(palette).not.toBeVisible();
+  const editor = app.getByRole("textbox", { name: "Page content" });
+  const activeItem = app.locator("[data-page-list-item][data-active='true']");
+  await activeItem.focus();
+  await app.keyboard.press("Enter");
+  await expect(editor).toBeFocused();
 
-    const editor = app.getByRole("textbox", { name: "Page content" });
-    const activeItem = app.locator("[data-page-list-item][data-active='true']");
-    await activeItem.focus();
-    await app.keyboard.press("Enter");
-    await expect(editor).toBeFocused();
+  await app.keyboard.type("Notes from the keyboard.");
+  await expect(editor).toContainText("Notes from the keyboard.");
 
-    await app.keyboard.type("Notes from the keyboard.");
-    await expect(editor).toContainText("Notes from the keyboard.");
+  await app.keyboard.press(mod("Mod+w"));
+  await expect(app.locator("[data-page-list-item][data-active='true']")).toHaveCount(0);
 
-    await app.keyboard.press(mod("Mod+w"));
-    await expect(app.locator("[data-page-list-item][data-active='true']")).toHaveCount(0);
+  // Wait for the result row before Enter: the FTS query is debounced 150 ms, so Enter on an empty list
+  // silently no-ops and leaves the palette open.
+  await app.keyboard.press(mod("Mod+k"));
+  await expect(palette).toBeVisible();
+  await app.keyboard.type("keyboard target");
+  await expect(palette.getByText("keyboard target")).toBeVisible();
+  await app.keyboard.press("Enter");
+  await expect(palette).not.toBeVisible();
 
-    // Re-open via Cmd+K — body autosave should have round-tripped, so the
-    // editor surfaces the typed text again. Wait for the result row before
-    // Enter — the FTS query is debounced 150 ms, so pressing Enter on an
-    // empty result list silently no-ops and leaves the palette open.
-    await app.keyboard.press(mod("Mod+k"));
-    await expect(palette).toBeVisible();
-    await app.keyboard.type("keyboard target");
-    await expect(palette.getByText("keyboard target")).toBeVisible();
-    await app.keyboard.press("Enter");
-    await expect(palette).not.toBeVisible();
-
-    await expect(editor).toContainText("Notes from the keyboard.");
-  }
-);
-
-// ─── Calendar nav: Mod+Shift+C, ArrowKeys, t ────────────────────────────────
-//
-// Calendar's three core navigation bindings — toggle, week paging, jump to
-// today — are routinely used together. Any shortcut going dark forces a
-// mouse fallback. Doing all three from one test keeps the spec dense and
-// asserts the bindings still co-exist (no Keyboard.register collision).
+  await expect(editor).toContainText("Notes from the keyboard.");
+});
 
 appTest("calendar week paging and jump-to-today via keyboard", async ({ app }) => {
   await app.keyboard.press(mod("Mod+Shift+c"));
@@ -85,19 +60,12 @@ appTest("calendar week paging and jump-to-today via keyboard", async ({ app }) =
   const furtherLabel = await heading.textContent();
   expect(furtherLabel).not.toBe(advancedLabel);
 
-  // 't' jumps back to the current week — same label as the initial state.
   await app.keyboard.press("t");
   await expect(heading).toHaveText(initialLabel ?? "");
 
   await app.keyboard.press(mod("Mod+Shift+c"));
   await expect(app.getByRole("region", { name: "Week calendar" })).not.toBeVisible();
 });
-
-// ─── Settings shortcut and Escape close ─────────────────────────────────────
-//
-// Cmd+, opens settings (already covered) but the keyboard-loop here verifies
-// that Escape returns focus to the workspace shell — i.e. the user can re-
-// trigger app shortcuts immediately, no stuck modal trap.
 
 appTest("settings opens via Cmd+, and Escape returns control", async ({ app }) => {
   await app.keyboard.press(mod("Mod+,"));
@@ -106,53 +74,34 @@ appTest("settings opens via Cmd+, and Escape returns control", async ({ app }) =
   await app.keyboard.press("Escape");
   await expect(app.getByRole("heading", { name: "About" })).not.toBeVisible();
 
-  // Re-trigger an unrelated shortcut to prove no modal trap left over —
-  // Cmd+N must still open Quick Add cleanly.
+  // Cmd+N must still open Quick Add, proving no modal trap is left.
   await app.keyboard.press(mod("Mod+n"));
   await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(app.getByRole("dialog", { name: "Quick add" })).not.toBeVisible();
 });
 
-// ─── Cmd+Z undoes the most recent delete ───────────────────────────────────
-//
-// The undo toast carries a button that triggers `undoFn`; users can also
-// hit Cmd+Z to fire the same action without reaching for the mouse. The
-// binding is gated on `allowInInputs:false`, so editor undo (Tiptap) keeps
-// working unchanged.
+// Cmd+Z is gated on allowInInputs:false, so editor undo (Tiptap) is unaffected.
 
-appTest(
-  "Cmd+Z undoes the most recent page delete",
-  { tag: ["@TRASH-02:3"] },
-  async ({ app }) => {
-    await quickAdd(app, "trash this");
+appTest("Cmd+Z undoes the most recent page delete", { tag: ["@TRASH-02:3"] }, async ({ app }) => {
+  await quickAdd(app, "trash this");
 
-    const item = app.locator("[data-page-list-item]").filter({ hasText: "trash this" });
-    await expect(item).toBeVisible();
+  const item = app.locator("[data-page-list-item]").filter({ hasText: "trash this" });
+  await expect(item).toBeVisible();
 
-    await item.click({ button: "right" });
-    await app.getByRole("menuitem", { name: "Delete" }).click();
-    await expect(item).not.toBeVisible();
-    await expect(app.getByRole("alert", { name: /trash this/ })).toBeVisible();
+  await item.click({ button: "right" });
+  await app.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(item).not.toBeVisible();
+  await expect(app.getByRole("alert", { name: /trash this/ })).toBeVisible();
 
-    // Cmd+Z while focus is in the page list (no editor/input focus): the
-    // toast's undo action fires, page is restored, toast clears.
-    await app.locator("body").click({ position: { x: 0, y: 0 } });
-    await app.keyboard.press(mod("Mod+z"));
+  await app.locator("body").click({ position: { x: 0, y: 0 } });
+  await app.keyboard.press(mod("Mod+z"));
 
-    await expect(item).toBeVisible();
-    await expect(app.getByRole("alert", { name: /trash this/ })).not.toBeVisible();
-  }
-);
-
-// ─── Mod+1 switches to first folder by index ────────────────────────────────
-//
-// The Mod+1..9 bindings are how power users hop between folders. Test the
-// first one — the implementation registers all nine through one effect, so
-// breaking any of them breaks the rest the same way.
+  await expect(item).toBeVisible();
+  await expect(app.getByRole("alert", { name: /trash this/ })).not.toBeVisible();
+});
 
 appTest("Mod+1 switches active view to the first folder", async ({ app }) => {
-  // Seed a folder so Mod+1 has a target.
   await createFolder(app, "Active");
 
   // Switch away to Inbox so Mod+1 actually moves the view.
@@ -164,15 +113,9 @@ appTest("Mod+1 switches active view to the first folder", async ({ app }) => {
   await expect(folderBtn).toHaveAttribute("aria-current", "true");
 });
 
-// ─── Arrow-key list navigation (page list, folder list, scoping) ─────────────
-//
-// Up/Down navigation for the page list is registered as a *global* shortcut so
-// it works regardless of which non-editable element holds focus. The folder
-// list keeps its own arrow handler. The two must not fight: folder focus →
-// folders move; otherwise the page list moves; and a focused control that
-// natively consumes arrows (a popover trigger / open menu) must take priority
-// over both. These specs lock down that contract — the focus/role-based
-// gating only really shows up under live keyboard dispatch, so it's E2E-only.
+// Page-list Up/Down is a global shortcut, working whichever non-editable element has focus; the folder list
+// keeps its own handler. Folder focus moves folders, and a control that natively consumes arrows (popover
+// trigger, open menu) wins over both. Focus/role gating only shows under live keyboard dispatch.
 
 async function seedPages(app: Page, titles: string[]) {
   for (const title of titles) await quickAdd(app, title);
@@ -184,8 +127,7 @@ appTest("Arrow Up/Down navigates the page list off-list focus", async ({ app }) 
   const list = app.locator("[data-page-list-item]");
   const active = app.locator("[data-page-list-item][data-active='true']");
 
-  // Activate the first row, then drop focus to <body> — the regression target:
-  // global registration means arrows still navigate when the list isn't focused.
+  // Drop focus to <body>: global registration means arrows still navigate when the list isn't focused.
   await list.first().click();
   const firstId = await active.getAttribute("data-page-id");
   expect(firstId).toBeTruthy();
@@ -255,40 +197,31 @@ appTest(
   }
 );
 
-appTest(
-  "Space toggles completion of the active page off-list focus",
-  async ({ app }) => {
-    await seedPages(app, ["done-me"]);
+appTest("Space toggles completion of the active page off-list focus", async ({ app }) => {
+  await seedPages(app, ["done-me"]);
 
-    const list = app.locator("[data-page-list-item]");
-    const item = list.filter({ hasText: "done-me" });
+  const list = app.locator("[data-page-list-item]");
+  const item = list.filter({ hasText: "done-me" });
 
-    // Activate it, then blur — same global-shortcut path the arrow nav uses.
-    await item.click();
-    await expect(app.locator("[data-page-list-item][data-active='true']")).toHaveCount(1);
-    await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await item.click();
+  await expect(app.locator("[data-page-list-item][data-active='true']")).toHaveCount(1);
+  await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
-    // Space marks it done, dropping it out of the visible (non-completed) list.
-    await app.keyboard.press("Space");
-    await expect(item).not.toBeVisible();
-  }
-);
+  await app.keyboard.press("Space");
+  await expect(item).not.toBeVisible();
+});
 
-// ─── Cmd+Shift+Backspace deletes the active page from the title input ──────
-//
-// Plain Cmd+Backspace gets eaten by the OS line-delete when an input has
-// focus. The Shift alias keeps `allowInInputs: true` + `preventDefault: true`
-// so the page can be deleted while editing its title — the case the user
-// actually needs since the popover/editor lands focus there by default.
+// Plain Cmd+Backspace is eaten by the OS line-delete in an input; the Shift alias keeps allowInInputs and
+// preventDefault so the page can be deleted while editing its title.
 
 appTest(
   "Cmd+Shift+Backspace deletes the active page from the title input",
-  { tag: ["@TRASH-01:5"] }, async ({ app }) => {
+  { tag: ["@TRASH-01:5"] },
+  async ({ app }) => {
     await quickAdd(app, "delete me from title");
     const item = app.locator("[data-page-list-item]").filter({ hasText: "delete me from title" });
     await expect(item).toBeVisible();
 
-    // Open the page; click the title to focus it (div → textarea swap).
     await item.click();
     await expect(app.getByRole("textbox", { name: "Page content" })).toBeVisible();
     await app.getByRole("button", { name: "Page title" }).click();
@@ -300,17 +233,12 @@ appTest(
   }
 );
 
-// ─── Cmd+Shift+Backspace is a no-op while a modal dialog is open ───────────
-//
-// Guards the `when: () => openDialog === null && !settingsOpen` predicate.
-// Quick Add (or Search Palette / Settings) puts the user in a context where
-// the background activePage is NOT what they meant to delete — pressing the
-// chord must NOT touch it. The OS line-delete inside the input is fine.
+// Guards the `when: () => openDialog === null && !settingsOpen` predicate: with a modal open, the chord must
+// not touch the background activePage.
 
 appTest(
   "Cmd+Shift+Backspace does not delete the active page while Quick Add is open",
   async ({ app }) => {
-    // Seed a page so there's a background activePage candidate.
     await quickAdd(app, "background survivor");
     const item = app.locator("[data-page-list-item]").filter({ hasText: "background survivor" });
     await item.click();
@@ -320,7 +248,7 @@ appTest(
     const dialog = app.getByRole("dialog", { name: "Quick add" });
     await expect(dialog).toBeVisible();
 
-    // Type something so an OS line-delete has a target, then press the chord.
+    // Type something so an OS line-delete has a target.
     const input = app.getByRole("textbox", { name: "Quick add input" });
     await input.fill("scratch text");
     await app.keyboard.press(mod("Mod+Shift+Backspace"));
@@ -330,48 +258,36 @@ appTest(
   }
 );
 
-appTest(
-  "Arrow keys drive a focused dropdown, not the page list",
-  async ({ app }) => {
-    await seedPages(app, ["dd-a", "dd-b"]);
+appTest("Arrow keys drive a focused dropdown, not the page list", async ({ app }) => {
+  await seedPages(app, ["dd-a", "dd-b"]);
 
-    const list = app.locator("[data-page-list-item]");
-    const active = app.locator("[data-page-list-item][data-active='true']");
+  const list = app.locator("[data-page-list-item]");
+  const active = app.locator("[data-page-list-item][data-active='true']");
 
-    // Activate a page so there *is* something the page list could navigate.
-    await list.first().click();
-    const activeIdBefore = await active.getAttribute("data-page-id");
-    expect(activeIdBefore).toBeTruthy();
+  await list.first().click();
+  const activeIdBefore = await active.getAttribute("data-page-id");
+  expect(activeIdBefore).toBeTruthy();
 
-    // Focus the "Sort folders" popover trigger (aria-haspopup). ArrowDown should
-    // open the menu — the trigger owns the key — and must NOT move the page list.
-    await app
-      .getByRole("toolbar", { name: "Folder actions" })
-      .getByRole("button", { name: "Sort folders" })
-      .focus();
-    await app.keyboard.press("ArrowDown");
+  // The trigger owns ArrowDown (it opens the menu); the page list must not move.
+  await app
+    .getByRole("toolbar", { name: "Folder actions" })
+    .getByRole("button", { name: "Sort folders" })
+    .focus();
+  await app.keyboard.press("ArrowDown");
 
-    const alphabetical = app.getByRole("menuitem", { name: /Alphabetical/ });
-    await expect(alphabetical).toBeVisible();
-    // Page list did not navigate.
-    await expect(active).toHaveAttribute("data-page-id", activeIdBefore!);
+  const alphabetical = app.getByRole("menuitem", { name: /Alphabetical/ });
+  await expect(alphabetical).toBeVisible();
+  await expect(active).toHaveAttribute("data-page-id", activeIdBefore!);
 
-    // A second ArrowDown moves the highlight *within the menu*, still not the page.
-    await app.keyboard.press("ArrowDown");
-    await expect(active).toHaveAttribute("data-page-id", activeIdBefore!);
+  await app.keyboard.press("ArrowDown");
+  await expect(active).toHaveAttribute("data-page-id", activeIdBefore!);
 
-    await app.keyboard.press("Escape");
-    await expect(alphabetical).not.toBeVisible();
-  }
-);
+  await app.keyboard.press("Escape");
+  await expect(alphabetical).not.toBeVisible();
+});
 
-// ─── A focus session's hidden panels leave the Tab order ────────────────────
-//
-// The panels a session hides are zero-width, not unmounted, and their contents
-// overflow rather than clip — so left to themselves they keep taking Tab focus
-// while nothing is on screen, and the user tabs through furniture they cannot
-// see. Both panels sit above the editor in the document, so the first Tab from
-// the top is the whole question: it must land in the editor.
+// Hidden panels are zero-width, not unmounted, and their contents overflow rather than clip, so they keep
+// taking Tab focus. Both sit above the editor, so the first Tab from the top must land in the editor.
 
 appTest(
   "a focus session's hidden panels leave the Tab order",
@@ -385,17 +301,12 @@ appTest(
     // starts inside the editor would pass whatever the panels did.
     await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
-    // Everything focusable in the two panels: the sidebar, and the page list's
-    // toolbar plus its rows.
     const hiddenPanels = app.locator(
       'nav[aria-label="Workspace navigation"], [aria-label="Page actions"], [role="group"][aria-label="Inbox"]'
     );
 
-    // Naming the element the first Tab lands on would pin this to one platform.
-    // macOS keeps buttons out of the Tab order, so there the first Tab reaches the
-    // editor; everywhere else it stops at the first of the eleven buttons the
-    // editor pane puts above it, the focus timer's among them. What has to hold on
-    // both is that no step of the walk lands in a panel that is not on screen.
+    // Naming the first Tab target would pin this to one platform: macOS keeps buttons out of the Tab order,
+    // elsewhere it stops at the first editor-pane button. What must hold on both is that no step lands in a hidden panel.
     for (let i = 0; i < 6; i++) {
       await app.keyboard.press("Tab");
       await expect(hiddenPanels.locator(":focus")).toHaveCount(0);

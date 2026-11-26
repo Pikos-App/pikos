@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { expect } from "./fixtures";
 
 export interface LongTaskMetrics {
-  /** ms — single longest long task observed (legacy "any long task" signal). */
+  /** ms — longest single long task observed. */
   longest: number;
   /** ms — Total Blocking Time = sum(duration - 50) for tasks > 50ms. CWV-aligned. */
   tbt: number;
@@ -42,8 +42,7 @@ export async function observeLongTasks(page: Page, key: string) {
  */
 export async function readLongTasks(page: Page, key: string): Promise<LongTaskMetrics> {
   await page.evaluate(
-    () =>
-      new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
   );
 
   return page.evaluate((k) => {
@@ -95,7 +94,7 @@ export function assertPerf(metric: string, actual: number, limit: number, opts: 
  * Assert no blocking from long tasks. Uses TBT as the primary signal (matches
  * Lighthouse / Core Web Vitals) but also logs longest + count for diagnostics.
  *
- * Default `tbtLimit = 0` preserves the existing "any long task = regression" strictness.
+ * Default `tbtLimit = 0` fails on any long task.
  * Raise it on a per-test basis if a small amount of blocking is acceptable.
  */
 export function assertNoBlocking(

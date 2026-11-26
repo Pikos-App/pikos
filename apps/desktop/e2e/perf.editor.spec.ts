@@ -16,8 +16,8 @@ import { mod } from "./fixtures";
  * are inside it, plus up to a frame of vsync. Timing until the driver's call returns stopped
  * before layout, and reported a 123 ms keystroke as 28 ms.
  *
- * A gate, run locally: on a shared runner these times only report. Each ceiling started at about
- * twice what an M2 Air measured in WebKit on 2026-10-19, so noise can't trip it and a regression
+ * A gate, run locally: on a shared runner these times only report. Each ceiling is about
+ * twice what an M2 Air measured in WebKit, so noise can't trip it and a regression
  * that doubles a cost does. A speed fix moves the ceilings for what it sped up to between its new
  * time and the old one, which is what makes reverting it fail.
  *
@@ -127,8 +127,7 @@ for (const shape of SHAPES) {
       await page.getByLabel("Seeded page 1", { exact: true }).click();
       const open = Math.round(await readPaintTimer(page));
 
-      // A body the editor can't parse opens empty and times as instant, which the first version of
-      // this spec reported as a result.
+      // A body the editor can't parse opens empty and times as instant, which would read as a result.
       const editor = page.locator(EDITOR);
       await expect(editor).not.toHaveAttribute("aria-busy", "true", { timeout: 30_000 });
       const blocks = await editor.locator(":scope > p").count();
@@ -141,7 +140,10 @@ for (const shape of SHAPES) {
       expect(held).toBe(words);
 
       // Mid-page, where a split reflows the most below it.
-      await editor.locator(":scope > p").nth(Math.floor(blocks / 2)).click();
+      await editor
+        .locator(":scope > p")
+        .nth(Math.floor(blocks / 2))
+        .click();
       // The first press after a click carries focus work unrelated to size.
       await page.keyboard.press("x");
       const key = await median(page, "x", KEY_SAMPLES);

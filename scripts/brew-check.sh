@@ -40,8 +40,8 @@ if grep -q "deprecated" "$audit_log"; then
   fail=1
 fi
 
-# Against GitHub's published digests rather than `brew fetch`, which downloaded every asset each
-# run, and GitHub counts a runner's download exactly as it counts a person's.
+# Compares against GitHub's published digests, not `brew fetch`: GitHub counts a runner's
+# download as a person's.
 step "each url and checksum against what is published"
 check bash "$(brew --repository "$TAP")/.github/check-digests.sh" \
   || echo "   the tap names an asset that is missing or has a different checksum"

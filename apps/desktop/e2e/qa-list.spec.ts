@@ -247,7 +247,7 @@ appTest(
     await quickAdd(app, "call the landlord");
     await scheduleOnPickerDay(app, "call the landlord", -1);
     // On yesterday's weekday, so yesterday is one of its dates: a daily series would
-    // also have today's, and a head moved off its rule snaps forward (PKOS-0029).
+    // also have today's, and a head moved off its rule snaps forward.
     await quickAdd(app, `water the plants every ${(await dayFrom(app, -1)).weekday}`);
     await scheduleOnPickerDay(app, "water the plants", -1);
     await quickAdd(app, "early sync @today at 12:05am");
@@ -838,7 +838,9 @@ appTest(
       const mirror = items.filter({ hasText: "Weekly 1:1 (London)" }).first();
       await deleteFromMenu(mirror);
       await expect(app.getByRole("alertdialog")).toHaveCount(0);
-      await expect(app.getByRole("alert", { name: /Deleted “Weekly 1:1 \(London\)”/ })).toBeVisible();
+      await expect(
+        app.getByRole("alert", { name: /Deleted “Weekly 1:1 \(London\)”/ })
+      ).toBeVisible();
     });
   }
 );
@@ -859,17 +861,20 @@ appTest(
       await expect(shown).toHaveText(title);
     }
 
-    await appTest.step("LIST-16 back twice reaches the first, forward once the second", async () => {
-      await open("first stop");
-      await open("second stop");
-      await open("third stop");
-      await back();
-      await expect(shown).toHaveText("second stop");
-      await back();
-      await expect(shown).toHaveText("first stop");
-      await forward();
-      await expect(shown).toHaveText("second stop");
-    });
+    await appTest.step(
+      "LIST-16 back twice reaches the first, forward once the second",
+      async () => {
+        await open("first stop");
+        await open("second stop");
+        await open("third stop");
+        await back();
+        await expect(shown).toHaveText("second stop");
+        await back();
+        await expect(shown).toHaveText("first stop");
+        await forward();
+        await expect(shown).toHaveText("second stop");
+      }
+    );
 
     await appTest.step("LIST-16 a run of arrow steps through the list is one step", async () => {
       const order = await firstLines(app);
@@ -1015,15 +1020,18 @@ appTest(
       await expect(link("Plans")).toBeVisible();
     });
 
-    await appTest.step("CLI-16 after a rename in the app, pikos read gives the new title", async () => {
-      await app.locator("[data-page-list-item]").filter({ hasText: "Plans" }).click();
-      await app.getByLabel("Page title").click();
-      await app.keyboard.press(mod("Mod+a"));
-      await app.keyboard.type("Plans for spring");
-      await app.keyboard.press("Enter");
-      await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
-      expect(cli("read", id)).toContain("See [[Plans for spring]]");
-    });
+    await appTest.step(
+      "CLI-16 after a rename in the app, pikos read gives the new title",
+      async () => {
+        await app.locator("[data-page-list-item]").filter({ hasText: "Plans" }).click();
+        await app.getByLabel("Page title").click();
+        await app.keyboard.press(mod("Mod+a"));
+        await app.keyboard.type("Plans for spring");
+        await app.keyboard.press("Enter");
+        await app.waitForTimeout(2 * WRITE_QUEUE_DEBOUNCE_MS);
+        expect(cli("read", id)).toContain("See [[Plans for spring]]");
+      }
+    );
 
     await appTest.step("CLI-16 writing that back keeps the link", async () => {
       await writeBody("See [[Plans for spring]]");

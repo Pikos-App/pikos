@@ -3,10 +3,9 @@
 #
 #   scripts/brew-bump.sh <tag> [--push]
 #
-# Without --push it prints the change and leaves the tap alone. A stable tag moves the
-# cask and the CLI formula, and the beta cask when no newer beta is published; a prerelease
-# moves the beta cask only. Checksums come from
-# the digests GitHub publishes with each asset, so nothing is downloaded.
+# Without --push it prints the change and leaves the tap alone. A stable tag moves the cask and
+# the CLI formula, and the beta cask when no newer beta is published; a prerelease moves the beta
+# cask only. Checksums come from the digests GitHub publishes, so nothing is downloaded.
 #
 # Pushing needs write access to the tap: TAP_TOKEN in CI, or `gh` auth locally.
 

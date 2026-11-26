@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Exit 0 only if the latest ci.yml run for the given commit (default HEAD)
 # completed successfully. Prints a diagnostic and exits non-zero otherwise.
-# This is the release gate: ci.yml on `main` is the single authoritative
-# validation, so we only cut a release from a commit CI has already passed.
+# This is the release gate: ci.yml on `main` is the single validation, so a release is only cut
+# from a commit CI has already passed.
 #
 # SKIP_CI_CHECK=1 short-circuits to success (CI infra down, verified by hand).
 
