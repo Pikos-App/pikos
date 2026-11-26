@@ -14,7 +14,6 @@ export interface LinkTarget {
   title: string;
 }
 
-/** Pages whose titles match `query`, for the picker. Set per editor by its owner. */
 export type FindLinkTargets = (query: string) => Promise<LinkTarget[]>;
 
 interface PickerStorage {

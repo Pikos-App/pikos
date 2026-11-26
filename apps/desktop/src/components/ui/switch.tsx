@@ -3,10 +3,9 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-// Track and thumb are written as calcs against the interface text scale. A plain
-// `rem` will not do: rem resolves against the root font size, which the scale
-// setting deliberately never touches, so the switch stayed at its 13px-base size
-// beside a doubled label.
+// Track and thumb are written as calcs against the interface text scale. A plain `rem` will not
+// do: rem resolves against the root font size, which the scale setting deliberately never
+// touches, so the switch would stay at its 13px-base size beside a doubled label.
 
 function Switch({
   className,

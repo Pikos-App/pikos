@@ -30,18 +30,13 @@ export function TimeGutter() {
     setTopHour,
   } = useCalendarSettings();
 
-  // Hour labels for the visible (non-collapsed) middle region. When a band is
-  // expanded its hours are labelled the same way — there's no special "this
-  // hour is in the band" treatment, just an extra collapse chevron and drag
-  // handle at the boundary.
   const labelStart = collapse.topCollapsed ? collapse.topHour : GRID_START_HOUR;
   const labelEnd = collapse.bottomCollapsed ? collapse.bottomHour : GRID_END_HOUR;
   const middleHours: number[] = [];
   for (let h = labelStart; h <= labelEnd; h++) middleHours.push(h);
 
-  // Drag-to-adjust the X (top) or Y (bottom) boundary. Live-updates the saved
-  // hour as the cursor moves; commits on release. Snaps to whole hours so the
-  // boundary always lands on a label line.
+  // Drag adjusts the top or bottom boundary: live-updates the saved hour, commits on release, and
+  // snaps to whole hours so the boundary lands on a label line.
   function startBoundaryDrag(which: "top" | "bottom", clientYStart: number) {
     const hourHeight = metrics.hourHeight;
     const startHour = which === "top" ? collapse.topHour : collapse.bottomHour;
@@ -78,10 +73,9 @@ export function TimeGutter() {
       style={{ height: geometry.totalHeight }}
     >
       {collapse.topCollapsed ? (
-        // Compressed band: two endpoint labels + chevron between, click to expand.
-        // Bottom divider matches the day columns so the band/middle seam reads
-        // as one continuous line across gutter and grid. Hover state is synced
-        // via context so hovering any column lights up the gutter too.
+        // Compressed band: two endpoint labels and a chevron, click to expand. The bottom divider matches
+        // the day columns so the seam reads as one line across gutter and grid; hover is synced via
+        // context so hovering any column lights the gutter.
         <button
           aria-label={`Expand ${hourLabel(0)} to ${hourLabel(collapse.topHour)}`}
           className={cn(
@@ -100,8 +94,6 @@ export function TimeGutter() {
           <span className="type-ui-sm">{hourLabel(collapse.topHour)}</span>
         </button>
       ) : (
-        // Expanded: the full top band area is the click target to collapse.
-        // Hour labels render on top (pointer-events-none) so they don't intercept.
         <button
           aria-label={`Collapse ${hourLabel(0)} to ${hourLabel(collapse.topHour)}`}
           className="absolute inset-x-0 top-0 hover:bg-foreground/[0.04]"
@@ -117,16 +109,12 @@ export function TimeGutter() {
         // other label sits above its hour line (-mt-2).
         const isTopOfGrid = hour === GRID_START_HOUR;
         const isBottomOfGrid = hour === GRID_END_HOUR;
-        // The bottomHour label, when the bottom is collapsed, is rendered by
-        // the bottom band itself — skip it here to avoid duplicates.
+        // The bottomHour label, when the bottom is collapsed, is the bottom band's; skip it here.
         if (collapse.bottomCollapsed && hour === collapse.bottomHour) return null;
-        // The topHour label, when the top is collapsed, is rendered by the
-        // top band — skip the duplicate here.
+        // The topHour label, when the top is collapsed, is the top band's; skip it here.
         if (collapse.topCollapsed && hour === collapse.topHour) return null;
-        // 12 AM at the bottom of the grid: anchor to the gutter's bottom edge
-        // instead of placing a full-hour-tall box at y=totalHeight. The latter
-        // would extend the scroll area below the visible content and leave
-        // dead space under midnight.
+        // 12 AM at the bottom: anchor to the gutter's bottom edge, since a full-hour-tall box at
+        // y=totalHeight would extend the scroll area and leave dead space under midnight.
         if (isBottomOfGrid) {
           return (
             <span
@@ -214,7 +202,6 @@ export function TimeGutter() {
           <span className="type-ui-sm">{hourLabel(0)}</span>
         </button>
       ) : (
-        // Expanded: the full bottom band area is the click target to collapse.
         <button
           aria-label={`Collapse ${hourLabel(collapse.bottomHour)} to ${hourLabel(0)}`}
           className="absolute inset-x-0 hover:bg-foreground/[0.04]"

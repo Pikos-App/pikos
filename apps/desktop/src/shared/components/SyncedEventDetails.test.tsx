@@ -1,7 +1,3 @@
-// Read-only mirror metadata (location + attendees) for synced events.
-// Verifies: nothing renders when both are empty; a single attendee shows the
-// email verbatim; multiple attendees collapse to a count.
-
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 

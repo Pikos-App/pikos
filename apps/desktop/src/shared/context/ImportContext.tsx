@@ -1,7 +1,6 @@
-// ImportContext — batch import flow + last-import undo. Carves out the
-// import concern from WorkspaceContext so DataSettings doesn't re-render
-// on every page mutation. Reads folders/storage from WorkspaceContext and
-// dispatches soft-delete + reload through it on undo.
+// Batch import flow and last-import undo, kept apart from WorkspaceContext so DataSettings
+// doesn't re-render on every page mutation. Undo soft-deletes and reloads through
+// WorkspaceContext.
 
 import { getLocalTimezone, isAllDayIso, parseLocalISO, writableFolders } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useState } from "react";
@@ -16,20 +15,17 @@ import { usePages } from "./PagesContext";
 import { useWorkspace } from "./WorkspaceContext";
 
 export interface ImportContextValue {
-  /** Batch-import pages and folders from an external source. Returns IDs for undo. */
   importBatch: (data: ImportBatchInput) => Promise<ImportBatchResult>;
-  /** Result of the last import — persists across settings open/close for undo. */
   lastImportResult: LastImportResult | null;
   clearLastImport: () => void;
-  /** Undo the last import — soft-deletes all imported pages and folders. */
   undoLastImport: () => Promise<void>;
 }
 
 const ImportContext = createContext<ImportContextValue | null>(null);
 
-/** A page's created, updated and completed dates are instants. A source that gives
- *  only a day means that day here; stored as the bare date it read as midnight UTC,
- *  a day early anywhere west of Greenwich. */
+/** A page's created, updated and completed dates are instants. A source that gives only a day
+ *  means that day here; stored as the bare date it would read as midnight UTC, a day early
+ *  anywhere west of Greenwich. */
 function asInstant(value: string): string {
   return isAllDayIso(value) ? parseLocalISO(value).toISOString() : value;
 }
@@ -87,9 +83,8 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         pagesNeedingParent.push({ pikosId: page.id, sourceParentId: p.sourceParentId });
       }
 
-      // Create schedule if needed. Recurring pages also get a recurrence rule
-      // anchored at the same start/end — the rule's scheduledStart is the
-      // DTSTART used by rrule.js to expand virtual occurrences.
+      // Recurring pages also get a rule anchored at the same start/end; its scheduledStart is the
+      // DTSTART rrule.js expands from.
       if (p.scheduledStart) {
         await adapter.createPageSchedule({
           pageId: page.id,
@@ -120,7 +115,6 @@ export function ImportProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Store result for undo before reload (reload unmounts components, losing local state)
     const result: LastImportResult = {
       folderCount: folderIds.length,
       folderIds,

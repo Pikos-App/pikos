@@ -18,27 +18,20 @@ interface VirtualPageBlockPopoverProps {
 }
 
 /**
- * Metadata popover for virtual rrule occurrences. Rows follow
- * PageBlockPopover's order (Status, Folder, Date, Repeats, Priority) but only
- * render when populated — empty rows would just add noise. Status appears only
- * on a synced-origin occurrence, which resolves per instance; a native virtual
- * has no status of its own, since its completions funnel to the head.
- * Everything except Date
- * is read-only: a virtual is just an rrule expansion of the head, so editing
- * Folder/Priority would silently mutate every occurrence — picking a new Date
- * materialises a per-occurrence override instead. On a synced series the Date is
- * read-only too — the backend rejects the reschedule, so a picker could only
- * produce an error.
+ * Metadata popover for virtual rrule occurrences. Rows follow PageBlockPopover's order but render
+ * only when populated. Status appears only on a synced-origin occurrence, which resolves per
+ * instance; a native virtual has none, since its completions funnel to the head. Only Date is
+ * editable: a virtual is an rrule expansion of the head, so editing Folder or Priority would
+ * mutate every occurrence, while a new Date materialises a per-occurrence override. On a synced
+ * series Date is read-only too, since the backend rejects the reschedule.
  */
 export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPageBlockPopoverProps) {
   const { folders, recurrenceRules, rescheduleVirtualOccurrence } = usePages();
   const { openPage } = useUI();
   const togglePageStatus = useRecurringStatusToggle();
 
-  // Picking a new start materialises a page_schedules override at the new
-  // time. The virtual disappears (excluded by originalDate match) and the
-  // override renders as a normal block. Close the popover so the user sees
-  // the result instead of a popover anchored to a chip that's about to move.
+  // A new start materialises a page_schedules override and the virtual drops out (excluded by
+  // originalDate). Close the popover so it isn't left anchored to a chip that's about to move.
   function handleDateChange(iso: string | null) {
     if (!iso) return; // clearing a virtual's date isn't meaningful — use Skip instead
     void rescheduleVirtualOccurrence(

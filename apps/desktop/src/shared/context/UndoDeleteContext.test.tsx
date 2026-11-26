@@ -9,7 +9,6 @@ import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useUndoDelete } from "./UndoDeleteContext";
 
-/** Render all three hooks, init workspace, and seed a page + folder. */
 async function setup() {
   const hook = renderHookWithProviders(() => ({
     pages: usePages(),
@@ -43,8 +42,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-// ─── Page deletion ───────────────────────────────────────────────────────────
 
 describe("requestDeletePage", () => {
   it("hides the page and creates a toast item with an Undo action", async () => {
@@ -177,8 +174,6 @@ describe("requestDeletePages", () => {
   });
 });
 
-// ─── Folder deletion ─────────────────────────────────────────────────────────
-
 describe("requestDeleteFolder", () => {
   it("hides the folder and creates a toast item with page count suffix", async () => {
     const { folderId, hook } = await setup();
@@ -238,7 +233,6 @@ describe("requestDeleteFolder", () => {
     const { folderId, hook } = await setup();
     const folder = hook.result.current.pages.folders.find((f) => f.id === folderId)!;
 
-    // Page in another folder
     let otherId!: string;
     await act(async () => {
       const otherFolder = await hook.result.current.pages.createFolder({ name: "Other" });
@@ -260,8 +254,6 @@ describe("requestDeleteFolder", () => {
     expect(hook.result.current.ui.activePageId).toBe(otherId);
   });
 });
-
-// ─── handleToastDismiss (toast timer expired → commit delete) ────────────────
 
 describe("handleToastDismiss", () => {
   it("removes page from hidden set and toast items", async () => {
@@ -293,8 +285,6 @@ describe("handleToastDismiss", () => {
     expect(hook.result.current.undo.toastItems).toHaveLength(0);
   });
 });
-
-// ─── Undo action (user clicked the toast button) ─────────────────────────────
 
 describe("undo action", () => {
   it("restores a page — removes from hidden set and calls restorePage", async () => {
@@ -330,8 +320,6 @@ describe("undo action", () => {
     expect(restoreSpy).toHaveBeenCalledWith(folderId);
   });
 });
-
-// ─── Notice (non-actionable confirmation) ────────────────────────────────────
 
 describe("showNotice", () => {
   it("appends a toast item without an action", async () => {

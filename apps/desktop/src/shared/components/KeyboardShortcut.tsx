@@ -1,5 +1,4 @@
-// Platform-aware symbols — Mac: ⌘⇧C | Windows/Linux: Ctrl+Shift+C.
-// Shared so tooltip display and keyboard registration use the same mappings.
+// Shared so tooltip display and keyboard registration use the same symbol mappings.
 
 import { IS_MACOS } from "@/shared/constants/platform";
 
@@ -44,7 +43,7 @@ function formatKey(key: string): string {
 }
 
 interface KeyboardShortcutProps {
-  shortcut: string; // canonical format: "mod+shift+c"
+  shortcut: string;
 }
 
 export function KeyboardShortcut({ shortcut }: KeyboardShortcutProps) {

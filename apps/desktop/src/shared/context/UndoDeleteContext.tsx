@@ -1,11 +1,6 @@
-// UndoDeleteContext — app-wide page/folder deletion with undo.
-// Items are soft-deleted in the DB and hidden from the UI immediately; the
-// toast's Undo action restores them (restorePage/restoreFolder). When the
-// toast timer expires, only local pending/hidden state is cleared — the row
-// stays soft-deleted (deleted_at set), no further DB write happens. Deleting
-// the active page also clears the editor — no caller-side bookkeeping. Also
-// exposes generic helpers (`showNotice`, `requestUndoableAction`) that ride
-// the same toast surface.
+// App-wide page and folder deletion with undo. Items are soft-deleted in the DB and hidden
+// immediately; Undo restores them. When the toast timer expires only local pending/hidden state
+// is cleared, with no further DB write. Deleting the active page also clears the editor.
 
 import type { Folder, PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -19,27 +14,19 @@ import { quoteTitle } from "@/shared/utils/quoteTitle";
 import { usePageLookup } from "@/shared/viewCache/useHeldPages";
 
 export interface UndoDeleteContextValue {
-  /** Soft-delete + hide the page immediately; the toast's Undo restores it. */
   requestDeletePage: (page: Pick<PageSummary, "id" | "title">) => void;
-  /** As requestDeletePage, for a selection: one toast whose Undo restores every page. */
   requestDeletePages: (pages: Pick<PageSummary, "id" | "title">[]) => void;
-  /** Soft-delete + hide the folder and its pages immediately; Undo restores all. */
   requestDeleteFolder: (folder: Folder, pageCount: number) => void;
-  /** Set of page IDs currently pending deletion — filter these from all views. */
   hiddenPageIds: Set<string>;
-  /** Set of folder IDs currently pending deletion — filter these from all views. */
   hiddenFolderIds: Set<string>;
   toastItems: ToastItem[];
-  /** Called by Toast when the visual timer expires — clears local pending/hidden
-   *  state only; the soft delete already happened at request time. */
+  /** Called by Toast when the timer expires: clears local pending/hidden state only. */
   handleToastDismiss: (id: string) => void;
 
   requestUndoableAction: (id: string, label: string, undoFn: () => void) => void;
 
-  /** Non-reversible confirmation — shows a toast with no action button. */
   showNotice: (label: string, durationMs?: number) => void;
 
-  // Backwards-compat alias
   /** @deprecated Use hiddenPageIds instead. */
   hiddenIds: Set<string>;
 }
@@ -108,8 +95,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     const toastId = isSingle ? first.id : `${PAGES_UNDO_PREFIX}${crypto.randomUUID()}`;
     for (const id of ids) pendingDeleteIds.current.add(id);
     toastPageIds.current.set(toastId, ids);
-    // Close the editor if we're about to hide the active page — otherwise the
-    // editor keeps rendering a stale page that no longer exists in any list.
+    // Close the editor if about to hide the active page, or it keeps rendering a page that no longer
+    // exists in any list.
     if (activePageId && ids.includes(activePageId)) setActivePage(null);
     setHiddenPageIds((prev) => new Set([...prev, ...ids]));
     const label = isSingle
@@ -131,8 +118,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     if (pendingDeleteIds.current.has(undoId)) return;
     pendingDeleteIds.current.add(undoId);
     pendingFolderIds.current.add(folder.id);
-    // Close the editor if the active page lives inside the folder we're about
-    // to hide — the cascade soft-delete removes it from the pages list.
+    // Close the editor if the active page lives inside the folder about to be hidden.
     const activePage = activePageId ? lookup(activePageId) : null;
     if (activePage && activePage.folderId === folder.id) setActivePage(null);
     setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
@@ -202,14 +188,13 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     ]);
   }
 
-  // Bridge module-level postNotice() calls (Tiptap extensions, Tauri drop
-  // handlers — places that can't access React context) into the toast surface.
+  // Bridge module-level postNotice() calls (Tiptap extensions, Tauri drop handlers) into the toast
+  // surface.
   useEffect(() => subscribeNotices(showNotice), []);
 
-  // Cmd+Z — fire the most recent undoable toast's action. Skipped while the
-  // user is in a text input or contentEditable so the editor's native undo
-  // (Tiptap history) keeps working unchanged. Gated on there being one, so the
-  // palette doesn't offer an undo that has nothing to act on.
+  // Cmd+Z fires the most recent undoable toast's action, skipped in a text input or contentEditable
+  // so the editor's native undo keeps working. Gated on there being one, so the palette doesn't
+  // offer an undo with nothing to act on.
   useKeyboardShortcut(
     "Mod+z",
     () => {

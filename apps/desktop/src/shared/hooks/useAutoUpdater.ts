@@ -22,13 +22,9 @@ type UpdateStatus =
 
 export interface AutoUpdater {
   status: UpdateStatus;
-  /** Manually trigger an update check. */
   checkForUpdates: () => void;
-  /** Skip the currently available version (won't prompt again). */
   skipVersion: () => void;
-  /** Dismiss the dialog without skipping — will prompt again next launch. */
   dismiss: () => void;
-  /** Download and install the available update, then restart. */
   installUpdate: () => void;
 }
 
@@ -48,11 +44,9 @@ export function useAutoUpdater(): AutoUpdater {
     setStatus({ state: "checking" });
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
-      // Without a timeout a stalled request hangs check() forever and the UI
-      // spins with no path to the error state. 10s is generous for a ~1KB
-      // manifest fetch. Don't add a timeout to doInstall's check(): the plugin
-      // carries it onto the Update and applies it to the download request,
-      // which would abort slow (legitimate) update downloads.
+      // Without a timeout a stalled request hangs check() forever. Don't add one to doInstall's
+      // check(): the plugin carries it onto the Update and applies it to the download request,
+      // which would abort slow, legitimate downloads.
       const update = await check({ timeout: 10_000 });
 
       if (!update) {
@@ -77,8 +71,7 @@ export function useAutoUpdater(): AutoUpdater {
         },
       });
     } catch (e: unknown) {
-      // Updater errors can include URLs from the GitHub Releases response,
-      // so we log only the class and show a generic user-facing message.
+      // Updater errors can include URLs from the GitHub Releases response, so only the class is logged.
       log.error("Update check failed", e instanceof Error ? e.name : "unknown");
       setStatus({
         message: "Couldn't check for updates. Check your network connection and try again.",
@@ -102,9 +95,8 @@ export function useAutoUpdater(): AutoUpdater {
         setStatus({ state: "up-to-date" });
         return;
       }
-      // Relaunch restarts the process without closing the window, so the write
-      // queue's close-time flush never runs. The user clicked this from a dialog
-      // they opened mid-session, most likely with an editor full of unsaved text.
+      // Relaunch restarts the process without closing the window, so the write queue's close-time
+      // flush never runs, and the user likely has an editor full of unsaved text.
       await flushPendingWrites();
       await update.downloadAndInstall();
       log.info(`Update ${targetVersion} installed, relaunching`);
@@ -120,9 +112,8 @@ export function useAutoUpdater(): AutoUpdater {
     }
   }
 
-  // Auto-check once on mount. Skipped when the user has disabled auto-update —
-  // in that case `@tauri-apps/plugin-updater` is never imported and no request
-  // is issued. Manual `checkForUpdates()` ignores this gate.
+  // Skipped when auto-update is disabled: the updater plugin is never imported and no request is
+  // issued. Manual `checkForUpdates()` ignores this gate.
   useEffect(() => {
     if (autoChecked.current) return;
     autoChecked.current = true;

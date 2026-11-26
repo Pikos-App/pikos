@@ -24,7 +24,6 @@ function findTableElement(editor: Editor): HTMLTableElement | null {
     if (node.type.name === "table") {
       const domNode = editor.view.nodeDOM(pos.before(d));
       if (domNode instanceof HTMLTableElement) return domNode;
-      // nodeDOM might return the wrapper — check children
       if (domNode instanceof HTMLElement) {
         const table = domNode.querySelector("table");
         if (table) return table;

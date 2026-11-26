@@ -32,15 +32,12 @@ interface WeekGridProps {
   autoOpenPageId: string | null;
   isCurrentWeek: boolean;
   onAutoOpenConsumed: () => void;
-  /** Create an all-day page. Optional end date for multi-day spans (drag-to-create). */
   onCreateAllDay: (start: Date, end?: Date) => Promise<void> | void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
-  /** When `originalDate` is set, the dragged block is a virtual rrule occurrence
-   * — caller should materialise an override instead of mutating the head schedule. */
+  /** With `originalDate` the dragged block is a virtual rrule occurrence: materialise an override rather than mutate the head. */
   onReschedule: (pageId: string, start: string, end?: string, originalDate?: string) => void;
   pages: PageSummary[];
-  /** The week's pages are still loading for the first time. */
   loading: boolean;
 }
 
@@ -71,11 +68,9 @@ export function WeekGrid({
   const dayColumnsRef = useRef<HTMLDivElement>(null);
   const today = useNow();
 
-  // Geometry needs a stable shape before useScrollPersist can map an hour to
-  // a pixel, but the final fit-to-viewport geometry depends on the measured
-  // containerHeight from useScrollPersist. Resolve the cycle by computing a
-  // first-pass geometry at the base hour height; the hook reads it once on
-  // restore. Subsequent re-renders use the fit-to-viewport geometry.
+  // useScrollPersist needs geometry to map an hour to a pixel, but the fit-to-viewport geometry
+  // needs its measured containerHeight. Break the cycle with a first-pass geometry at the base hour
+  // height, which the hook reads once on restore.
   const baseGeometry = buildCollapseGeometry(settings.collapse, settings.metrics.hourHeight);
   const { containerHeight, scrollRef } = useScrollPersist({
     calendarScrollRequest,
@@ -83,11 +78,9 @@ export function WeekGrid({
     rightPanel,
   });
 
-  // Fit-to-viewport sizes hours so the rendered grid fills the available
-  // height exactly — midnight (or whichever hour ends the visible range)
-  // sits at the bottom edge of the scroll area with no dead space below.
-  // Fixed-height collapsed bands subtract from the available space first so
-  // the per-hour stretch only divides the truly hour-pitched portion.
+  // Fit-to-viewport sizes hours so the grid fills the height exactly, with no dead space below the
+  // last visible hour. Fixed-height collapsed bands subtract first, so the stretch divides only the
+  // hour-pitched portion.
   const renderedHours =
     (settings.collapse.topCollapsed ? 0 : settings.collapse.topHour) +
     (settings.collapse.bottomHour - settings.collapse.topHour) +
@@ -110,8 +103,6 @@ export function WeekGrid({
   };
   const settingsValue = { ...settings, geometry, metrics };
 
-  // Shared drag ghost — owned by the ghost hook; consumed by useTimedDrag and
-  // useAllDayDrag via individual imperative functions (avoids ref leaks).
   const {
     ghostContent,
     ghostRefCallback,
@@ -205,9 +196,6 @@ export function WeekGrid({
     storageKey: STORAGE_KEYS.calendarAllDayHeight,
   });
 
-  // Page list passed to AllDaySection, with live override for edge-resize
-  // preview. Drag-to-create preview is rendered separately as an absolute
-  // overlay so it doesn't participate in row assignment (see AllDaySection).
   const displayedAllDayPages: PageSummary[] = allDayEdgeResizePreview
     ? pages.map((p) =>
         p.id === allDayEdgeResizePreview.pageId
@@ -264,9 +252,7 @@ export function WeekGrid({
             <TimeGutter />
             <div className="relative flex flex-1" ref={dayColumnsRef}>
               {days.map((day, i) => {
-                // External page-list drag ghost only. Internal block drag and
-                // all-day chip drag both use the ref-positioned overlay below
-                // to avoid per-frame re-renders.
+                // External page-list drag ghost only; internal drags use the ref-positioned overlay below.
                 const colDragGhost: DragGhost | null =
                   externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
                     ? {
@@ -313,8 +299,6 @@ export function WeekGrid({
                 );
               })}
 
-              {/* Drag ghost overlay — content via state (2x/gesture),
-                  position via ref (every frame). */}
               {ghostContent && (
                 <DragGhostOverlay
                   content={ghostContent}

@@ -1,13 +1,8 @@
-// usePageWriteQueue — the write half of PagesContext: the per-page mutation
-// queue, the 800ms debounce that batches editor typing into one DB write, and
-// the `pageErrors` map the UI reads when one fails. Every edit is a pending
-// write on the view cache's store until its write lands or fails.
-//
-// It also owns the ONE optimistic-write shape every mutation in the context
-// uses — patch state now, write, and on failure put the state back and surface
-// the error where the UI can see it. Before this module that shape was written
-// out by hand at every call site, which is how the same rollback could be
-// subtly wrong in three of them at once.
+// The write half of PagesContext: the per-page mutation queue, the debounce that batches editor
+// typing into one DB write, and the `pageErrors` map the UI reads when one fails. Every edit is a
+// pending write on the view cache's store until its write lands or fails. Also owns the one
+// optimistic-write shape every mutation uses: patch state now, write, and on failure restore the
+// state and surface the error.
 
 import type { PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
 import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
@@ -21,65 +16,46 @@ import type { WriteMirror } from "@/shared/viewCache/writeMirror";
 
 const log = createLogger("PageWriteQueue");
 
-/** Editor typing coalesces into one DB write this long after the last keystroke. */
 const WRITE_DEBOUNCE_MS = 800;
 
-/** One optimistic mutation: what it displaces, what it writes, how it undoes. */
 export interface OptimisticWrite<T> {
-  /** The optimistic patch. Runs synchronously, before the write is even queued —
-   *  a mutation that waits for the adapter to remove a row can be raced by an
-   *  undo that re-adds it. */
+  /** Runs synchronously, before the write is queued: a mutation that waits for the adapter to remove
+   *  a row can be raced by an undo that re-adds it. */
   apply: () => void;
-  /** Pages that carry the StorageError when the write fails. Omit for mutations
-   *  with no per-page error surface (reorders, folder writes). */
+  /** Pages that carry the StorageError when the write fails. */
   errorIds?: string[];
-  /** Short, app-controlled prefix for the rollback log line. */
   label: string;
-  /** What the user was doing, in their words, for the toast a failure raises —
-   *  "reordering pages", "moving a page to a folder". Reads as "Storage error
-   *  while <notice>." A generic save message stands in when it is omitted.
+  /** What the user was doing, in their words, for the failure toast: "reordering pages". A generic
+   *  save message stands in when omitted.
    *
-   *  Supplying this is what makes the queue report, and `rethrow` no longer
-   *  decides it. A fire-and-forget write is reported from here whether or not it
-   *  names an action; a write that also rethrows is reported from here only when
-   *  it names one, so a caller raising its own message leaves this out and does
-   *  not toast the same failure twice. Keying it to `rethrow` alone was wrong:
-   *  `scheduleOnce` and `clearSchedule` rethrow for the one caller that undoes a
-   *  half-finished create, while ten others call them fire-and-forget, and those
-   *  ten went silent. Before any of it the only surface was `pageErrors`, which
-   *  the editor reads for the one page it has open, so a status ticked from a
-   *  list, the calendar or a search result rolled back in silence. With no
-   *  telemetry, a failure nobody is shown is a failure nobody can report. */
+   *  Supplying this is what makes the queue report. A write that also rethrows is reported from here
+   *  only when it names one, so a caller raising its own message leaves this out and doesn't toast
+   *  twice. Keying it to `rethrow` alone would silence the fire-and-forget callers of `scheduleOnce`
+   *  and `clearSchedule`. `pageErrors` alone isn't enough: the editor reads it for its one open page,
+   *  so a status ticked from a list, the calendar or a search result would roll back in silence. */
   notice?: string;
-  /** Serialise the write on this page's queue. Omit for writes that aren't
-   *  scoped to one page (bulk status, folder reorder). */
   queueOn?: string;
-  /** Re-throw after rolling back — for callers that await and branch on failure. */
   rethrow?: boolean;
-  /** Edits made before this write, by the debounce, that it carries to the database. */
   carries?: number[];
-  /** Hold the carried edits on screen if the write fails: typing the editor still shows. */
   keepOnFailure?: boolean;
-  /** Puts back exactly what `apply` displaced. */
   rollback: () => void;
   write: () => Promise<T>;
 }
 
 export interface PageWriteQueue {
-  /** Forget a page's queued debounce + pending patch — a delete must not be
-   *  followed by a write that resurrects the row. */
+  /** Forget a page's queued debounce and pending patch: a delete must not be followed by a write
+   *  that resurrects the row. */
   cancelPendingWrite: (id: string) => void;
   clearPageError: (id: string) => void;
   /** Serialise a write behind this page's in-flight ones, so a debounced patch
    *  and a concurrent schedule write can never interleave or clobber. */
   enqueue: <T>(pageId: string, fn: () => Promise<T>) => Promise<T>;
-  /** Write out a page's pending patch now, ahead of the debounce. Rejects on a
-   *  failed write (after rolling back), unlike the debounced path. */
+  /** Write out a page's pending patch now. Rejects on a failed write (after rolling back), unlike
+   *  the debounced path. */
   flushPage: (id: string) => Promise<void>;
   optimistic: <T>(spec: OptimisticWrite<T>) => Promise<T | undefined>;
   pageErrors: Map<string, StorageError>;
-  /** Optimistic patch now, one coalesced DB write ~800ms after the last call.
-   *  Status changes bypass the debounce (see below). */
+  /** Optimistic patch now, one coalesced DB write after the last call. Status changes bypass the debounce. */
   updatePage: (id: string, patch: PageUpdate) => void;
 }
 
@@ -96,13 +72,12 @@ export function usePageWriteQueue({
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
-  /** Each page's debounced edits, as the mirror recorded them, for the write that carries them. */
   const debouncedWrites = useRef<Map<string, number[]>>(new Map());
 
   function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
-    // A patch still in its debounce was made first, so it is written first. Left
-    // to its timer it landed after this write and put back what this one replaced:
-    // a head moved within 800ms of its quick add snapped back to its old date.
+    // A patch still in its debounce was made first, so it is written first. Left to its timer it
+    // would land after this write and put back what this one replaced: a head moved within 800ms of
+    // its quick add would snap back to its old date.
     commitPendingPatch(pageId);
     const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
     // Pass fn as both fulfilment and rejection handler so the queue never stalls
@@ -164,16 +139,13 @@ export function usePageWriteQueue({
 
   function cancelPendingWrite(id: string): void {
     takePendingPatch(id);
-    // Never written, so its edits mustn't stay on screen.
     mirror.fail(debouncedWrites.current.get(id) ?? []);
     debouncedWrites.current.delete(id);
   }
 
-  /** The write both the debounce timer and flushPage land in. The optimistic
-   *  patch is already on screen by the time this runs — only the DB write and
-   *  its rollback happen here. `adoptEcho` false is for a patch committed ahead
-   *  of another write: its echo predates that write, and adopting it would put
-   *  back on screen what the later write's optimistic patch replaced. */
+  /** The write both the debounce timer and flushPage land in. `adoptEcho` false is for a patch
+   *  committed ahead of another write: its echo predates that write, and adopting it would put back
+   *  what the later write's optimistic patch replaced. */
   function commitPatch(
     id: string,
     patch: PageUpdate,
@@ -190,7 +162,6 @@ export function usePageWriteQueue({
       label: `page write for ${id}`,
       queueOn: id,
       rethrow,
-      // Failing the carried edits takes them off the store, which is the rollback.
       rollback: () => {},
       write: async () => {
         const updated = await adapter.updatePage(id, patch);
@@ -225,12 +196,10 @@ export function usePageWriteQueue({
     const prevTimer = debounceTimers.current.get(id);
     if (prevTimer !== undefined) clearTimeout(prevTimer);
 
-    // Status changes gate the native notification scheduler, which reads
-    // pages.status directly from SQLite. Flushing them immediately — instead of
-    // after the debounce — closes a race where a reminder could fire for a page
-    // the user just marked done. Status toggles are deliberate and
-    // low-frequency, so the immediate write has no perceptible cost. flushPage
-    // records any DB error in pageErrors, so the rethrow is safe to swallow.
+    // Status changes gate the native notification scheduler, which reads pages.status from
+    // SQLite. Flushing them immediately closes a race where a reminder fires for a page just marked
+    // done, and status toggles are infrequent enough that it costs nothing. flushPage records any DB
+    // error in pageErrors, so the rethrow is safe to swallow.
     if ("status" in patch) {
       // flushPage rethrows, so nothing downstream of it reports. This is the one
       // place that awaits it and has no caller to hand the failure to: the tick
@@ -253,7 +222,6 @@ export function usePageWriteQueue({
     debounceTimers.current.set(id, timer);
   }
 
-  /** Take a page's debounced patch off its timer, or undefined when none waits. */
   function takePendingPatch(id: string): PageUpdate | undefined {
     const timer = debounceTimers.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
@@ -263,7 +231,6 @@ export function usePageWriteQueue({
     return accumulated;
   }
 
-  /** Queue a waiting patch now, reporting a failure the way its timer would have. */
   function commitPendingPatch(id: string): void {
     const accumulated = takePendingPatch(id);
     if (accumulated) void commitPatch(id, accumulated, false, false);
@@ -271,7 +238,7 @@ export function usePageWriteQueue({
 
   /** With nothing waiting, still settles once the writes already in flight have: a write queued
    *  ahead of the flush (a recurrence enqueued on Enter) takes the debounced patch with it, and a
-   *  read that followed a bare return saw the page as it was before that patch. */
+   *  read that followed a bare return would see the page as it was before that patch. */
   async function flushPage(id: string): Promise<void> {
     const accumulated = takePendingPatch(id);
     if (!accumulated) {
@@ -305,7 +272,6 @@ export function usePageWriteQueue({
     await Promise.allSettled(Array.from(mutationQueues.current.values()));
   }
 
-  // Quit from the menu ends here too, by closing the window.
   useEffect(() => {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
 

@@ -48,7 +48,6 @@ async function init(hook: Hook) {
   });
 }
 
-/** Returns the id of the external-calendar folder a newly enabled calendar mints. */
 async function enableSyncedCalendar(hook: Hook): Promise<string> {
   let folderId!: string;
   await act(async () => {

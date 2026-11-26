@@ -36,7 +36,6 @@ import type { RowPickerKind } from "../hooks/useRowPicker";
 interface PageRowMenuProps {
   page: PageSummary;
   folders: Folder[];
-  /** How many pages the menu acts on: the selection the row belongs to, or 1. */
   actsOn: number;
   onCloseAutoFocus: (e: Event) => void;
   onToggleStatus: () => void;

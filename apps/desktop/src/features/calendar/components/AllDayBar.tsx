@@ -27,7 +27,6 @@ export interface AllDayBarProps {
   onDragStart: (info: {
     folderColor: string | undefined;
     pageId: string;
-    /** Set when dragging a virtual rrule occurrence — keys the override. */
     originalDate?: string;
   }) => void;
   onEdgeResizeStart?: (info: {
@@ -35,19 +34,15 @@ export interface AllDayBarProps {
     clientY: number;
     edge: "start" | "end";
     pageId: string;
-    /** Set when resizing a virtual rrule occurrence — keys the override. */
     originalDate?: string;
   }) => void;
-  /** Absolute-positioning style (left/top/width) computed by the parent so
-   * the bar stays ignorant of column-count math. */
+  /** Absolute-positioning style from the parent, so the bar stays ignorant of column-count math. */
   position: CSSProperties;
 }
 
 /**
- * Single absolute-positioned bar for one all-day event segment. A 4-day event
- * is one element spanning 4 columns — cross-segment hover is a native CSS
- * `:hover`, the title flows naturally across the bar's width, and only one
- * popover exists per event.
+ * One absolute-positioned bar per all-day event segment. A 4-day event is one element spanning
+ * 4 columns, so cross-segment hover is a native `:hover` and only one popover exists per event.
  */
 export function AllDayBar({
   autoOpenPopover,
@@ -81,8 +76,7 @@ export function AllDayBar({
     onDoubleClick: () => onDoubleClick(page.id),
   });
 
-  // Suppress the drag + edge-resize affordances too — the hooks already no-op,
-  // this just stops the cursor from advertising a move/resize that can't happen.
+  // The hooks already no-op; this stops the cursor advertising a move or resize that can't happen.
   const locked = page.scheduleLocked;
 
   function handlePointerDown(e: React.PointerEvent) {
@@ -91,8 +85,6 @@ export function AllDayBar({
     // pointerdown is what Radix listens on to dismiss another open popover
     // from outside — swallowing it would strand that one open.
     if (locked) return;
-    // Prevent native text selection — the bar's content is mostly text and
-    // dragging across it would otherwise highlight it.
     e.preventDefault();
     const virtual = page as { originalDate?: string };
     beginDragThreshold(e.clientX, e.clientY, {

@@ -1,9 +1,7 @@
-// A detached synced all-day bar stays a real, editable page: it shows the
-// broken-sync glyph but is NOT struck through / dimmed-as-done. Only a `done`
-// status applies the done treatment. Neither component renders a CSS
-// line-through (done is conveyed via opacity-50); the user-visible "not done"
-// signal is the absence of that treatment, asserted via the button's class as a
-// last resort since done state isn't otherwise exposed accessibly inside the bar.
+// A detached synced all-day bar stays a real, editable page: it shows the broken-sync glyph
+// but is not dimmed-as-done. Only a `done` status applies the done treatment (opacity-50, no
+// line-through), so "not done" is asserted as the absence of that class, the only handle since
+// done state isn't otherwise exposed accessibly inside the bar.
 
 import type { AllDayBar as AllDayBarData, PageSummary } from "@pikos/core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
@@ -95,10 +93,8 @@ describe("AllDayBar — detached synced rendering", () => {
   });
 });
 
-// One bar of a recurring all-day series is an occurrence, not the series: the drag
-// has to name which day moved, or the write lands on the head and drags every other
-// occurrence with it. This is the first half of the hand-off `useAllDayDrag` then
-// carries through to the reschedule.
+// One bar of a recurring all-day series is an occurrence, not the series: the drag has to name
+// which day moved, or the write lands on the head and drags every other occurrence with it.
 describe("AllDayBar — occurrence identity on drag", () => {
   const dragPast = (bar: HTMLElement) => {
     fireEvent.pointerDown(bar, { button: 0, clientX: 0, clientY: 0, isPrimary: true });
@@ -130,9 +126,8 @@ describe("AllDayBar — occurrence identity on drag", () => {
   });
 });
 
-// The chip paints itself in the folder's color, so a checkbox left on the default
-// neutral stroke sinks into its own fill. Timed blocks have always passed the color
-// through; the all-day chip did not, which showed up worst on the dark theme.
+// The chip paints itself in the folder's color, so a checkbox on the default neutral stroke
+// sinks into its own fill.
 describe("AllDayBar — the checkbox stays visible on a colored chip", () => {
   it("strokes the checkbox in the folder color", () => {
     renderBar(makePage({ status: "not_started", syncState: null }), vi.fn(), "rgb(255, 0, 0)");

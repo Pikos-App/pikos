@@ -1,12 +1,9 @@
-// MD path: markdown string → parseMarkdownVault → convertMarkdownToTiptap → editor.getJSON()
-//          → editor.storage.markdown.getMarkdown() → parseMarkdownVault → verify metadata + content
+// MD path: markdown -> parseMarkdownVault -> convertMarkdownToTiptap -> editor.getJSON() ->
+//          getMarkdown() -> parseMarkdownVault -> verify metadata and content.
+// CSV path: CSV -> prepareCSVRows + applyMappings -> verify metadata -> build CSV -> re-parse.
 //
-// Both ends of that loop are tiptap-markdown, so it says nothing about the Markdown a
-// vault *export* writes — that is the Rust exporter, covered by
-// markdownExport.conformance.test.ts.
-//
-// CSV path: CSV string → prepareCSVRows + applyMappings → verify metadata fields
-//           → build CSV from output → re-parse → verify round-trip
+// Both ends of the MD loop are tiptap-markdown, so it says nothing about the Markdown a vault export
+// writes; that is the Rust exporter, covered by markdownExport.conformance.test.ts.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -53,15 +50,8 @@ function readVault(root: string): VaultFile[] {
 }
 
 /**
- * An editor with the production document schema.
- *
- * This used to assemble its own extension list, which had drifted from
- * production — base Image instead of the Pikos node, no Link configuration, no
- * table extension, no TabIndent. A round-trip test that does not use the
- * production schema can pass while production breaks, which is the failure this
- * suite exists to prevent.
- *
- * Markdown parsing is overridden to match the importer (`breaks: true` for
+ * An editor with the production document schema: a round-trip test that doesn't use it can pass while
+ * production breaks. Markdown parsing is overridden to match the importer (`breaks: true` for
  * Obsidian's non-CommonMark line breaks); its schema contribution is unchanged.
  */
 function createTestEditor(): Editor {
@@ -184,7 +174,6 @@ describe("Markdown round-trip", () => {
 
     const exportedMd = tiptapJsonToMarkdown(parsed);
 
-    // Re-build with frontmatter (simulating export_markdown)
     const frontmatter = [
       "---",
       `title: "test-note"`,
@@ -254,7 +243,6 @@ describe("Markdown round-trip", () => {
     const table = json.content?.find((n) => n.type === "table");
     expect(table).toBeTruthy();
 
-    // Should have 3 rows (header + 2 data)
     expect(table!.content).toHaveLength(3);
 
     const exported = tiptapJsonToMarkdown(json);
@@ -349,7 +337,6 @@ describe("CSV round-trip", () => {
     });
   }
 
-  /** Simulate CSV export from page data (matches Rust export_csv headers). */
   function exportPagesToCsv(pages: ImportPage[], folderNames: Map<string, string>): string {
     let csv =
       "Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Created At,Updated At,Completed At\n";

@@ -17,27 +17,19 @@ import type { CachedView } from "./useCachedView";
 
 export interface CachedList {
   sections: ListSection[];
-  /** The loaded pages of every section, in the order shown. */
   pages: PageSummary[];
-  /** Every id known so far, in the order shown; may run past the loaded rows. */
   ids: string[];
   loading: boolean;
-  /** Rows `first` through `last` of `section` are on screen. */
   ensure: (section: string, first: number, last: number) => void;
-  /** Every id in the view, loading the ones not yet known. */
   allIds: () => Promise<string[]>;
-  /** Summaries for `ids`, fetching any not held. */
   rows: (ids: string[]) => Promise<PageSummary[]>;
-  /** The one list of an Inbox or folder view, which a drag reorders; null for sections. */
   single: CachedView | null;
-  /** Every page in one section, fetching the ones not loaded: Overdue, for moving it to today. */
   sectionPages: (section: string) => Promise<PageSummary[]>;
 }
 
 interface Section {
   key: string;
   header: ListSection["header"];
-  /** Whether a page, as it now stands, belongs here. */
   holds: (page: PageSummary) => boolean;
 }
 
@@ -46,7 +38,6 @@ function startDay(page: PageSummary): string | null {
   return start ? dateKey(start) : null;
 }
 
-/** The sections `views` stand for, in order: see `cachedViewKeys`. */
 function sectionsOf(viewId: string, views: CachedView[], today: string): Section[] {
   if (viewId === "today") {
     return [
@@ -79,7 +70,7 @@ function sectionsOf(viewId: string, views: CachedView[], today: string): Section
 }
 
 /**
- * Synced series whose occurrence today stands in for a head on another day, by head id. The
+ * Synced series whose occurrence today stands in for a head on another day, by head id; the
  * occurrence moves the row into today's section, as `withTodayOccurrences` does for the full list.
  */
 function todaySwaps(pages: PageSummary[], occurrences: PageSummary[], today: string) {
@@ -96,10 +87,8 @@ function todaySwaps(pages: PageSummary[], occurrences: PageSummary[], today: str
 export function buildCachedList(input: {
   viewId: string;
   views: CachedView[];
-  /** The in-memory list, for synced series heads. */
   pages: PageSummary[];
   hiddenIds: Set<string>;
-  /** Today's recurring occurrences, for the Today view. */
   occurrences: PageSummary[];
   today: string;
   /** Show nothing yet, as loading: Today waits for the series heads rather than draw without its
@@ -108,7 +97,7 @@ export function buildCachedList(input: {
 }): CachedList {
   const list = buildList(input);
   // A view of several lists, as Upcoming is one a day, also waits for every list's first rows:
-  // drawn as each landed, it redrew once a list, each redraw holding up the next list's arrival.
+  // drawn as each landed, it would redraw once per list, each redraw holding up the next arrival.
   if (!input.waiting && !list.loading) return list;
   return {
     ...list,
@@ -173,7 +162,6 @@ function buildList(input: Parameters<typeof buildCachedList>[0]): CachedList {
       const view = viewOf.get(section);
       if (!view) return;
       const placed = places.get(section) ?? [];
-      // Past the shown slots is the tail, which follows the list's known ids in order.
       const placeOf = (at: number) => placed[at] ?? view.ids.length + (at - placed.length);
       const known = placed.slice(first, last + 1);
       view.ensure(Math.min(placeOf(first), ...known), Math.max(placeOf(last), ...known));

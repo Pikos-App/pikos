@@ -43,7 +43,6 @@ function renderPanel(options: Parameters<typeof usePanelResize>[0]) {
   return renderHook(() => usePanelResize(options), { wrapper });
 }
 
-/** Wide enough that `min` and `max` are what bound the panel. */
 const NO_CEILING = 100_000;
 
 describe("usePanelResize", () => {
@@ -147,7 +146,6 @@ describe("usePanelResize", () => {
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 200)));
 
-    // Move far left: would compute 150 + (50 - 200) = 0, clamps to 100
     act(() => dispatchMove(50));
     expect(result.current.width).toBe(100);
   });
@@ -163,7 +161,6 @@ describe("usePanelResize", () => {
     const handle = document.createElement("div");
     act(() => result.current.onResizeStart(makeMouseDown(handle, 100)));
 
-    // Would compute 400 + 1000 = 1400; clamp to 500
     act(() => dispatchMove(1100));
     expect(result.current.width).toBe(500);
   });
@@ -215,7 +212,6 @@ describe("usePanelResize", () => {
     const after = result.current.width;
     act(() => dispatchUp());
 
-    // A "stray" mousemove after release should not change the width.
     act(() => dispatchMove(400));
     expect(result.current.width).toBe(after);
   });

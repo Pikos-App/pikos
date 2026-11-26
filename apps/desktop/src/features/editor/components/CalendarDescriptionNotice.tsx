@@ -8,16 +8,12 @@ interface CalendarDescriptionNoticeProps {
 }
 
 /**
- * Shown when the event's description changed upstream but the user had already
- * edited the body — the reconciler parks the change (`page_sync.pending_description`)
- * rather than clobber it.
+ * Shown when the event's description changed upstream but the user had already edited the body:
+ * the reconciler parks the change (`page_sync.pending_description`) rather than clobber it.
  *
- * Append adds the parked text to the end of the body; Dismiss drops it. There is
- * deliberately no "replace": the notice only ever appears *because* the user
- * edited the body, so replacing destroys the very thing that raised it, with no
- * undo but the trash. Dismiss is final — the next upstream change raises a fresh
- * notice, and keeping this one retrievable would rebuild the parked state the
- * actions exist to clear.
+ * Append adds the parked text to the end of the body; Dismiss drops it. There is no "replace": the
+ * notice only appears because the user edited the body, so replacing destroys what raised it.
+ * Dismiss is final, since keeping it retrievable would rebuild the parked state the actions clear.
  */
 export function CalendarDescriptionNotice({
   onAppend,

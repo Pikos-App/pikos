@@ -115,7 +115,6 @@ export function FolderList() {
 
   return (
     <div aria-label="Views and folders" className="flex h-full flex-col" role="group">
-      {/* Sticky smart views + folders header */}
       <div className="flex shrink-0 flex-col gap-0.5 px-1 pt-2">
         <SmartViewEntry
           badge={todayCount}
@@ -199,7 +198,6 @@ export function FolderList() {
         </div>
       </div>
 
-      {/* Scrollable folder list */}
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2" ref={scrollElementRef}>
         <SortableContext items={folderIds} strategy={() => null}>
           <div
@@ -313,11 +311,8 @@ export function FolderList() {
         )}
       </div>
 
-      {/* Trash sits under everything, behind the same hairline the sidebar puts
-          above Settings. It reads as a smart view because it behaves like one —
-          a place you go to see pages — but it is not somewhere pages live and
-          nothing can be dropped into it, so it must not sit in the scrolling
-          list beside Inbox and the folders. */}
+      {/* Under everything, behind the same hairline the sidebar puts above Settings. It reads as a smart
+          view but isn't somewhere pages live or can be dropped, so it stays out of the scrolling list. */}
       <div className="shrink-0 border-t border-border-subtle px-1 py-2">
         <SmartViewEntry
           icon={<Trash2 size={16} />}

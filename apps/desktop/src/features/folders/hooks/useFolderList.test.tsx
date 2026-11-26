@@ -56,7 +56,6 @@ describe("useFolderList — counts", () => {
       const b = await hook.result.current.pages.createPage({ folderId: work.id, title: "B" });
       const c = await hook.result.current.pages.createPage({ folderId: work.id, title: "C" });
       hook.result.current.pages.updatePage(c.id, { status: "done" });
-      // Silence unused-variable lint.
       void a;
       void b;
     });
@@ -82,7 +81,6 @@ describe("useFolderList — counts", () => {
     const hook = setup();
     await init(hook);
 
-    // Pick a yesterday timestamp so the value is unambiguously "today or earlier".
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().slice(0, 10);

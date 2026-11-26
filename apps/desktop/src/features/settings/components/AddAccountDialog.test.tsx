@@ -1,8 +1,3 @@
-// AddAccountDialog — provider picker + the CalDAV form. Validates the submit
-// gate, the failure path (stay open, show the error), and Back navigation.
-// Rendered standalone with a spy onConnect; the happy path through the real
-// adapter is covered by CalendarSyncSettings.test.tsx.
-
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,9 +64,8 @@ describe("AddAccountDialog", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
-  // Closing the browser without consenting leaves the grant pending for the five
-  // minutes the loopback listener holds its port. While one boolean covered both
-  // kinds of waiting, that was a dialog nobody could dismiss.
+  // Closing the browser without consenting leaves the grant pending for the five minutes the
+  // loopback listener holds its port; one boolean covering both waits made that undismissable.
   it("can be dismissed while the Google grant is still pending", async () => {
     const onConnectGoogle = vi.fn(() => new Promise<void>(() => {}));
     const onOpenChange = vi.fn();
@@ -128,10 +122,8 @@ describe("AddAccountDialog", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
-  // C113: the Server URL placeholder was a real, working iCloud URL, sitting above
-  // two placeholders that obviously are examples. An iCloud user read the field as
-  // answered, filled in the other two, and met a Connect button that stayed grey
-  // and said nothing.
+  // The Server URL placeholder was a real iCloud URL above two obvious examples, so an iCloud user
+  // read the field as answered and met a Connect button that stayed grey and said nothing.
   it("offers a server URL you cannot mistake for a value", () => {
     render();
     fireEvent.click(screen.getByText("CalDAV"));
@@ -146,7 +138,6 @@ describe("AddAccountDialog", () => {
     render();
     fireEvent.click(screen.getByText("CalDAV"));
 
-    // Nothing typed: the empty inputs already say it, so no line.
     expect(screen.queryByText(/^Needs /)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Server URL"), {

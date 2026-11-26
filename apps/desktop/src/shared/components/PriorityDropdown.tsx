@@ -28,9 +28,7 @@ export const ALL_PRIORITIES: PagePriority[] = [0, 1, 2, 3, 4];
 export interface PriorityDropdownProps {
   priority: PagePriority;
   onSelect: (priority: PagePriority) => void;
-  /** "byline" = text+icon in metadata header row; "badge" = compact icon-only badge for lists */
   variant?: "byline" | "badge";
-  /** Fires when the menu transitions from open to closed (any cause). */
   onClose?: () => void;
 }
 

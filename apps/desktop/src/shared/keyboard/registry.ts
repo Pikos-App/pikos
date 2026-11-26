@@ -5,16 +5,14 @@ const log = createLogger("Keyboard");
 
 export type Binding = {
   id: string;
-  combo: string; // e.g., "Mod+Shift+D"
-  scope?: string; // default: "global"
+  combo: string;
+  scope?: string;
   /**
-   * Short imperative name — "New page", "Toggle sidebar". Every user-facing
-   * binding carries one: it is what the command palette lists and what the
-   * shortcuts settings page renders, so a binding without a label is invisible
-   * to both (which is right for the internal half of a chord).
+   * Short imperative name ("New page"). It is what the command palette lists and the shortcuts
+   * settings page renders, so a binding without one is invisible to both (right for the internal
+   * half of a chord).
    */
   label?: string;
-  /** Section heading the shortcuts settings page files this under. */
   group?: string;
   /** False for a command that opens the command palette: run from inside it, it
    *  only closes the palette it was chosen in. Static rather than a `when` gate,
@@ -23,21 +21,19 @@ export type Binding = {
   /** Lists after every command that matches the palette's filter as well, so the
    *  palette never opens with it highlighted for a stray Enter. */
   destructive?: boolean;
-  // The originating KeyboardEvent is passed so handlers can branch on e.g.
-  // `e.repeat`. Handlers that don't need it can ignore the argument.
   handler: (e: KeyboardEvent) => void;
   when?: () => boolean;
   preventDefault?: boolean;
   stopPropagation?: boolean;
-  repeat?: boolean; // default false -> ignore auto-repeat
-  allowInInputs?: boolean; // default false
+  repeat?: boolean;
+  allowInInputs?: boolean;
   /** Stand down when an earlier listener already used the key, such as a popover
    *  closing or the editor collapsing a selection on Escape (see `wasUsed`). */
   unlessHandled?: boolean;
 };
 
 export type NormalizedCombo = {
-  key: string; // lowercase key
+  key: string; // lowercase
   mod: boolean;
   ctrl: boolean;
   meta: boolean;
@@ -56,7 +52,6 @@ function normalizeKey(key: string): string {
 }
 
 function parseCombo(combo: string): NormalizedCombo {
-  // Accept forms like "Mod+Shift+D" or "Cmd+Shift+D" or "Ctrl+D"
   const parts = combo.split("+").map((p) => p.trim());
 
   let key = "";
@@ -93,7 +88,6 @@ function normalizeEvent(e: KeyboardEvent): NormalizedCombo {
     ctrl: e.ctrlKey,
     key,
     meta: e.metaKey,
-    // Mod maps to Meta on macOS and Control elsewhere
     mod: IS_MACOS ? e.metaKey : e.ctrlKey,
     shift: e.shiftKey,
   };
@@ -102,16 +96,13 @@ function normalizeEvent(e: KeyboardEvent): NormalizedCombo {
 function matchCombo(evt: NormalizedCombo, bind: NormalizedCombo): boolean {
   if (evt.key !== bind.key) return false;
 
-  // Alt and Shift must match exactly
   if (evt.alt !== bind.alt) return false;
   if (evt.shift !== bind.shift) return false;
 
   if (bind.mod) {
-    // Require the platform "mod" key to be held (Cmd on mac, Ctrl otherwise)
     if (!evt.mod) return false;
     // When using Mod, don't additionally require explicit ctrl/meta flags.
   } else {
-    // No Mod: explicit ctrl/meta must match exactly
     if (evt.ctrl !== bind.ctrl) return false;
     if (evt.meta !== bind.meta) return false;
   }
@@ -143,7 +134,6 @@ function isBlockingDialogOpen(): boolean {
 
 let listingForPalette = false;
 
-/** One labelled shortcut, as the settings page needs it. */
 export type ShortcutDoc = {
   combo: string;
   group: string;
@@ -185,18 +175,13 @@ function conflictKey(parsed: NormalizedCombo): string {
 
 export const Keyboard = {
   handle(e: KeyboardEvent): void {
-    // Focus guard. A blocking dialog puts the user in a separate mental
-    // context (the activePage / page list isn't what they're acting on), so
-    // treat "a modal dialog is open" exactly like "a text input is focused":
-    // global shortcuts that opted out of inputs (delete, Space-complete, arrow
-    // nav) stand down, while `allowInInputs` shortcuts (the dialog's own keys,
-    // Mod+, etc.) still fire. Prevents accidental page deletes after clicking
-    // a button inside a dialog.
+    // A blocking dialog is a separate context from the page list, so treat it like a focused text
+    // input: global shortcuts that opted out of inputs (delete, Space-complete, arrow nav) stand
+    // down, while `allowInInputs` ones (the dialog's own keys, Mod+,) still fire.
     const targetIsEditable = isEditableTarget(e.target) || isBlockingDialogOpen();
 
     const evt = normalizeEvent(e);
 
-    // Evaluate scopes from top-most down (last is top)
     for (let i = activeScopes.length - 1; i >= 0; i--) {
       const scope = activeScopes[i];
       for (const b of store.values()) {
@@ -214,7 +199,7 @@ export const Keyboard = {
         } catch (err) {
           log.error(`Handler failed for ${b.id}`, err);
         }
-        return; // stop at first match in current top scope
+        return;
       }
     }
   },
@@ -233,12 +218,9 @@ export const Keyboard = {
   },
 
   /**
-   * What the command palette can offer right now: bindings in an active scope
-   * that carry a label and whose `when()` gate currently passes. The gate is
-   * evaluated here rather than left to the caller so a command the key press
-   * wouldn't fire is never listed as available. The palette closes before it
-   * runs a command, so while gates are read here the palette's own dialog
-   * doesn't count as one open over the page; any other dialog still does.
+   * What the command palette can offer now: labelled bindings in an active scope whose `when()`
+   * gate passes. The palette closes before it runs a command, so its own dialog doesn't count as
+   * one open over the page here; any other dialog still does.
    */
   listCommands(): Binding[] {
     listingForPalette = true;
@@ -251,7 +233,6 @@ export const Keyboard = {
     }
   },
 
-  /** Every labelled shortcut registered this session — see `catalog`. */
   listShortcutCatalog(): ShortcutDoc[] {
     return Array.from(catalog.values());
   },

@@ -24,11 +24,7 @@ import { WeekGrid } from "./WeekGrid";
 
 const NO_PAGES: PageSummary[] = [];
 
-/**
- * Reads the visible range's pages from the view cache and expands rrule rules
- * into virtual occurrences. Navigation (prev/next/today) is owned by
- * EditorPanel through the calendar date.
- */
+/** Reads the visible range's pages from the view cache and expands rrule rules into virtual occurrences. */
 export function CalendarView() {
   const {
     deletePage,
@@ -50,19 +46,15 @@ export function CalendarView() {
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
   const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
 
-  // A deleted page gives up its claim on the auto-open. The block clears this by
-  // reporting its popover closed, and deleting the page from that very popover
-  // unmounts the block before it can — which left the id pointing at a page in the
-  // trash. Restoring it matched again, so a restore re-opened the naming popover
-  // for a page nobody had just made, with the empty-title cleanup still attached to
-  // dismissing it.
+  // A deleted page gives up its claim on the auto-open. The block clears it by reporting its
+  // popover closed, but deleting from that popover unmounts the block first, and restoring the
+  // page would then match again and reopen the naming popover.
   useEffect(() => {
     return on("page:deleted", (id) => {
       setAutoOpenPageId((current) => (current === id ? null : current));
     });
   }, [on]);
 
-  // Blur whatever had focus in the editor panel so no focus ring lingers.
   useEffect(() => {
     (document.activeElement as HTMLElement | null)?.blur();
   }, []);
@@ -90,20 +82,16 @@ export function CalendarView() {
     openPage(pageId);
   }
 
-  /** Month view's only navigation gesture: land on the picked day in the time
-   * grid, which is where every scheduling gesture lives. */
+  /** Month view's only navigation: land on the picked day in the time grid. */
   function handleOpenDay(day: Date) {
     setReferenceDate(day);
     setViewMode("time");
   }
 
   /**
-   * Drag-to-reschedule or resize. When `originalDate` is set, the dragged block
-   * is a virtual rrule occurrence (which shares the head's id) — calling
-   * scheduleOnce here would corrupt the head's denorm. Materialise an
-   * independent clone at the new time and exdate the original date, so the
-   * head and rule stay intact while the moved occurrence becomes a regular
-   * page (with its own status, drag, delete, etc.).
+   * Drag-to-reschedule or resize. With `originalDate` the block is a virtual rrule occurrence
+   * sharing the head's id, so scheduleOnce would corrupt the head's denorm: materialise a clone
+   * at the new time and exdate the original date instead.
    */
   function handleReschedule(pageId: string, start: string, end?: string, originalDate?: string) {
     if (originalDate) {
@@ -116,12 +104,10 @@ export function CalendarView() {
   }
 
   /**
-   * Called after the auto-opened popover closes. If the user never gave the
-   * page a title — regardless of close path (Escape, outside click) — delete
-   * it so stray blank pages don't pile up. Only an explicit title (or Enter,
-   * which commits "Untitled" via PageBlockPopover) keeps the page. We flush
-   * any pending debounced title write, then read the persisted page straight
-   * from the adapter so we're not racing with React's effect scheduler.
+   * Called after the auto-opened popover closes by any path. A page never given a title is
+   * deleted so blank pages don't pile up; an explicit title, or Enter (which commits "Untitled"),
+   * keeps it. Flushes the pending title write, then reads the persisted page from the adapter to
+   * avoid racing React's effect scheduler.
    */
   function handleAutoOpenConsumed() {
     const id = autoOpenPageId;
@@ -137,9 +123,7 @@ export function CalendarView() {
   }
 
   return (
-    // Overriding `--ui-text-scale` here is what makes the calendar's text size
-    // independent of the interface's: everything below inherits the calendar's
-    // value, everything above keeps the interface's.
+    // Overriding `--ui-text-scale` here makes the calendar's text size independent of the interface's.
     <div
       className="flex min-h-0 flex-1 flex-col"
       style={

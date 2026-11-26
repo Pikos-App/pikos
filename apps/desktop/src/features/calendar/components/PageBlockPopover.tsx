@@ -31,10 +31,7 @@ interface PageBlockPopoverProps {
   onRemoveDate?: () => void;
 }
 
-/**
- * Opens on single click. Does NOT set activePageId (calendar context
- * preserved) — the "Open page" button is the bridge to the full editor.
- */
+/** Opens on single click without setting activePageId, so calendar context is preserved. */
 export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
   const {
     clearSchedule,
@@ -52,16 +49,14 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   useKeyboardScope("modal");
   useBlockDeleteShortcut(() => onDelete?.());
 
-  // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
   const [openingTitle] = useState(page.title);
   // Enter commits and closes, and the blur that follows reads either the typed text
   // or the title it became; neither may commit again and create a second repeat.
   const committedTitle = useRef<{ title: string; typed: string } | null>(null);
 
-  // Sync every keystroke to the store (debounced write) so close paths that
-  // don't run our blur handler — outside click, Escape, parent unmount — still
-  // see the latest title when they check whether the page is still untitled.
+  // Sync every keystroke to the store (debounced) so close paths that skip our blur handler (outside
+  // click, Escape, parent unmount) still see the latest title when checking whether it's untitled.
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const next = e.target.value;
     setTitleValue(next);
@@ -169,8 +164,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
 
-  // Synced events own a locked mirror — title, folder, date, recurrence read-only
-  // here too (the backend would reject an edit). Body/priority/reminders stay open.
+  // Synced events own a locked mirror: title, folder, date and recurrence are read-only (the backend
+  // would reject an edit); body, priority and reminders stay open.
   const locked = page.scheduleLocked;
   const detached = page.syncState === "detached";
   const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
@@ -186,9 +181,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
 
   return (
     <div className="flex flex-col gap-3">
-      {/* No "synced from" banner for an active mirror — the block colour, the
-          Folder row, and the read-only fields already convey it. Detachment is a
-          real warning state, so it keeps its notice. */}
+      {/* No banner for an active mirror: the block colour, Folder row and read-only fields convey it.
+          Detachment is a real warning state, so it keeps its notice. */}
       {detached && (
         <div className="flex items-center gap-1.5 text-xs text-subtle">
           <CalendarOff size={12} />
@@ -200,10 +194,9 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         </div>
       )}
       {locked ? (
-        // Text, not a read-only input. The popover's focus trap lands on the first
-        // focusable thing it finds, and an input that takes focus and selects its
-        // own contents reads as a title about to be typed over — on the one page
-        // whose title cannot be typed over at all.
+        // Text, not a read-only input: the popover's focus trap lands on the first focusable thing, and an
+        // input that takes focus and selects its contents reads as a title about to be typed over, on the
+        // one page whose title can't be.
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
             {titleValue || <span className="text-subtle">Untitled</span>}
@@ -277,9 +270,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
                         value: page.scheduledStart ?? null,
                       },
                     },
-                // A timed page reminds on a lead time; an all-day page has no
-                // start time to count back from, so its dropdown offers the
-                // day-before anchor instead — same split the editor byline makes.
+                // A timed page reminds on a lead time; an all-day page offers the day-before anchor.
                 !!page.scheduledStart && {
                   kind: "reminder",
                   props: {

@@ -71,7 +71,6 @@ export function CSVColumnMappingPage({
         if (cm.csvHeader === csvHeader) {
           return { ...cm, pikosField: newField };
         }
-        // Auto-reassign duplicate to skip (except "skip" which allows multiples)
         if (newField !== "skip" && cm.pikosField === newField) {
           return { ...cm, pikosField: "skip" as PikosFieldKey };
         }
@@ -88,7 +87,6 @@ export function CSVColumnMappingPage({
         return [...filtered, suggested];
       });
     } else {
-      // If we just un-mapped status or priority, remove its value mapping
       const oldMapping = columnMappings.find((cm) => cm.csvHeader === csvHeader);
       if (
         oldMapping &&

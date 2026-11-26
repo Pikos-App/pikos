@@ -20,7 +20,6 @@ beforeEach(() => {
   matchMediaListeners = [];
   matchMediaMatches = false;
 
-  // Mock matchMedia
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn().mockImplementation(() => ({
@@ -117,7 +116,6 @@ describe("ThemeContext", () => {
 
     act(() => result.current.setTheme("system"));
 
-    // Simulate OS switching to light
     matchMediaMatches = false;
     act(() => {
       for (const fn of matchMediaListeners) fn();

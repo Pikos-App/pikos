@@ -72,9 +72,8 @@ export function UpdateDialog({ updater }: UpdateDialogProps) {
     );
   }
 
-  // Show a dialog for install failures only — check failures (background
-  // auto-check or "Check now") surface inline in the About card and shouldn't
-  // pop a modal over the user's first session.
+  // Install failures only: check failures surface inline in the About card and shouldn't pop a
+  // modal over the user's first session.
   if (status.state === "error" && status.scope === "install") {
     return (
       <Dialog onOpenChange={(open) => !open && updater.dismiss()} open>

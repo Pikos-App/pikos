@@ -26,7 +26,6 @@ interface SettingsNavProps {
 export function SettingsNav({ active, isLocked, onClose, onNavigate }: SettingsNavProps) {
   return (
     <div className="flex h-full w-settings-nav shrink-0 flex-col border-r border-border bg-background">
-      {/* Header */}
       <div className="flex min-h-11 items-center justify-between border-b border-border px-ui-lg">
         <span className="type-ui-sm tracking-wide text-subtle uppercase">Settings</span>
         <Tooltip>
@@ -47,7 +46,6 @@ export function SettingsNav({ active, isLocked, onClose, onNavigate }: SettingsN
         </Tooltip>
       </div>
 
-      {/* Nav items */}
       <nav className="flex-1 overflow-y-auto p-2">
         {NAV_ITEMS.map(({ icon: Icon, id, label }) => (
           <button

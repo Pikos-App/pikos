@@ -43,7 +43,6 @@ function centreSelected(node: HTMLDivElement | null): void {
 }
 
 interface SettingPickerProps<T extends string | number> {
-  /** Prefix for the accessible name; the selected label is appended to it. */
   label: string;
   options: readonly { id: T; label: string }[];
   value: T;
@@ -53,7 +52,6 @@ interface SettingPickerProps<T extends string | number> {
   listClassName?: string;
 }
 
-/** One-of-many picker for lists too long for `SettingChoice`'s button group. */
 export function SettingPicker<T extends string | number>({
   label,
   listClassName = "w-28",

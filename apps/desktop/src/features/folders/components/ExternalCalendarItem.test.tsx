@@ -1,8 +1,3 @@
-// ExternalCalendarItem — a synced calendar's sidebar row. Two contract points
-// this app relies on: the context-menu Color submenu recolours via onColorChange
-// with a Pikos-palette value (never the provider hex), and the row exposes NO
-// rename affordance (the calendar's display name is authoritative).
-
 import type { Folder } from "@pikos/core";
 import { PALETTE_COLORS } from "@pikos/core";
 import { fireEvent, screen } from "@testing-library/react";
@@ -81,8 +76,6 @@ describe("ExternalCalendarItem", () => {
   it("offers no rename affordance — no rename input is ever rendered", () => {
     renderItem();
 
-    // Double-click is the inline-rename trigger on SidebarListItem; here the
-    // handlers are NOOP, so it must not surface an editable field.
     for (const row of screen.getAllByRole("button", { name: "Work Calendar" })) {
       fireEvent.doubleClick(row);
     }

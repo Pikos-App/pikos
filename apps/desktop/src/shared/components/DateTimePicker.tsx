@@ -1,5 +1,3 @@
-// All changes apply immediately via onChange — no internal uncommitted state.
-
 import type { TimeSlot } from "@pikos/core";
 import {
   computeEndTimeLabel,
@@ -46,17 +44,13 @@ const QUICK_PICKS: readonly (readonly [string, (today: Date) => Date])[] = [
 ];
 
 export interface DateTimePickerProps {
-  /** ISO 8601 date (date-only or datetime) or null (no schedule). */
   value: string | null;
-  /** Called with an ISO string when a date/time is selected, or null to clear. */
   onChange: (iso: string | null) => void;
   /** End ISO 8601 datetime — duration is calculated as endValue − value. Optional — hides duration section if absent. */
   endValue?: string | null;
   /** Called when user picks a duration preset (sets the end ISO). Optional — hides duration section if absent. */
   onEndChange?: (iso: string | null) => void;
-  /** When true, past dates are not highlighted red. */
   isDone?: boolean;
-  /** Fires when the popover transitions from open to closed (any cause). */
   onClose?: () => void;
   side?: "bottom" | "right";
 }
@@ -76,7 +70,6 @@ export function DateTimePicker({
 
   const monthNav = useMonthNav();
 
-  // Virtual slot inserted into the time list for non-15-minute times.
   const [customTimeEntry, setCustomTimeEntry] = useState<{
     hour24: number;
     minute: number;
@@ -153,15 +146,11 @@ export function DateTimePicker({
     return () => clearTimeout(id);
   }, [open, scrollTargetHour, scrollTargetMinute]);
 
-  // ── Wheel-to-scroll the time list ──────────────────────────────────────────
-  // A native non-passive listener is required: React's onWheel is passive (it
-  // can't preventDefault), and when this popover opens from a modal Dialog
-  // (e.g. Quick Add) react-remove-scroll's wheel lock blocks native scrolling
-  // of content portaled outside the dialog. We attach via a callback ref
-  // (not an effect) because Radix mounts the popover content a tick after
-  // `open` flips, so a ref read in an effect would still be null. Scrolling
-  // the list ourselves and preventing the default gives a single, consistent
-  // scroll in every context.
+  // A native non-passive listener is required: React's onWheel is passive, and when this popover
+  // opens from a modal Dialog (Quick Add) react-remove-scroll's wheel lock blocks native scrolling
+  // of content portaled outside the dialog. Attached via a callback ref, not an effect, because
+  // Radix mounts the popover content a tick after `open` flips and an effect would read null.
+  // Scrolling the list ourselves gives one consistent scroll in every context.
 
   const detachWheel = useRef<(() => void) | null>(null);
 
@@ -292,7 +281,6 @@ export function DateTimePicker({
     setCustomDurationStr("");
   }
 
-  /** Set the end date for an all-day event. `days` = span length (2 = start + 1). */
   function selectEndDays(days: number | null) {
     if (!onEndChange) return;
     if (!selectedDate) return;

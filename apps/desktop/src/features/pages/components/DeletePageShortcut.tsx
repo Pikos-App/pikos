@@ -1,9 +1,6 @@
-// Renders nothing; owns the delete-page shortcuts.
-//
-// They sit above the middle column's view branch because they act on the active
-// page, which outlives whichever panel the column is showing. Registered inside
-// the page list they stopped working the moment the trash took the column, which
-// is exactly when a user is most likely to reach for one.
+// Renders nothing; owns the delete-page shortcuts. They sit above the middle column's view branch
+// because they act on the active page, which outlives whichever panel the column shows; inside the
+// page list they stopped working when the trash took the column.
 
 import { useSelection } from "@/shared/context/SelectionContext";
 import { Keyboard } from "@/shared/keyboard/registry";

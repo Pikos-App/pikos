@@ -12,9 +12,8 @@ import { followReducedMotion } from "./shared/reducedMotion";
 installGlobalErrorHandlers();
 followReducedMotion();
 
-// Suppress the WebView's native right-click menu globally.
-// Radix ContextMenu calls preventDefault() on events it handles, so custom
-// menus still work — this only blocks the OS menu on non-interactive areas.
+// Radix ContextMenu preventDefault()s events it handles, so custom menus still work; this only
+// blocks the OS menu on non-interactive areas.
 document.addEventListener("contextmenu", (e) => {
   const target = e.target as HTMLElement;
   // Allow native context menu inside the editor (for spellcheck suggestions)
@@ -22,16 +21,12 @@ document.addEventListener("contextmenu", (e) => {
   e.preventDefault();
 });
 
-// Suppress the browser's default file-drop behavior (navigate to file URL).
-// ProseMirror's editor calls preventDefault inside its own drop handler, so
-// in-editor drops still work; this only catches drops on non-editor areas.
+// ProseMirror preventDefault()s inside its own drop handler, so in-editor drops still work.
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => e.preventDefault());
 
 async function mount() {
-  // The in-memory adapter lives in its own chunk so production never downloads
-  // it. Fetch it before the first render, because WorkspaceProvider picks its
-  // adapter synchronously.
+  // Fetched before the first render because WorkspaceProvider picks its adapter synchronously.
   // Stryker disable next-line ConditionalExpression,EqualityOperator,StringLiteral: the e2e lane always runs the bridge backend; only another build takes this branch
   if (STORAGE_BACKEND === "mock") await loadMockStorage();
   // Stryker disable next-line ConditionalExpression: the e2e lane always runs the bridge backend; only another build takes this branch

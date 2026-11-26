@@ -1,8 +1,3 @@
-// useRecurrenceExpansion — verifies the calendar's hook for merging virtual
-// rrule occurrences into the rendered page list. Covers head-deduplication,
-// override exclusion, multi-rule expansion, the empty-rules short-circuit, and
-// the Rust-via-IPC batch path (including a rule the engine omits).
-
 import type {
   PageRecurrenceRule,
   PageSchedule,
@@ -20,9 +15,7 @@ import {
   useRecurrenceExpansion,
 } from "./useRecurrenceExpansion";
 
-// Stand-in for the batched Rust command: delegates to the same `rawExpandRule`
-// the backend mirrors (raw per-rule occurrences, rule EXDATEs only). The page
-// only satisfies the helper's signature — the raw fields are rule-derived.
+// Stand-in for the batched Rust command, delegating to the `rawExpandRule` the backend mirrors.
 const DUMMY_PAGE = makePage();
 const EXPAND = (
   rules: PageRecurrenceRule[],
@@ -88,8 +81,7 @@ function makeOverride(
   };
 }
 
-/** The non-virtual (real, completable) block rendered at `scheduledStart` — a
- * moved synced override, distinct from a recurring virtual. */
+/** The real, completable block a moved synced override renders, distinct from a recurring virtual. */
 function movedBlock(
   list: (PageSummary | VirtualOccurrence)[],
   scheduledStart: string
@@ -107,9 +99,8 @@ function weekDays(start: Date): Date[] {
 
 const NOOP_LIST_SCHEDULES = (): Promise<PageSchedule[]> => Promise.resolve([]);
 
-/** Sync-state fixtures. `scheduleLocked` is `sync_state = 'active'` alone, so the
- * two always move together — a detached page keeps its `page_sync` row and loses
- * the lock. */
+/** `scheduleLocked` is `sync_state = 'active'` alone, so the two move together; a detached page
+ * keeps its `page_sync` row and loses the lock. */
 const SYNCED = { scheduleLocked: true, syncState: "active" as const };
 const DETACHED = { scheduleLocked: false, syncState: "detached" as const };
 
@@ -132,7 +123,7 @@ describe("useRecurrenceExpansion", () => {
   it("expands a weekly rule into virtual occurrences for the visible week", async () => {
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const rule = makeRule();
-    const days = weekDays(new Date(2026, 2, 9)); // week of March 9 (next Monday)
+    const days = weekDays(new Date(2026, 2, 9));
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
@@ -143,7 +134,6 @@ describe("useRecurrenceExpansion", () => {
       })
     );
 
-    // No async fetches needed since listOverridesForRules returns []
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual).toHaveLength(1);
@@ -152,9 +142,7 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("excludes the head's current date from virtual expansion (head renders as a real block)", async () => {
-    // Head is on Mar 9 — the first Monday of the visible week. The hook must
-    // not emit a virtual for Mar 9 on top of the real head, otherwise the
-    // calendar would render two stacked blocks for the same occurrence.
+    // A virtual on top of the real head would render two stacked blocks for one occurrence.
     const head = makePage({ scheduledStart: "2026-03-09T09:00:00" });
     const rule = makeRule();
     const days = weekDays(new Date(2026, 2, 9));
@@ -171,20 +159,14 @@ describe("useRecurrenceExpansion", () => {
 
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
-      // No virtual for Mar 9 — that slot is the real head block.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
-      // Real head still present.
       expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeDefined();
     });
   });
 
   it("suppresses only the head's own-date virtual — a pre-head open gap still renders", async () => {
-    // Daily anchor at Mar 2. Head has advanced to Mar 11: Mar 9 was completed
-    // (its clone renders instead), but Mar 10 is an open gap — neither completed
-    // nor skipped (an "advance, gap stays open" outcome). Visible week Mar 9–15.
-    // Only Mar 11 (the head's own date) is filtered here; Mar 9 drops via the
-    // completed exclusion union, and Mar 10 must survive — the gap stays visible.
-    // (The old "<= headDate" filter wrongly hid Mar 10.)
+    // Mar 10 is an open gap (neither completed nor skipped) and must survive: only the head's own
+    // date is filtered.
     const head = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       scheduledStart: "2026-03-11T09:00:00",
@@ -194,7 +176,7 @@ describe("useRecurrenceExpansion", () => {
       scheduledEnd: "2026-03-02T10:00:00",
       scheduledStart: "2026-03-02T09:00:00",
     });
-    const days = weekDays(new Date(2026, 2, 9)); // Mar 9–15
+    const days = weekDays(new Date(2026, 2, 9));
 
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
@@ -208,13 +190,9 @@ describe("useRecurrenceExpansion", () => {
 
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
-      // Mar 9 — completed, dropped by the exclusion union (not this filter).
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
-      // Mar 10 — open gap before the head; must render under own-date-only.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-10"))).toBeDefined();
-      // Mar 11 — the head's own date; suppressed so the real head isn't doubled.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-11"))).toBeUndefined();
-      // Mar 12+ still appear.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-12"))).toBeDefined();
     });
   });
@@ -249,15 +227,13 @@ describe("useRecurrenceExpansion", () => {
 
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
-      // No virtual on Mar 9 — there's a materialised override row for it.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
   });
 
   it("excludes a synced override stored as full wall-clock (day-keyed)", async () => {
-    // A synced timed override stores its original_date as '...THH:MM:SS', but the
-    // occurrence key is day-only — the exclusion set must day-key it to match,
-    // else Mar 9 ghosts beside the moved instance.
+    // A synced timed override stores original_date as '...THH:MM:SS' but the occurrence key is
+    // day-only, so the exclusion set must day-key it or Mar 9 ghosts beside the moved instance.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const rule = makeRule();
     const overrideSchedule: PageSchedule = {
@@ -290,9 +266,8 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("excludes the original slot of an override moved out of the visible week (cross-week)", async () => {
-    // The override's moved scheduledStart lands weeks away, so a range fetch keyed
-    // on that position would never return it — but listOverridesForRules is keyed
-    // by rule, so the original Mar 9 slot still excludes.
+    // The override's moved scheduledStart lands weeks away, so only the by-rule fetch still
+    // excludes the original slot.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const rule = makeRule();
     const movedOverride: PageSchedule = {
@@ -326,10 +301,6 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("renders a synced override at its moved slot as a locked, completable block (not a virtual)", async () => {
-    // A synced weekly series whose Mar 9 occurrence was moved upstream to Mar 11
-    // 11am. Mar 9's original slot is excluded from the virtuals; the moved instance
-    // renders at Mar 11 as a plain (non-virtual) block that inherits the page's
-    // synced lock and carries the original occurrence's day-key.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", ...SYNCED })];
     const rule = makeRule();
     const movedOverride: PageSchedule = {
@@ -347,7 +318,7 @@ describe("useRecurrenceExpansion", () => {
 
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
-        days: weekDays(new Date(2026, 2, 9)), // Mar 9–15
+        days: weekDays(new Date(2026, 2, 9)),
         expandRecurrenceRange: EXPAND,
         listOverridesForRules,
         pages,
@@ -361,12 +332,9 @@ describe("useRecurrenceExpansion", () => {
       );
       expect(moved).toBeDefined();
       expect(moved?.id).toBe("page-1");
-      // Inherits the page's synced lock (drag/resize suppressed downstream).
       expect(moved?.scheduleLocked).toBe(true);
-      // Keyed to the ORIGINAL occurrence day so completing it records that date.
       expect((moved as { originalDate?: string }).originalDate).toBe("2026-03-09");
     });
-    // No virtual resurrects the original Mar 9 slot.
     const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
     expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
   });
@@ -406,11 +374,8 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("excludes a synced override whose original occurrence is completed", async () => {
-    // Daily series. Mar 10 is done (its clone renders), so its moved override at
-    // Mar 11 5pm must NOT render — else the completed occurrence shows twice. A
-    // second override (Mar 12 → Mar 13 5pm, still open) is the positive anchor:
-    // once it renders, the whole batch was applied, so the excluded slot's
-    // absence is real and not just an unresolved fetch.
+    // Mar 12 → Mar 13 (open) is the positive anchor: once it renders the whole batch was applied, so
+    // the done Mar 10 override's absence is real and not an unresolved fetch.
     const pages = [
       makePage({
         completedOccurrences: { "2026-03-10": "clone-1" },
@@ -449,8 +414,8 @@ describe("useRecurrenceExpansion", () => {
     ];
     const rule = makeRule({ rrule: "FREQ=DAILY" });
     const overrides: PageSchedule[] = [
-      makeOverride("2026-03-10T09:00:00", "2026-03-11T17:00:00"), // skipped → excluded
-      makeOverride("2026-03-12T09:00:00", "2026-03-13T17:00:00"), // anchor
+      makeOverride("2026-03-10T09:00:00", "2026-03-11T17:00:00"),
+      makeOverride("2026-03-12T09:00:00", "2026-03-13T17:00:00"),
     ];
     const listOverridesForRules = vi.fn().mockResolvedValue(overrides);
 
@@ -469,11 +434,9 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("does not render an override block for a native (never-synced) series", async () => {
-    // Guards toOverrideBlocks' sync-origin gate: only a synced series has override
-    // rows, so a page with no page_sync row gets no block even when one is handed
-    // to it. Signal that the fetch applied via the Mar 9 virtual dropping out — the
-    // override excludes its own slot either way — then assert no moved block.
-    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })]; // no syncState
+    // Guards toOverrideBlocks' sync-origin gate: a page with no page_sync row gets no block. The
+    // Mar 9 virtual dropping out signals the fetch applied.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const rule = makeRule();
     const listOverridesForRules = vi
       .fn()
@@ -497,10 +460,8 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("refetches overrides when overridesVersion changes and renders the moved-in-place row's new time", async () => {
-    // Moving an override row in place leaves the visible range, the rule set,
-    // and the row id identical — the version counter is the only refetch
-    // trigger, and the state guard must compare the schedule fields, or the
-    // same-id refetch is discarded and the block snaps back to its old slot.
+    // An in-place move leaves range, rule set and row id identical, so the version counter is the
+    // only refetch trigger and the guard must compare schedule fields or the block snaps back.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", ...DETACHED })];
     const rule = makeRule();
     const before = {
@@ -541,11 +502,8 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("still renders a detached series' override — unlocked, original slot suppressed", async () => {
-    // Detaching flips sync_state to 'detached', which drops scheduleLocked while
-    // toVirtuals goes on suppressing the override's original slot. Gating the block
-    // on the lock therefore erased the occurrence from the calendar entirely — it
-    // rendered at neither slot while its reminder kept firing. The row is the
-    // user's now, so it renders unlocked: movable and completable.
+    // Detaching drops scheduleLocked while toVirtuals still suppresses the original slot, so gating
+    // on the lock would erase the occurrence entirely. The row is the user's now: unlocked.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", ...DETACHED })];
     const rule = makeRule();
     const listOverridesForRules = vi
@@ -568,7 +526,6 @@ describe("useRecurrenceExpansion", () => {
       expect(moved?.scheduleLocked).toBe(false);
       expect((moved as { originalDate?: string }).originalDate).toBe("2026-03-09");
     });
-    // Exactly one block for the occurrence: the original slot stays suppressed.
     const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
     expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     expect(
@@ -577,9 +534,6 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("suppresses a synced series' head when its base occurrence is completed", async () => {
-    // A synced series pins its head at the base (Mar 9). Completing that
-    // occurrence records it in completedOccurrences — the head block must drop
-    // out (its done clone renders instead), while later virtuals keep showing.
     const head = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       scheduledStart: "2026-03-09T09:00:00",
@@ -605,20 +559,16 @@ describe("useRecurrenceExpansion", () => {
     );
 
     await waitFor(() => {
-      // The head (real page at the completed base date) is gone.
       expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
       expect(result.current.find((p) => p.id === "clone-1")).toBeDefined();
-      // No virtual resurrects the completed base date either.
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
   });
 
   it("suppresses a native head on a completed base too (out-of-envelope rule) while its clone renders", async () => {
-    // An engine-rejected (out-of-envelope) rule never advances its head, so a
-    // native page (scheduleLocked: false) can sit on a completed base just like
-    // a synced one. The un-gated headCompleted must drop it — proving the
-    // dropped scheduleLocked gate — while its done clone (a separate page) stays.
+    // An engine-rejected rule never advances its head, so a native page can sit on a completed
+    // base too: the un-gated headCompleted must drop it while its done clone stays.
     const head = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       detachIsReversible: false,
@@ -645,10 +595,8 @@ describe("useRecurrenceExpansion", () => {
     );
 
     await waitFor(() => {
-      // The head (real recurring page on the completed base) is gone.
       expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
       expect(result.current.find((p) => p.id === "clone-1")).toBeDefined();
-      // No virtual resurrects the completed base date.
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
@@ -767,9 +715,8 @@ describe("useRecurrenceExpansion", () => {
   });
 
   it("renders no virtuals for a rule the engine omitted (out-of-envelope)", async () => {
-    // The batch omits any rule the engine rejects. There is no second engine to
-    // fall back to (the mock adapter and the backend run the same crate), so the
-    // series contributes nothing — while other rules in the batch still render.
+    // The engine omits a rejected rule and there is no second engine to fall back to, so the series
+    // contributes nothing while other rules still render.
     const pages = [
       makePage({ id: "page-A", scheduledStart: "2026-03-02T09:00:00" }),
       makePage({ id: "page-B", scheduledStart: "2026-03-04T15:00:00" }),
@@ -782,7 +729,6 @@ describe("useRecurrenceExpansion", () => {
       scheduledEnd: "2026-03-04T16:00:00",
       scheduledStart: "2026-03-04T15:00:00",
     });
-    // rule-A is omitted from the batch; rule-B expands normally.
     const omitA = (
       rules: PageRecurrenceRule[],
       startStr: string,
@@ -812,16 +758,12 @@ describe("useRecurrenceExpansion", () => {
   });
 });
 
-// The IPC path is stale-while-revalidate: every batch resolves asynchronously and
-// out-of-order arrivals are token-guarded. The default EXPAND above resolves
-// synchronously, so it can't exercise the in-flight machinery — these hold the
-// promise open by hand and assert each intermediate frame.
+// The IPC path is stale-while-revalidate with token-guarded out-of-order arrivals. The default
+// EXPAND resolves synchronously, so these hold the promise open by hand.
 describe("useRecurrenceExpansion — async in-flight", () => {
   const isVirtual = (p: PageSummary | VirtualOccurrence): p is VirtualOccurrence =>
     "isVirtual" in p;
 
-  // Settle a captured promise and let the hook's `.then` state update land, all
-  // inside act so React flushes before the assertions.
   const flush = async (settle: () => void): Promise<void> => {
     await act(async () => {
       settle();
@@ -829,8 +771,7 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     });
   };
 
-  /** An expander that never resolves on its own; each call is captured so the test
-   * settles it explicitly. `resolveReal` mirrors the real batch for the call's range. */
+  /** An expander that never resolves on its own; each call is captured for the test to settle. */
   function controllableExpand() {
     const calls: {
       rules: PageRecurrenceRule[];
@@ -873,7 +814,6 @@ describe("useRecurrenceExpansion — async in-flight", () => {
       })
     );
 
-    // rawExpansion === null this frame → pages only, no virtuals yet.
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(result.current.filter(isVirtual)).toHaveLength(0);
     expect(result.current).toEqual(pages);
@@ -897,12 +837,11 @@ describe("useRecurrenceExpansion — async in-flight", () => {
         }),
       { initialProps: { days: weekDays(new Date(2026, 2, 2)) } }
     );
-    await waitFor(() => expect(calls).toHaveLength(1)); // stale batch (week of Mar 2)
+    await waitFor(() => expect(calls).toHaveLength(1));
 
     rerender({ days: weekDays(new Date(2026, 2, 9)) });
-    await waitFor(() => expect(calls).toHaveLength(2)); // current batch (week of Mar 9)
+    await waitFor(() => expect(calls).toHaveLength(2));
 
-    // Current resolves first, then the stale earlier-week batch lands late.
     await flush(() => resolveReal(1));
     await flush(() =>
       calls[0]!.settle([
@@ -945,9 +884,8 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     await flush(() => resolveReal(0));
     expect(result.current.filter(isVirtual)).toHaveLength(1);
 
-    // Day-step nav (Mar 10–16 overlaps Mar 9–15). rawExpansion is NOT reset to
-    // null, so the retained map keeps rendering virtuals while the new batch is
-    // in flight — no empty frame.
+    // rawExpansion is NOT reset to null, so the retained map keeps rendering virtuals while the new
+    // batch is in flight.
     rerender({ days: weekDays(new Date(2026, 2, 10)) });
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(result.current.filter(isVirtual)).toHaveLength(1);
@@ -978,9 +916,8 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     expect(result.current.filter(isVirtual)).toHaveLength(1);
     expect(fn).toHaveBeenCalledTimes(1);
 
-    // Optimistic completion of the Mar 9 virtual: the page gains a
-    // completedOccurrences entry. The virtual must drop synchronously, with zero
-    // new expand round-trips (pages isn't in the effect's dep set).
+    // The virtual must drop synchronously with zero new expand round-trips: pages isn't in the
+    // effect's dep set.
     rerender({
       pages: [
         makePage({
@@ -993,13 +930,9 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     expect(result.current.filter(isVirtual)).toHaveLength(0);
     expect(fn).toHaveBeenCalledTimes(1);
   });
-  // A synced series' rule base is the provider's original DTSTART, so range-only
-  // expansion paints it into every past week the user pages back to — from a
-  // period whose cancellations were never fetched, and below the head floor so
-  // none of it can be completed. `syncedSince` bounds it at the same anchor.
-  //
-  // All three hold the rule (base Mar 2, weekly Monday) and the visible week
-  // (Mar 9) fixed, so only the floor varies.
+  // A synced series' rule base is the provider's original DTSTART, so range-only expansion would
+  // paint it into every past week, from a period whose cancellations were never fetched.
+  // `syncedSince` bounds it at the same anchor.
   describe("synced render floor", () => {
     const virtualsFor = async (over: Partial<PageSummary>) => {
       const { result } = renderHook(() =>

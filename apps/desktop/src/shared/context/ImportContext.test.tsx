@@ -1,10 +1,3 @@
-// ImportContext — unit tests for the batch import + last-import undo flow.
-//
-// Runs in VITE_TEST_MODE so the provider tree uses MockStorageAdapter. Spies
-// on the adapter prototype assert which writes the importer issues; the merged
-// hook exposes workspace + pages + import APIs so a test can seed folders and
-// read back state without a second render.
-
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,10 +8,6 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Merge workspace + pages + import into one hook so a single render exposes
- * seeding (createFolder), reading (pages/folders), and the import API. */
 async function setup() {
   const hook = renderHookWithProviders(() => ({
     ...useWorkspace(),
@@ -34,7 +23,6 @@ async function setup() {
   return { hook };
 }
 
-/** Build an ImportBatchItem with sensible defaults; override per test. */
 function item(overrides: Partial<ImportBatchItem> = {}): ImportBatchItem {
   return {
     completedAt: null,
@@ -70,8 +58,6 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-
-// ─── importBatch ────────────────────────────────────────────────────────────
 
 describe("importBatch", () => {
   it("creates new folders and pages, returning their IDs", async () => {
@@ -134,7 +120,6 @@ describe("importBatch", () => {
       );
     });
 
-    // Folder already existed → no new folder created, none reported for undo.
     expect(createFolder).not.toHaveBeenCalled();
     expect(result.folderIds).toHaveLength(0);
   });
@@ -209,14 +194,11 @@ describe("importBatch", () => {
       );
     });
 
-    // The child's parentId is rewired to the parent's freshly-minted Pikos id.
     const [parentId, childId] = result.pageIds;
     expect(updatePage).toHaveBeenCalledOnce();
     expect(updatePage).toHaveBeenCalledWith(childId, { parentId });
   });
 });
-
-// ─── lastImportResult + undo ──────────────────────────────────────────────────
 
 describe("last import result", () => {
   it("records the last import and clears it on demand", async () => {
@@ -270,8 +252,6 @@ describe("last import result", () => {
     expect(deletePage).not.toHaveBeenCalled();
   });
 });
-
-// ─── Provider guard ─────────────────────────────────────────────────────────
 
 describe("useImportBatch", () => {
   it("throws when used outside <ImportProvider>", () => {

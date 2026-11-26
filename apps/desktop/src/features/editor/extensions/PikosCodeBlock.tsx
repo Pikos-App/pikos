@@ -47,11 +47,8 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 const PICKER_LANGUAGES = Object.keys(LANGUAGE_LABELS);
 
-/**
- * How sure the highlighter must be before a paste labels a block. Real code
- * scores 4 to 7 on it, while a sentence of prose or a one-line assignment
- * scores 2 and gets guessed as VB.NET or INI.
- */
+/** How sure the highlighter must be before a paste labels a block: real code scores 4 to 7, prose or a
+ *  one-line assignment scores 2 and gets guessed as VB.NET or INI. */
 const MIN_GUESS_RELEVANCE = 4;
 
 export function guessLanguage(code: string): string | null {
@@ -114,10 +111,9 @@ function CodeBlockView({ editor, node, updateAttributes }: ReactNodeViewProps) {
 }
 
 /**
- * The code block, coloured by its language, with a picker for it. A block with
- * no language stays uncoloured rather than auto-detected on every render, so
- * the colours always match what the picker says. Pasting into a block with no
- * language labels it with a guess, which the picker shows and can undo.
+ * The code block, coloured by its language, with a picker. A block with no language stays uncoloured
+ * rather than auto-detected on every render, so colours match the picker. Pasting into one labels it
+ * with a guess, which the picker shows and can undo.
  */
 export const PikosCodeBlock = CodeBlockLowlight.extend({
   // The base block stores `defaultLanguage` as the attribute's default, which

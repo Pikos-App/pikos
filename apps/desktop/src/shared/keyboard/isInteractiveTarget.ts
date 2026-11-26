@@ -1,14 +1,7 @@
-// Shared focus-target classifier for global keyboard shortcuts.
-//
-// Some shortcuts (Space to toggle done, Up/Down to navigate the page list) are
-// registered globally so they work regardless of which non-editable element
-// holds focus. But when the focused element is itself an interactive control —
-// a button, link, menu item, or popover/dropdown trigger — that control should
-// own the key press (Space activates it, Arrow keys move within its menu). This
-// guard lets those shortcuts stand down so the focused control takes priority.
-//
-// Generic containers (role="group", the page/folder list wrappers) are NOT
-// interactive, so arrow navigation still works while they hold focus.
+// Global shortcuts (Space to toggle done, Up/Down to navigate the page list) work whichever
+// non-editable element holds focus, but when the focused element is itself an interactive control
+// (button, link, menu item, popover trigger) that control owns the key press, so they stand down.
+// Generic containers (role="group", the list wrappers) are not interactive.
 
 const INTERACTIVE_SELECTOR = [
   "a[href]",
@@ -33,11 +26,9 @@ export function isInteractiveTarget(target: EventTarget | null): boolean {
   return el.closest(INTERACTIVE_SELECTOR) != null;
 }
 
-// A narrower classifier for Arrow-key shortcuts. Plain buttons, links, and the
-// folder/page nav rows do NOT respond to arrow keys natively, so arrow-driven
-// list navigation should still run while they hold focus. Only controls that
-// natively consume arrows — popover/menu triggers (aria-haspopup), open menus,
-// listboxes, comboboxes, sliders, etc. — should take priority.
+// A narrower classifier for Arrow-key shortcuts: plain buttons, links and nav rows don't consume
+// arrows natively, so list navigation still runs while they hold focus. Only controls that do
+// (aria-haspopup triggers, open menus, listboxes, comboboxes, sliders) take priority.
 const ARROW_CONSUMER_SELECTOR = [
   '[aria-haspopup]:not([aria-haspopup="false"])',
   '[role="menu"]',

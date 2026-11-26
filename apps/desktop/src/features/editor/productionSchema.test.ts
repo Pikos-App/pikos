@@ -1,21 +1,12 @@
-// Pins the document schema the desktop app actually ships.
+// Pins the document schema the desktop app ships. @pikos/editor-schema's own tests exercise the
+// package in isolation; this asserts what the composed production extension list produces, which is
+// what ends up in users' files and which a behavioural extension could change by accident.
 //
-// @pikos/editor-schema has its own tests, but they exercise the package in
-// isolation. This one asserts what the *composed production extension list*
-// produces, which is the thing that ends up in users' files — and which a
-// behavioural extension could change by accident, since nothing stops one from
-// registering a node.
+// An absolute snapshot, not a comparison against another list: comparing against a copy of the
+// pre-extraction list passed vacuously, since both shared the same image node.
 //
-// Deliberately an absolute snapshot rather than a comparison against some other
-// list. An earlier attempt compared the post-extraction list against a copy of
-// the pre-extraction one and passed vacuously: both referenced the same shared
-// image node, so mutating it moved both sides together. A snapshot has no such
-// blind spot.
-//
-// A diff here means one of two things. If it is intentional, it needs a
-// CONTENT_SCHEMA_VERSION bump in pikos-db and a content migration (see
-// migration 023). If it is not, it is a document-corruption bug caught before
-// it shipped.
+// A diff means either an intentional change, which needs a CONTENT_SCHEMA_VERSION bump in pikos-db
+// and a content migration, or a document-corruption bug caught before it shipped.
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 
@@ -43,9 +34,8 @@ describe("production document schema", () => {
   it("declares exactly these nodes, with exactly these attributes", () => {
     expect(attrsOf(productionSchema().nodes)).toEqual({
       blockquote: [],
-      // `tight` comes from tiptap-markdown and `indent` from TabIndent — both
-      // read as behavioural extensions and both write into every document.
-      // They live in @pikos/editor-schema for exactly that reason.
+      // `tight` (tiptap-markdown) and `indent` (TabIndent) read as behavioural extensions but write into
+      // every document, so they live in @pikos/editor-schema.
       bulletList: ["tight"],
       codeBlock: ["language"],
       doc: [],

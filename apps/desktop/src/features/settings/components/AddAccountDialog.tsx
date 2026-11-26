@@ -14,13 +14,11 @@ import {
 import { CaldavCredentialForm } from "./CaldavCredentialForm";
 
 /**
- * What the dialog is waiting on, which decides whether it may be dismissed.
- *
- * `connecting` is writing an account and has to finish. `awaitingGoogle` is waiting
- * for a browser the user may already have closed, and nothing is persisted until the
- * callback arrives, so abandoning it is safe and is the only way out. One boolean
- * covered both, which made an abandoned Google attempt an undismissable dialog for
- * the five minutes the loopback listener holds its port.
+ * What the dialog is waiting on, which decides whether it may be dismissed. `connecting` is writing an
+ * account and has to finish. `awaitingGoogle` waits on a browser the user may have closed and persists
+ * nothing until the callback, so abandoning it is safe and is the only way out. One boolean covering
+ * both made an abandoned Google attempt undismissable for the five minutes the loopback listener holds
+ * its port.
  */
 type Progress = { kind: "idle" } | { kind: "connecting" } | { kind: "awaitingGoogle" };
 
@@ -45,8 +43,6 @@ export function AddAccountDialog({
   const [password, setPassword] = useState("");
   const [progress, setProgress] = useState<Progress>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
-  // Bumped when a Google attempt is abandoned, so the one still in flight knows
-  // its result is no longer wanted.
   const googleAttempt = useRef(0);
   const busy = progress.kind !== "idle";
 
@@ -89,11 +85,9 @@ export function AddAccountDialog({
     }
   }
 
-  // The grant resolves only once the user finishes in their browser and can sit
-  // pending a long time — the picker shows a waiting state so the click doesn't
-  // look inert. A dismissed dialog abandons the attempt: the account still lands if
-  // the user finishes in the browser, because `onConnectGoogle` has already done
-  // the work and refreshed the panel by the time this resolves.
+  // The grant resolves only once the user finishes in their browser, so the picker shows a waiting state.
+  // A dismissed dialog abandons the attempt, but the account still lands if they finish, because
+  // `onConnectGoogle` has already done the work and refreshed the panel by then.
   async function submitGoogle() {
     const attempt = googleAttempt.current;
     setProgress({ kind: "awaitingGoogle" });

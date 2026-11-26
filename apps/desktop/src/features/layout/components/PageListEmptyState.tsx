@@ -5,7 +5,6 @@ import { MOD_KEY_LABEL } from "@/shared/constants/platform";
 
 interface PageListEmptyStateProps {
   activeViewId: string;
-  /** True when the active folder is a synced external calendar (read-only mirror). */
   isExternalCalendar?: boolean;
 }
 

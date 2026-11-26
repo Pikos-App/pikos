@@ -70,8 +70,6 @@ describe("defaultFolderId", () => {
   });
 });
 
-// ─── Notification settings ──────────────────────────────────────────────────
-
 describe("autoUpdateEnabled", () => {
   it("defaults to true", () => {
     const { result } = setup();

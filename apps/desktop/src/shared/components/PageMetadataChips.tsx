@@ -1,8 +1,6 @@
-// One renderer for every metadata chip row in the app: the editor byline, the
-// quick-add footer, and the two calendar block popovers. Each call site keeps
-// its own container element and picks the chips, their order, and their
-// grouping — this module only owns the scaffolding (byline separators or
-// labelled rows) and the shared prop wiring.
+// One renderer for every metadata chip row. Each call site keeps its own container element and
+// picks the chips, their order and their grouping; this module owns the scaffolding (byline
+// separators or labelled rows) and the shared prop wiring.
 
 import { Fragment, type ReactNode } from "react";
 
@@ -15,7 +13,6 @@ import { ReminderDropdown, type ReminderDropdownProps } from "./ReminderDropdown
 import { TagsPopover, type TagsPopoverProps } from "./TagsPopover";
 import { TaskCheckbox } from "./TaskCheckbox";
 
-/** Horizontal byline (dot-separated) vs. the popovers' labelled rows. */
 export type MetadataChipLayout = "byline" | "rows";
 
 export interface StatusChipProps {
@@ -24,10 +21,9 @@ export interface StatusChipProps {
 }
 
 /**
- * `node` is the escape hatch for the per-site pieces that aren't shared chips:
- * a synced page's read-only schedule label, the editor's own date popover, the
- * "view in calendar" button, the save-failed retry. Its `id` keys the slot, so
- * a chip that comes and goes never shifts its neighbours' identity.
+ * `node` is the escape hatch for per-site pieces that aren't shared chips (a synced page's
+ * schedule label, the editor's date popover, the save-failed retry). Its `id` keys the slot, so a
+ * chip that comes and goes never shifts its neighbours' identity.
  */
 export type MetadataChip =
   | { kind: "date"; props: DateTimePickerProps }
@@ -40,18 +36,15 @@ export type MetadataChip =
   | { kind: "tags"; props: TagsPopoverProps };
 
 export interface MetadataChipGroup {
-  /** React key, and the row label in the "rows" layout. */
   key: string;
   chips: (MetadataChip | false | null | undefined)[];
-  /** Wrap the group's chips in their own flex box rather than emitting them as
-   *  direct children of the caller's container. */
+  /** Wrap the group's chips in their own flex box rather than as direct children of the container. */
   boxed?: boolean;
 }
 
 interface PageMetadataChipsProps {
   layout: MetadataChipLayout;
-  /** Rendered in order. Falsy entries drop out, taking their separator or
-   *  labelled row with them. */
+  /** Rendered in order. Falsy entries drop out with their separator or labelled row. */
   groups: (MetadataChipGroup | false | null | undefined)[];
 }
 
@@ -78,9 +71,8 @@ function StatusChip({
         onChange={onToggle}
       />
       {layout === "byline" ? (
-        // Scales with the interface, like every size token: a `rem` is relative to the
-        // root, which the text scale does not touch, so at 200% the label outgrew its box
-        // and ran into the chip beside it.
+        // Scales with the interface like every size token: a `rem` is relative to the root, which the
+        // text scale does not touch, so at 200% the label would outgrow its box.
         <span className="inline-block w-[calc(2.5rem*var(--ui-text-scale,1))]">{label}</span>
       ) : (
         <span>{label}</span>

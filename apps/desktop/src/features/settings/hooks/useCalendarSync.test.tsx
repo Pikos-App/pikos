@@ -1,7 +1,6 @@
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Captures the handler the hook subscribes so a test can fire a sync pass.
 const passHandlers: Array<() => void> = [];
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (event: string, handler: () => void) => {
@@ -91,9 +90,8 @@ describe("useCalendarSync", () => {
     expect(updated.folderId).not.toBeNull();
   });
 
-  // Enabling a calendar only pokes the backfill, so the freshness that first sync
-  // stamps lands after this hook's own post-toggle read. The pass event is what
-  // pulls it in; without it the row sits on a pre-sync snapshot.
+  // Enabling a calendar only pokes the backfill, so the freshness that first sync stamps lands after
+  // the hook's post-toggle read; the pass event pulls it in.
   it("re-reads the panel when a background pass completes", async () => {
     const hook = renderHookWithProviders(() => ({
       storage: useWorkspace().storage,
@@ -112,7 +110,6 @@ describe("useCalendarSync", () => {
       hook.result.current.sync.accounts[0]!.calendars.find((c) => c.id === cal.id)!;
     expect(shown().lastSyncedAt).toBeNull();
 
-    // Out of band, as the background loop would: sync, then announce the pass.
     await act(async () => {
       await hook.result.current.storage!.resyncSyncAccount(account.id);
       passHandlers.forEach((h) => h());

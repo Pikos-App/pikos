@@ -29,11 +29,8 @@ import { PageBlock } from "./PageBlock";
 const PILL_OUTER_EDGE_PAD = 2;
 
 /**
- * Anchored to leftPct=0/widthPct=100 so "+N more" spans the column's full
- * width inside the squished band. Top-band pills hug the band's top edge;
- * bottom-band pills hug the bottom — leaving the band's inner edge clear so
- * the tops of straddling blocks can intrude visibly without overlapping the
- * pill.
+ * Anchored to leftPct=0/widthPct=100 so "+N more" spans the column inside the squished band.
+ * Pills hug the band's outer edge, leaving its inner edge clear for straddling blocks to intrude.
  */
 function makeCollapsedBandPill(
   pageIds: string[],
@@ -55,7 +52,6 @@ export interface BlockDragStartInfo {
   dayIndex: number;
   clientY: number;
   folderColor: string | undefined;
-  /** Set when the dragged block is a virtual rrule occurrence — keys the override. */
   originalDate?: string;
 }
 
@@ -63,7 +59,6 @@ export interface BlockResizeStartInfo {
   pageId: string;
   block: CalendarBlock;
   dayIndex: number;
-  /** Set when the resized block is a virtual rrule occurrence — keys the override. */
   originalDate?: string;
 }
 
@@ -80,7 +75,6 @@ export interface ResizeGhost {
   pageId: string;
   /** Day column index the resize gesture originated on — scopes the ghost to a single continuation segment of a multi-day block. */
   dayIndex: number;
-  /** Absolute Y from grid top — DayColumn converts to height for the matching block. */
   bottom: number;
 }
 
@@ -91,8 +85,6 @@ interface DayColumnProps {
   draggingPageId: string | null;
   autoOpenPageId: string | null;
   isCurrentWeek: boolean;
-  /** True when any active drag (external page-list or internal block) is over
-   * this column — drives the drop-zone tint, mirroring the all-day strip. */
   isDropTarget: boolean;
   now: Date;
   onBlockDragStart: (info: BlockDragStartInfo) => void;
@@ -150,18 +142,15 @@ export function DayColumn({
 
   const minDragHeight = metrics.minResizeHeight;
 
-  // Hour and half-hour grid lines — only the visible (non-collapsed) hour
-  // range gets gridlines; the collapsed bands render as solid stripes via
-  // the dim overlay below.
+  // Gridlines only for the visible hour range; collapsed bands render as stripes via the dim overlay.
   const hourLineFirst = collapse.topCollapsed ? collapse.topHour : GRID_START_HOUR;
   const hourLineLast = collapse.bottomCollapsed ? collapse.bottomHour : GRID_END_HOUR;
   const hours = Array.from({ length: hourLineLast - hourLineFirst }, (_, i) => hourLineFirst + i);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Column width drives the dense-day overflow + compact-mode rules. Sync
-  // first read via useLayoutEffect to avoid a frame of "wide" rendering
-  // before ResizeObserver fires; then RO for live width changes.
+  // Column width drives the dense-day overflow and compact rules. The first read is synchronous
+  // (useLayoutEffect) to avoid a frame of "wide" rendering before ResizeObserver fires.
   const [columnWidth, setColumnWidth] = useState(0);
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -190,23 +179,16 @@ export function DayColumn({
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!e.isPrimary || e.button !== 0) return;
-    // Don't create a block if a context menu is open — the click is targeting the menu.
     if (document.querySelector('[role="menu"]')) return;
-    // Presses that belong to something else: an event block, the overflow pill,
-    // a collapsed-band expander — or, since React bubbles portal events through
-    // the component tree rather than the DOM one, a popover rendered outside
-    // this column entirely.
-    //
-    // Filtered here rather than by calling stopPropagation() at each of those
-    // controls: pointerdown is also how Radix decides an open popover was
-    // dismissed from outside, so swallowing it there would strand it open.
+    // Presses that belong to something else: an event block, the overflow pill, a band expander,
+    // or a portaled popover (React bubbles portal events through the component tree). Filtered here,
+    // not with stopPropagation() at each control: pointerdown is how Radix detects an outside
+    // dismiss, so swallowing it would strand an open popover.
     const target = e.target as HTMLElement;
     if (!containerRef.current?.contains(target)) return;
     if (target.closest("[data-cal-page-id],[data-cal-no-create]")) return;
-    // Commit any open popover's title input: e.preventDefault() below suppresses
-    // the default focus/blur behavior, so we must flush it manually before the
-    // input unmounts — otherwise the typed title is lost and the auto-created
-    // page gets deleted as "empty" by handleAutoOpenConsumed.
+    // e.preventDefault() below suppresses the default blur, so flush any open popover's title input
+    // manually; otherwise the typed title is lost and handleAutoOpenConsumed deletes the page as empty.
     (document.activeElement as HTMLElement | null)?.blur();
     e.preventDefault(); // prevent text selection during drag
 
@@ -252,10 +234,8 @@ export function DayColumn({
         const end = mapYToDate(endY, day, geometry);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
-        // Single click — only create when the y position is in empty grid.
-        // `blocks` includes both visible blocks AND those collapsed into the
-        // overflow pill, so clicks above or below the pill (which sit on top
-        // of collapsed-event slots) don't fire phantom pages.
+        // Only create in empty grid. `blocks` includes those collapsed into the overflow pill, so
+        // clicks above or below the pill don't fire phantom pages.
         const yOccupied = blocks.some((b) => pressY >= b.top && pressY <= b.top + b.height);
         if (!yOccupied) {
           void onCreatePage(day, start);
@@ -263,7 +243,6 @@ export function DayColumn({
       }
     }
 
-    /** Platform-cancelled gesture — drop the draft, create nothing. */
     function onPointerCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();
@@ -289,11 +268,6 @@ export function DayColumn({
         weekend ? "bg-white/[0.012]" : ""
       )}
     >
-      {/* Hour + half-hour grid lines — only emitted for the visible (non-
-          collapsed) hour range. Each collapsed band gets a 1px divider at
-          the band/middle boundary so straddling blocks visibly poke through
-          into compressed time, but no separate background tint (the band
-          shares the column's surface). */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         {collapse.topCollapsed && (
           <div
@@ -313,12 +287,9 @@ export function DayColumn({
             key={hour}
             style={{ height: metrics.hourHeight, top: mapHourToY(hour, geometry) }}
           >
-            {/* Hour line — skipped for the very first row of the grid (its top
-                edge is the grid boundary). */}
             {hour !== GRID_START_HOUR && (
               <div className="absolute inset-x-0 top-0 border-t border-border/40" />
             )}
-            {/* Half-hour line */}
             <div
               className="absolute inset-x-0 border-t border-border/20"
               style={{ top: metrics.hourHeight / 2 }}
@@ -327,23 +298,17 @@ export function DayColumn({
         ))}
       </div>
 
-      {/* Relative container for absolutely-positioned blocks. Drag-to-create
-          is a pointer-only gesture; the keyboard equivalent is Cmd+N (Quick
-          Add). Tab/focus support deferred to the post-launch a11y backlog. Can't use
-          role="button" here — it would nest inside the interactive page
-          blocks rendered as children. */}
+      {/* Drag-to-create is pointer-only; the keyboard equivalent is Cmd+N (Quick Add). Can't use
+          role="button" here: it would nest inside the interactive page blocks rendered as children. */}
       <div
         className={cn("relative cursor-cell", isDropTarget && "bg-accent/30")}
         onPointerDown={handlePointerDown}
         ref={containerRef}
         style={{ height: metrics.gridHeight }}
       >
-        {/* Click-to-expand overlays for collapsed bands. Sit at the bottom of
-            the stacking order so straddling blocks and the band's `+N more`
-            pill stay clickable; absorb clicks on the empty band area and
-            expand the band rather than create a hidden-time event. Hover
-            state is synced via context so hovering any column lights up the
-            entire band — gutter included — as a single click target. */}
+        {/* Lowest in the stacking order so straddling blocks and the band's `+N more` pill stay
+            clickable; absorbs clicks on the empty band and expands it rather than creating a hidden-time
+            event. Hover is synced via context so the whole band, gutter included, lights as one target. */}
         {collapse.topCollapsed && (
           <button
             aria-label="Expand collapsed early-morning hours"
@@ -383,7 +348,6 @@ export function DayColumn({
 
         {showNowIndicator && <NowIndicator now={now} />}
 
-        {/* Draft ghost block — shown while dragging to create */}
         {draft && (
           <div
             aria-hidden
@@ -398,7 +362,6 @@ export function DayColumn({
           />
         )}
 
-        {/* Drag-to-reschedule ghost — rendered in the target column */}
         {dragGhost && (
           <div
             aria-hidden
@@ -477,9 +440,8 @@ export function DayColumn({
               ? Math.max(resizeGhost.bottom - block.top, 0)
               : undefined;
 
-          // Virtual/override occurrences share the series page id, so a moved
-          // override and a same-day occurrence of the same series would collide
-          // on a bare id key — disambiguate by occurrence date.
+          // Virtual and override occurrences share the series page id, so a moved override and a same-day
+          // occurrence would collide on a bare id key: disambiguate by occurrence date.
           const occDate = (block.page as { originalDate?: string }).originalDate;
           const blockKey = occDate ? `${block.page.id}:${occDate}` : block.page.id;
 
@@ -529,8 +491,6 @@ export function DayColumn({
           />
         ))}
 
-        {/* Collapsed-band overflow pills — one per band when there are pages
-            whose entire span sits inside a collapsed time range. */}
         {topCollapsedPageIds.length > 0 && (
           <OverflowPill
             onOpen={onPageDoubleClick}

@@ -1,22 +1,16 @@
 import { DRAG_THRESHOLD } from "@pikos/core";
 
 /**
- * Wires up a pointerdown→pointermove drag-threshold detector. Fires `onCrossed`
- * the first time the pointer moves more than `DRAG_THRESHOLD` px from its
- * starting coordinates and then disconnects — downstream drag state is the
- * caller's responsibility. A release before the threshold (a "click", not a
- * drag) just tears the listeners down.
+ * Pointerdown-to-pointermove drag-threshold detector. Fires `onCrossed` the first time the
+ * pointer moves more than `DRAG_THRESHOLD` px from where it started, then disconnects; drag
+ * state is the caller's. A release before the threshold (a click) just tears down.
  *
- * Pointer events rather than mouse events so the same gesture works from a
- * finger or a pen. Non-primary pointers are ignored: a second finger landing
- * mid-drag must not steer the gesture the first one started. `pointercancel`
- * (the platform taking the gesture away — a system swipe, a palm rejection)
- * tears down exactly like a release below the threshold.
+ * Pointer events so a finger or pen works. Non-primary pointers are ignored: a second finger
+ * must not steer the first one's gesture. `pointercancel` (system swipe, palm rejection) tears
+ * down like an early release.
  *
- * `bodyCursor` is optional: when set, the class is added to <html> on
- * pointerdown for instant feedback and removed on a click-release. After the
- * threshold is crossed, the caller (usually the drag handler on the parent
- * grid) owns class management — the helper leaves it set.
+ * `bodyCursor`, when set, is added to <html> on pointerdown and removed on a click-release;
+ * once the threshold is crossed the caller owns it.
  */
 export function beginDragThreshold(
   startX: number,

@@ -1,9 +1,7 @@
-// Import, run against the table the Rust exporter also runs.
-//
-// A vault export writes Markdown from `prosemirror_to_markdown`; re-importing it
-// comes back through `convertMarkdownToTiptap`. Those are the two dialects that meet,
-// and until this table nothing compared them: `roundtrip.test.ts` serializes with
-// `tiptap-markdown`, so it round-trips the importer against itself.
+// Import, run against the table the Rust exporter also runs. A vault export writes Markdown from
+// `prosemirror_to_markdown` and re-import comes back through `convertMarkdownToTiptap`; those are the
+// two dialects that meet. `roundtrip.test.ts` serializes with `tiptap-markdown`, so it round-trips the
+// importer against itself.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

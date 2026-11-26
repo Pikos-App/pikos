@@ -24,7 +24,6 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** Stands in for the page list on screen, which is what loads the active view's list. */
 function useShownList(viewId: string): string[] {
   const lists = useCachedViews(viewId, useActiveSortMode(), []);
   return lists?.views[0]?.pages.map((p) => p.id) ?? [];
@@ -105,7 +104,6 @@ async function makeFolder(hook: ReturnType<typeof setup>, name: string): Promise
   return folder;
 }
 
-/** Minimal DragStartEvent carrying only the data the hook reads. */
 function startEvent(id: string, type: "page" | "folder") {
   return {
     active: { data: { current: { type } }, id },
@@ -188,7 +186,6 @@ describe("useThreePanelDnD — handleDragStart", () => {
     act(() => hook.result.current.dnd.handleDragStart(startEvent(b.id, "page")));
 
     expect(hook.result.current.dnd.draggedPageCount).toBe(2);
-    // Page a is not selected → not in dragged set.
     void a;
   });
 

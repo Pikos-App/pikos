@@ -1,11 +1,7 @@
-// TypedConfirmDialog — destructive-action confirmation that requires the user
-// to type a specific phrase before the confirm button is enabled. The pattern
-// guards against the "I clicked OK without reading" case for irreversible
-// actions (account delete, data wipe, etc.).
-//
-// Same surface as ConfirmDialog (title / description / busy / onConfirm) plus
-// `confirmPhrase` — typically the literal word "delete" rendered in the
-// description so it's discoverable.
+// Destructive-action confirmation that requires the user to type a phrase before the confirm
+// button is enabled, guarding against clicking OK without reading on irreversible actions. Same
+// surface as ConfirmDialog plus `confirmPhrase`, typically the literal word "delete" rendered in
+// the description so it's discoverable.
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";

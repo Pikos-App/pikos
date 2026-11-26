@@ -1,14 +1,8 @@
-// Every localStorage key the app persists, spelled once.
-//
-// The literal values are load-bearing: they name state already sitting in
-// users' browsers, so renaming one silently drops the preference it holds.
-// `theme` is the single key that predates the `pikos:` namespace and uses a
-// hyphen instead of a colon. It stays that way deliberately — and because
-// lib/data/deleteAllData.ts sweeps localStorage by STORAGE_KEY_PREFIX, that
-// also means "Delete All Data" leaves the theme choice standing. Both
-// behaviours are what ships today.
+// The literal values are load-bearing: they name state already in users' browsers, so renaming
+// one silently drops the preference it holds. `theme` predates the `pikos:` namespace and uses a
+// hyphen; it stays so, and because deleteAllData sweeps by STORAGE_KEY_PREFIX, "Delete All Data"
+// leaves the theme standing.
 
-/** Namespace every key but `theme` carries; deleteAllData sweeps on it. */
 export const STORAGE_KEY_PREFIX = "pikos:";
 
 export const STORAGE_KEYS = {
@@ -48,7 +42,6 @@ export const STORAGE_KEYS = {
   skippedVersion: "pikos:skippedVersion",
   sortModes: "pikos:sortModes",
   summaryTime: "pikos:summaryTime",
-  /** Outlier: hyphenated, no `pikos:` namespace. See the note above. */
   theme: "pikos-theme",
   weekStart: "pikos:weekStart",
 } as const;

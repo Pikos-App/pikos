@@ -1,25 +1,14 @@
-// The `focus_sessions` producer. The table has been in the schema since
-// migration 001 and the Data panel has been summing it into a "Focus time" card
-// all along, with nothing ever writing a row — so the card showed a hard zero
-// that read as a measurement. This is the smallest honest writer for it.
+// The `focus_sessions` producer, with two limits so the number stays something the user can account for.
 //
-// Two deliberate limits, both so the number stays something the user can
-// account for:
+//   * Nothing is persisted while a session runs. The row is written once, from real wall-clock
+//     timestamps, when it ends: on stop, on leaving the page, or on quit or relaunch to update. A
+//     session whose end the app never sees (a crash or force quit) is lost rather than closed out on
+//     the next launch, because its end would be a guess, and a guess is worse than a missing session.
+//   * Sessions under `MIN_SESSION_S` are discarded: opening a page and tapping play is not focus time,
+//     and one-second rows would inflate the session count.
 //
-//   * Nothing is persisted while a session runs. The row is written once, from
-//     real wall-clock timestamps, when the session ends: on stop, on leaving the
-//     page, or when the app quits or relaunches to update. A session the app
-//     never sees the end of, a crash or a force quit, is lost rather than closed
-//     out on the next launch, because its end would be a guess, and a guess in a
-//     total is worse than a missing session.
-//   * Sessions under `MIN_SESSION_S` are discarded rather than written. Opening
-//     a page, tapping play and moving on is not focus time; without a floor the
-//     card fills with one-second rows that inflate the session count while
-//     adding nothing to the minutes.
-//
-// Switching pages banks a running session rather than dropping it: the editor
-// remounts this hook per page (`key={page.id}`), so it is banked on unmount. A
-// quit never unmounts, so it is banked from the app's pending-write flush too.
+// Switching pages banks a running session: the editor remounts this hook per page (`key={page.id}`),
+// so it is banked on unmount. A quit never unmounts, so it is banked from the pending-write flush too.
 
 import type { NewFocusSession, StorageAdapter } from "@pikos/core";
 import { formatElapsed, formatLocalISO, formatSessionLength, MIN_SESSION_S } from "@pikos/core";
@@ -31,12 +20,9 @@ import { onFlushPending } from "@/shared/pendingWrites";
 
 const log = createLogger("useFocusTimer");
 
-// Re-exported rather than moved out of sight: both live in `@pikos/core` now,
-// shared with the Rust the phone runs, and the components here import them from
-// the hook they belong to conceptually.
+// Re-exported from `@pikos/core` so the components import them from the hook they belong with.
 export { formatElapsed, MIN_SESSION_S };
 
-/** What the unmount flush needs, captured while the session is running. */
 interface PendingSession {
   storage: StorageAdapter | null;
   pageId: string;
@@ -44,11 +30,9 @@ interface PendingSession {
 }
 
 export interface FocusTimerState {
-  /** Seconds since the session started, ticking once a second. 0 when idle. */
   elapsedS: number;
   running: boolean;
   start: () => void;
-  /** Ends the session and writes it, unless it was too short to count. */
   stop: () => Promise<void>;
 }
 
@@ -56,10 +40,9 @@ export function useFocusTimer(storage: StorageAdapter | null, pageId: string): F
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
 
-  // The quit and unmount flushes below are registered once, so their closures
-  // can't see the current session. This ref carries it across — kept up to date
-  // from an effect rather than during render, and cleared by whichever ends the
-  // session first so no two of them can bank it twice.
+  // The quit and unmount flushes are registered once, so their closures can't see the current session;
+  // this ref carries it, updated from an effect and cleared by whichever ends the session first so
+  // none of them banks it twice.
   const pendingRef = useRef<PendingSession | null>(null);
 
   useEffect(() => {
@@ -117,13 +100,9 @@ export function useFocusTimer(storage: StorageAdapter | null, pageId: string): F
   return { elapsedS, running: startedAt !== null, start, stop };
 }
 
-/** Write one finished session, or decline to. Never throws: a lost session is a
- *  missing row on a settings card, not something worth an error state in the
- *  editor the user is typing in.
- *
- *  Both outcomes get a toast. Ending is otherwise near-invisible — the row is
- *  written to a panel the user isn't looking at — and a silent discard below the
- *  floor reads exactly like a silent success. */
+/** Write one finished session, or decline to. Never throws: a lost session is a missing row on a
+ *  settings card, not worth an error state in the editor. Both outcomes toast: ending is otherwise
+ *  near-invisible, and a silent discard below the floor reads like a silent success. */
 async function writeSession(
   storage: StorageAdapter | null,
   pageId: string,

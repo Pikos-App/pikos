@@ -1,6 +1,3 @@
-// The parent owns count draft state so blur/Enter still commits when the
-// user clicks elsewhere mid-edit (same pattern as RecurrenceCustomEditor).
-
 import { parseLocalISO, type RecurrenceOptions } from "@pikos/core";
 import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
@@ -17,8 +14,7 @@ export interface RecurrenceEndsEditorProps {
   options: RecurrenceOptions;
   endType: RecurrenceEndType;
   weekStartsOn: 0 | 1;
-  /** Year/month the until-picker calendar should display. Owned by parent so
-   * popover open/close transitions seed it from the current until value. */
+  /** Owned by the parent so popover open/close transitions seed it from the current until value. */
   untilViewYear: number;
   untilViewMonth: number;
   onUntilViewYearChange: (year: number) => void;

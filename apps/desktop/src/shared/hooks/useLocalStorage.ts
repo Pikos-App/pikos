@@ -8,8 +8,7 @@ function readItem<T>(key: string, fallback: T): T {
   try {
     return JSON.parse(raw) as T;
   } catch {
-    // Stored value isn't the shape this key used to hold — fall back rather
-    // than surface a parse error the user can do nothing about.
+    // Stored value isn't the shape this key holds: fall back rather than surface a parse error.
     return fallback;
   }
 }
@@ -18,7 +17,6 @@ function writeItem<T>(key: string, value: T): void {
   getKeyValueStore().setItem(key, JSON.stringify(value));
 }
 
-/** useState backed by the platform key-value store. Value is JSON-serialized. */
 export function useLocalStorage<T>(
   key: string,
   defaultValue: T

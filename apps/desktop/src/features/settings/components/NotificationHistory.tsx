@@ -1,14 +1,7 @@
-// "Recent notifications" — the notification log, read back.
-//
-// Until now the log was write-only bookkeeping: the scheduler wrote a row to
-// stop a reminder re-firing and nobody ever looked at it, so "did Pikos remind
-// me?" had no answer inside the app. This renders the same 30-day window the
-// dedup ledger keeps: what fired, when, for which page, whether the user clicked
-// it through — and, for the first time, the reminders quiet hours silenced,
-// which used to vanish without a trace.
-//
-// Presentational on purpose: it takes the rows and hands clicks back out, so the
-// list is testable without a workspace, a scheduler or a clock.
+// "Recent notifications": the notification log read back, over the same 30-day window the dedup ledger
+// keeps. It shows what fired, when, for which page, whether it was clicked through, and the reminders
+// quiet hours silenced. Presentational: it takes rows and hands clicks out, so it is testable without a
+// workspace, scheduler or clock.
 
 import type { NotificationHistoryEntry } from "@pikos/core";
 import { Bell, BellOff, CalendarClock } from "lucide-react";
@@ -40,7 +33,6 @@ export interface NotificationHistoryProps {
   /** Open a page from a row. Rows with no page (the daily summary, a deleted
    *  page) render as plain text instead of a button. */
   onOpenPage: (pageId: string) => void;
-  /** Open the system setting that turned off a refused reminder. */
   onOpenNotificationSettings: () => void;
 }
 

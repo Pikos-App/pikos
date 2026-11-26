@@ -1,6 +1,5 @@
-// useActivePage — derives the active PageSummary from UIContext.activePageId.
-// Verifies the three branches: null id → null, id with matching page, id
-// pointing at a deleted/missing page → null.
+// Three branches: null id gives null, an id with a matching page gives it, an id pointing at a
+// deleted or missing page gives null.
 
 import type { Page } from "@pikos/core";
 import { act } from "@testing-library/react";

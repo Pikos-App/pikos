@@ -21,8 +21,6 @@ afterEach(() => {
   localStorage.clear();
 });
 
-// ─── computeRangeSelection (pure helper) ────────────────────────────────────
-
 describe("computeRangeSelection", () => {
   const ids = ["a", "b", "c", "d", "e"];
 
@@ -51,8 +49,6 @@ describe("computeRangeSelection", () => {
   });
 });
 
-// ─── Multi-select state ────────────────────────────────────────────────────
-
 describe("multi-select", () => {
   it("starts with empty selection", () => {
     const { result } = setup();
@@ -70,7 +66,6 @@ describe("multi-select", () => {
     expect(result.current.selection.selectedPageIds.has("p1")).toBe(true);
     expect(result.current.selection.selectedPageIds.has("p2")).toBe(true);
 
-    // Toggle off
     act(() => result.current.selection.togglePageSelection("p1"));
     expect(result.current.selection.selectedPageIds.has("p1")).toBe(false);
     expect(result.current.selection.selectedPageIds.has("p2")).toBe(true);
@@ -80,9 +75,7 @@ describe("multi-select", () => {
     const { result } = setup();
     const ids = ["a", "b", "c", "d", "e"];
 
-    // Set anchor
     act(() => result.current.selection.setSelectionAnchorId("b"));
-    // Range select to d
     act(() => result.current.selection.setRangeSelection(ids, "d"));
 
     expect(result.current.selection.selectedPageIds).toEqual(new Set(["b", "c", "d"]));
@@ -143,8 +136,6 @@ describe("multi-select", () => {
     expect(result.current.selection.selectionAnchorId).toBeNull();
   });
 });
-
-// ─── useSelection outside provider ───────────────────────────────────────────
 
 describe("useSelection outside provider", () => {
   it("throws when used outside SelectionProvider", () => {

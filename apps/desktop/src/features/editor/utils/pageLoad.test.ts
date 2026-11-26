@@ -14,10 +14,8 @@ function pageOf(count: number, label = "block") {
   };
 }
 
-/** Several slices of short paragraphs. */
 const LONG = FIRST_SCREEN_SIZE;
 
-/** The page as opening it in one go produces it, schema defaults included. */
 function loadedWhole(page: object) {
   const reference = new Editor({ content: page, extensions: editorExtensions });
   const json = reference.getJSON();

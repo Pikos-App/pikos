@@ -1,7 +1,3 @@
-// The timer's UI contract: quiet play button at rest, elapsed count + stop while
-// running, and a stop that hands the session to the adapter. The timing rules
-// themselves are pinned on the hook (`useFocusTimer.test.ts`).
-
 import type { MockStorageAdapter } from "@pikos/core";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

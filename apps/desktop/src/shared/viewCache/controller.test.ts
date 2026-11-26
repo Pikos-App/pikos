@@ -29,7 +29,6 @@ async function setup(pages: number, windowSize = 2) {
   return { adapter, controller, raw };
 }
 
-/** Wait for every fetch the controller started to land. */
 async function settle() {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 }
@@ -317,7 +316,6 @@ describe("ViewCacheController range races", () => {
       scheduledStart: "2026-06-03T09:00:00",
     });
     await settle();
-    // The first load read before the write; the refresh's load reads after it.
     raw.listRange = real;
     const [older, newer] = held;
     newer?.();

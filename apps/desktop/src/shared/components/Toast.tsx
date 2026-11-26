@@ -1,6 +1,3 @@
-// Auto-dismisses after `duration` ms; hovering pauses dismissal and resets
-// the remaining time.
-
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
@@ -12,16 +9,13 @@ interface ToastAction {
 export interface ToastItem {
   id: string;
   label: string;
-  /** Per-item duration override. Falls back to the component-level `duration` prop. */
   duration?: number;
-  /** Optional action button. Action's onClick is responsible for any cleanup. */
   action?: ToastAction;
 }
 
 interface ToastProps {
   items: ToastItem[];
   duration?: number;
-  /** Fires when the timer expires (no action taken). */
   onDismiss: (id: string) => void;
 }
 
@@ -44,7 +38,6 @@ function SingleToast({
     startTime: null as number | null,
   });
 
-  // Keep callbacks in a ref so the RAF loop always sees the latest versions
   const callbacksRef = useRef({ action: item.action, onDismiss });
   useEffect(() => {
     callbacksRef.current = { action: item.action, onDismiss };

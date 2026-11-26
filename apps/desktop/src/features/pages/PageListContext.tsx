@@ -1,12 +1,7 @@
-// What the middle column is currently showing, resolved once by whoever owns the
-// column rather than by whichever panel happens to be rendering it.
-//
-// The trash is its own panel, so opening it unmounts the page list — and with it
-// anything the page list had registered. That is fine for the list's own
-// behaviour, and wrong for the delete shortcut, which acts on the active page and
-// should not stop working because a different view took the column. Reading the
-// data here lets the shortcut live above the branch without a second copy of the
-// queries behind it.
+// What the middle column shows, resolved once by whoever owns the column. The trash is its own panel,
+// so opening it unmounts the page list and anything registered there; the delete shortcut acts on the
+// active page and must not stop working then. Reading the data here lets it live above the branch
+// without a second copy of the queries.
 
 import { createContext, type ReactNode, useContext } from "react";
 

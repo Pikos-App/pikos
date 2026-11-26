@@ -64,7 +64,6 @@ describe("SyncAccountCard", () => {
   });
 
   it("shows Reconnect needed when a calendar's last resync failed auth", () => {
-    // results is keyed by sync_calendar row id (cal() → id "c1").
     render_({ results: { c1: "reconnectNeeded" } });
     expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
     expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();

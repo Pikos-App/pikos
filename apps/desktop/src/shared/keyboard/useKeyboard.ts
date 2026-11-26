@@ -7,21 +7,15 @@ type ShortcutOpts = Omit<Binding, "id" | "combo" | "handler">;
 const CHORD_TIMEOUT_MS = 400;
 
 /**
- * Registers a keyboard shortcut for the lifetime of the component.
- * Automatically unregisters on unmount.
- *
- * Single: useKeyboardShortcut('Mod+Shift+D', handler)
- * Chord:  useKeyboardShortcut(['Mod+K', 'Mod+O'], handler)
- *
- * `handler` and `opts.when` are kept in refs — safe to pass inline functions
- * without causing re-registrations on every render.
+ * Registers a keyboard shortcut for the component's lifetime: a combo, or a chord given as an
+ * array (`['Mod+K', 'Mod+O']`). `handler` and `opts.when` are kept in refs, so inline functions
+ * don't re-register on every render.
  */
 export function useKeyboardShortcut(
   combo: string | [string, string],
   handler: (e: KeyboardEvent) => void,
   opts?: ShortcutOpts
 ): void {
-  // Stable refs for callbacks — kept current via useLayoutEffect (not during render)
   const handlerRef = useRef(handler);
   const whenRef = useRef(opts?.when);
   useLayoutEffect(() => {
@@ -29,7 +23,6 @@ export function useKeyboardShortcut(
     whenRef.current = opts?.when;
   });
 
-  // Scalar opts — extract individually so they can be deps
   const first = Array.isArray(combo) ? combo[0] : combo;
   const second = Array.isArray(combo) ? combo[1] : undefined;
   const scope = opts?.scope;
@@ -46,7 +39,6 @@ export function useKeyboardShortcut(
 
   useEffect(() => {
     const id = `shortcut-${crypto.randomUUID()}`;
-    // Wrappers read from refs so the latest handler/when is always used
     const stableHandler = (e: KeyboardEvent) => handlerRef.current(e);
     const stableWhen = () => whenRef.current?.() ?? true;
 
@@ -58,8 +50,7 @@ export function useKeyboardShortcut(
       ...(unlessHandled !== undefined && { unlessHandled }),
       ...(repeat !== undefined && { repeat }),
       ...(stopPropagation !== undefined && { stopPropagation }),
-      // Palette + settings metadata. Only the first key of a chord carries it —
-      // the second half is an implementation detail, not a command.
+      // Only the first key of a chord carries palette and settings metadata; the second half isn't a command.
       ...(label !== undefined && { label }),
       ...(group !== undefined && { group }),
       // Stryker disable next-line ConditionalExpression: spreading an undefined inPalette equals leaving it out
@@ -68,10 +59,8 @@ export function useKeyboardShortcut(
     };
 
     if (second !== undefined) {
-      // ── Chord binding ────────────────────────────────────────────────────
-      // First key arms the chord by pushing a transient scope.
-      // Second key (within CHORD_TIMEOUT_MS) fires the handler.
-      // Timeout or any non-matching key clears the chord scope.
+      // The first key arms the chord with a transient scope; the second (within CHORD_TIMEOUT_MS)
+      // fires. A timeout or non-matching key clears it.
       const chordScope = `chord:${id}`;
       const secondId = `${id}-second`;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -113,7 +102,6 @@ export function useKeyboardShortcut(
       };
     }
 
-    // ── Single binding ─────────────────────────────────────────────────────
     Keyboard.register({ combo: first, handler: stableHandler, id, ...baseOpts });
     return () => Keyboard.unregister(id);
   }, [
@@ -132,10 +120,6 @@ export function useKeyboardShortcut(
   ]);
 }
 
-/**
- * Pushes a keyboard scope on mount, pops it on unmount.
- * Use in modals and dialogs to isolate shortcuts to that context.
- */
 export function useKeyboardScope(scope: string): void {
   useEffect(() => {
     Keyboard.pushScope(scope);
@@ -143,10 +127,6 @@ export function useKeyboardScope(scope: string): void {
   }, [scope]);
 }
 
-/**
- * Attaches the global keydown listener. Call once in App.tsx.
- * All shortcuts registered via useKeyboardShortcut flow through here.
- */
 export function useKeyboardListener(): void {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => Keyboard.handle(e);

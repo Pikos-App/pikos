@@ -4,26 +4,18 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface AutosaveState {
-  /** True while the saveFn promise is in flight. */
   isSaving: boolean;
-  /** Set on saveFn rejection; cleared on next successful save. */
   saveError: Error | null;
-  /** Mark unsaved input and restart the debounce, for `delay` ms when given. Renders nothing, so
-   *  it can run on every key. */
+  /** Marks unsaved input and restarts the debounce, for `delay` ms when given. Renders nothing, so it can run on every key. */
   schedule: (delay?: number) => void;
-  /** Immediately flush any pending debounced save. Returns when the save completes. */
   flush: () => Promise<void>;
 }
 
 /**
- * Debounces calls to `saveFn` after each `schedule()`.
- *
- * The caller holds the unsaved input itself and reads it when `saveFn` runs, so
- * marking a change costs nothing: no state update, no re-render, no copy of the
- * value per keystroke.
- *
- * - Flushes on unmount so page switches and app close never lose data.
- * - A failed save stays pending, so the next flush or schedule retries it.
+ * Debounces `saveFn` after each `schedule()`. The caller holds the unsaved input and reads it when
+ * `saveFn` runs, so marking a change costs no state update, re-render or copy per keystroke.
+ * Flushes on unmount so page switches and app close never lose data; a failed save stays pending,
+ * so the next flush or schedule retries it.
  */
 export function useAutosave(
   saveFn: () => Promise<void>,
@@ -42,7 +34,6 @@ export function useAutosave(
 
   saveFnRef.current = saveFn;
 
-  // Core save logic — shared by debounce timer, flush, and unmount
   const doSave = useRef(async () => {
     if (!isPendingRef.current || isSavingRef.current) return;
 
@@ -78,13 +69,11 @@ export function useAutosave(
     }, delayOverride ?? delay);
   });
 
-  // Flush on unmount (covers page switch + app close).
-  // mountedRef is reset to true on each mount so StrictMode's remount cycle
-  // doesn't permanently disable setState calls.
+  // Flush on unmount. mountedRef resets to true on each mount so StrictMode's remount doesn't
+  // permanently disable setState.
   useEffect(() => {
     mountedRef.current = true;
-    // Capture ref value per lint rule — the ref is stable but the linter
-    // can't prove it, so we copy to a local variable for the cleanup closure.
+    // Copied to a local for the cleanup closure; the linter can't prove the ref is stable.
     const save = doSave.current;
     return () => {
       mountedRef.current = false;

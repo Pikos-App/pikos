@@ -4,51 +4,31 @@ import { useEffect, useRef, useState } from "react";
 import { useUI } from "@/shared/context/UIContext";
 
 export interface UseCalendarBlockPopoverOptions {
-  /** When true, the block mounts with its popover open. The rising-edge latch
-   * accepts a `false → true` flip on a later render too, since the block may
-   * mount before the parent's autoOpenPageId state commits. */
+  /** Opens the popover on mount, or when this later flips to true. */
   autoOpenPopover?: boolean | undefined;
-  /** Called once after the auto-opened popover is closed by any path. */
   onAutoOpenConsumed?: (() => void) | undefined;
-  /** Fired on a double-click — typically opens the full editor. */
   onDoubleClick: () => void;
 }
 
 export interface UseCalendarBlockPopoverResult {
   popoverOpen: boolean;
   setPopoverOpen: (open: boolean) => void;
-  /** Bind to Popover's `onOpenChange` — invokes `onAutoOpenConsumed` when the
-   * popover closes after having been auto-opened. */
   handlePopoverOpenChange: (open: boolean) => void;
-  /** Bind to the block's `onClick` — discriminates single-click (opens
-   * popover after CLICK_DELAY) from double-click (fires `onDoubleClick`),
-   * and swallows the click fired at the end of a drag gesture. */
   handleClick: (e: React.MouseEvent) => void;
-  /** Bind to the block's `onContextMenu` — opens the popover at once. */
   handleContextMenu: (e: React.MouseEvent) => void;
-  /** Cancel a pending single-click timer. Call from checkbox + edge-resize
-   * presses so the block's click doesn't also open the popover. */
+  /** Cancels a pending single-click; call from checkbox and edge-resize presses. */
   suppressPendingClick: () => void;
-  /** Mark a drag gesture as in progress. A click that ends it on the block is
-   * swallowed (no popover open, no double-click check). The mark clears when the
-   * pointer is released, not on that click: a gesture released off the block
-   * sends the block no click, and the mark then ate the user's next real one. */
+  /**
+   * Marks a drag in progress; the click that ends it on the block is swallowed. The mark clears
+   * on pointer release, not on that click: a gesture released off the block sends no click,
+   * and the mark would eat the user's next real one.
+   */
   markDragging: () => void;
 }
 
 /**
- * Shared popover + click-gesture logic for calendar blocks (timed PageBlock
- * and all-day AllDayBar). Owns:
- *   • popover open state with auto-open rising-edge latch
- *   • force-close when the right panel switches away from calendar
- *   • click-vs-double-click timer (CLICK_DELAY ms)
- *   • post-drag click suppression (swallows the click that fires on mouseup
- *     after a drag threshold is crossed)
- *   • timer cleanup on unmount
- * Each block still owns its own pointerdown handlers — body-drag vs edge-
- * resize fire with different payloads and the threshold behaviour differs
- * (edge-resize fires immediately on pointerdown; body-drag waits for the
- * threshold). Unifying them further adds more indirection than it saves.
+ * Popover and click-gesture logic shared by timed PageBlock and all-day AllDayBar. Pointerdown
+ * handlers stay per block: body-drag waits for the threshold, edge-resize fires at once.
  */
 export function useCalendarBlockPopover(
   opts: UseCalendarBlockPopoverOptions
@@ -56,16 +36,14 @@ export function useCalendarBlockPopover(
   const { rightPanel } = useUI();
   const [popoverOpen, setPopoverOpen] = useState(opts.autoOpenPopover ?? false);
   const [autoOpenHandled, setAutoOpenHandled] = useState(opts.autoOpenPopover ?? false);
-  // Parent may flip autoOpenPopover to true on a later render (the block
-  // mounts between scheduleOnce's commit and setAutoOpenPageId's commit), so
-  // we latch on the rising edge via the render-time derived-state pattern.
+  // The block may mount before the parent's autoOpenPageId commits, so latch the rising edge
+  // via the render-time derived-state pattern.
   if (opts.autoOpenPopover && !autoOpenHandled) {
     setAutoOpenHandled(true);
     setPopoverOpen(true);
   }
-  // Calendar is hidden (not unmounted) when the editor takes over the right
-  // panel. The trigger collapses to a 0×0 box, so a portaled popover would
-  // otherwise float next to (0, 0). Force-close on panel switch.
+  // The calendar is hidden, not unmounted, when the editor takes over the right panel; its
+  // trigger collapses to 0×0 and a portaled popover would float at (0, 0).
   if (popoverOpen && rightPanel !== "calendar") {
     setPopoverOpen(false);
   }

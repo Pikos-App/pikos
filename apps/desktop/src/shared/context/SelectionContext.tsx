@@ -1,5 +1,4 @@
-// Independent from activePageId so cmd/shift-click selection coexists with
-// the currently open page. Clears automatically on view switch.
+// Independent from activePageId so cmd/shift-click selection coexists with the open page.
 
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
@@ -9,16 +8,13 @@ import { useViewCacheController } from "./WorkspaceContext";
 
 export interface SelectionContextValue {
   selectedPageIds: ReadonlySet<string>;
-  /** Toggle a single page in/out of the selection (Cmd+Click). */
   togglePageSelection: (pageId: string) => void;
   /** Select a range from the last-clicked anchor to targetId in the order given, as Finder does.
    *  `fallbackAnchor` is used only when nothing has been clicked since the view opened. */
   setRangeSelection: (visibleIds: string[], targetId: string, fallbackAnchor?: string) => void;
   selectAll: (visibleIds: string[]) => void;
   clearSelection: () => void;
-  /** The last-clicked page ID used as the anchor for Shift+Click range selection. */
   selectionAnchorId: string | null;
-  /** Update the selection anchor (set on every click / cmd+click). */
   setSelectionAnchorId: (id: string | null) => void;
 }
 
@@ -45,9 +41,8 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     });
   }, [viewCache]);
 
-  // Reset selection when the active view changes. setState-during-render is
-  // the React-recommended pattern for "adjust state when a prop changes" —
-  // a wrapper around UIContext.setActiveViewId would couple the two contexts.
+  // Reset when the active view changes. setState-during-render is React's pattern for adjusting
+  // state on a prop change; a wrapper around setActiveViewId would couple the two contexts.
   const [prevActiveViewId, setPrevActiveViewId] = useState(activeViewId);
   if (prevActiveViewId !== activeViewId) {
     setPrevActiveViewId(activeViewId);
@@ -65,7 +60,6 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
   function togglePageSelection(pageId: string) {
     setSelectedPageIds((prev) => {
       const next = new Set(prev);
-      // First cmd+click: seed selection with the active page so it's included.
       if (next.size === 0 && activePageId && activePageId !== pageId) {
         next.add(activePageId);
       }

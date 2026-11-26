@@ -103,7 +103,6 @@ describe("add", () => {
     expect(result.current.activeReminders).toHaveLength(1);
     expect(result.current.activeReminders[0]?.minutesBefore).toBe(15);
 
-    // Storage should only have the real reminder, not the sentinel
     const stored = await adapter.listPageReminders(PAGE_ID);
     expect(stored.every((r) => r.minutesBefore >= 0)).toBe(true);
   });

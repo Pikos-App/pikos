@@ -19,8 +19,6 @@ export interface UseExternalDropPreviewOptions {
   days: Date[];
   geometry: CollapseGeometry;
   metrics: CalendarMetrics;
-  /** Refs to the calendar's wrapper, scroll viewport, and day-columns row.
-   * Used to translate client coords → grid coords. */
   weekGridRef: React.RefObject<HTMLDivElement | null>;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   dayColumnsRef: React.RefObject<HTMLDivElement | null>;
@@ -31,12 +29,8 @@ export interface UseExternalDropPreviewResult {
 }
 
 /**
- * Owns the live ghost state shown when a page is dragged from the page list
- * (or anywhere outside the calendar) onto the timed/all-day grid. The actual
- * drop coordinates are pushed in by useThreePanelDnD via
- * CalendarDnDContext.registerExternalDragUpdater; this hook just translates
- * client coords → preview state and returns the snapped start ISO that the
- * drop handler hands off to scheduleOnce.
+ * Live ghost state for a page dragged from outside the calendar onto the grid. The drop
+ * handler passes the snapped start ISO on to scheduleOnce.
  */
 export function useExternalDropPreview({
   dayColumnsRef,
@@ -50,10 +44,8 @@ export function useExternalDropPreview({
   const [externalPreview, setExternalPreview] = useState<ExternalPreview | null>(null);
 
   /**
-   * Called by useThreePanelDnD on every mousemove. Computes the drop slot
-   * from cursor coords, updates local preview state for ghost rendering, and
-   * returns { start } (ISO string) for scheduleOnce. Passing out-of-bounds
-   * coords (e.g. -1, -1) clears the preview.
+   * Called by useThreePanelDnD on every mousemove; returns { start } for scheduleOnce.
+   * Out-of-bounds coords (e.g. -1, -1) clear the preview.
    */
   function updateExternalDrag(
     clientX: number,
@@ -79,7 +71,6 @@ export function useExternalDropPreview({
       setExternalPreview(null);
       return null;
     }
-    // Must be within the calendar panel vertically (all-day row counts too).
     if (clientY < gridRect.top || clientY > scrollRect.bottom) {
       setExternalPreview(null);
       return null;
@@ -97,7 +88,6 @@ export function useExternalDropPreview({
       return null;
     }
 
-    // Cursor above the timed scroll area → all-day zone.
     if (clientY < scrollRect.top) {
       setExternalPreview({ dayIndex, folderColor, isAllDay: true, isDone, title, top: 0 });
       return { start: format(targetDay, "yyyy-MM-dd") };
@@ -125,8 +115,7 @@ export function useExternalDropPreview({
     return { start: format(newStart, "yyyy-MM-dd'T'HH:mm:ss") };
   }
 
-  // Keep registerExternalDragUpdater pointed at the latest closure so
-  // useThreePanelDnD always calls the current updater (fresh days, refs).
+  // Keeps the registered updater on the latest closure (fresh days, refs).
   const latestUpdaterRef = useRef(updateExternalDrag);
   useEffect(() => {
     latestUpdaterRef.current = updateExternalDrag;

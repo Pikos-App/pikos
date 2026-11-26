@@ -1,6 +1,5 @@
-// ReleaseNotes — covers the markdown subset it renders (headings as labels,
-// bullet lists, **bold**, `inline code`) and the core guarantee: no raw
-// markdown syntax leaks into the visible text.
+// Covers the markdown subset it renders (headings as labels, bullet lists, **bold**, `inline
+// code`) and the core guarantee: no raw markdown syntax leaks into the visible text.
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

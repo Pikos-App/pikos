@@ -8,9 +8,8 @@ interface HeightResizeOptions {
   min: number;
   max: number;
   /**
-   * What the drawn height is multiplied by. The stored height, default, min and
-   * max are all at scale 1, so a value persisted before scaling existed keeps its
-   * meaning and a drag position shows the same contents at every zoom.
+   * What the drawn height is multiplied by. The stored height, default, min and max are at
+   * scale 1, so a persisted value keeps its meaning at every zoom.
    */
   scale?: number;
 }
@@ -35,11 +34,8 @@ export function useHeightResize({
   }, [height]);
 
   /**
-   * Pointer capture rather than document-level listeners: it routes every
-   * later event for this pointer back to the handle, so the drag keeps
-   * tracking once the cursor leaves the 3px bar without the hook having to
-   * own — and later remember to remove — a pair of global listeners. It also
-   * scopes the gesture to one pointer, so a second finger can't fight it.
+   * Pointer capture rather than document listeners: it routes the pointer's later events to the
+   * handle, so the drag keeps tracking off the 3px bar and a second finger can't fight it.
    */
   function onResizeStart(e: React.PointerEvent<HTMLElement>) {
     if (!e.isPrimary) return;
@@ -55,8 +51,7 @@ export function useHeightResize({
       const h = Math.max(min, Math.min(max, startHeight + (ev.clientY - startY) / scale));
       setHeight(h);
     };
-    // pointerup and pointercancel both end the gesture; the height already
-    // committed on every move, so there is nothing to roll back either way.
+    // Up and cancel both end the gesture; the height committed on every move, so nothing to roll back.
     const onEnd = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
       handle.removeEventListener("pointermove", onMove);

@@ -2,15 +2,12 @@ import { DEFAULT_EVENT_COLOR } from "@pikos/core";
 import type { CSSProperties } from "react";
 
 /**
- * Shared Tailwind classes for event chips — compact timed blocks, all-day bars and
- * month chips all wear them, so they stay visually identical.
+ * Shared Tailwind classes for event chips: compact timed blocks, all-day bars and month chips.
  *
- * Lives in the app rather than in `@pikos/core` beside the geometry it pairs with:
- * Tailwind generates a utility only when it finds the literal while scanning, and its
- * scan does not reach `packages/core`. Declared there, `h-[19px]` produced no rule at
- * all and every chip silently collapsed to its text height — the class was present in
- * the DOM and did nothing, which is why it read as a styling bug rather than a missing
- * one. `ALL_DAY_BAR_HEIGHT` still owns the number; these two must agree.
+ * Lives in the app, not beside the geometry in `@pikos/core`: Tailwind generates a utility only
+ * when its scan finds the literal, and the scan does not reach `packages/core`. Declared there,
+ * `h-[19px]` produced no rule and every chip collapsed to its text height. `ALL_DAY_BAR_HEIGHT`
+ * still owns the number; these two must agree.
  */
 export const CHIP_HEIGHT_CLASS = "h-[calc(19px*var(--calendar-zoom,1))]";
 
@@ -36,14 +33,9 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * Inline `--event-color` style for chips. CSS derives the mode-aware
- * background (opaque color-mix with `--background`) and the full-saturation
- * left-edge accent — see app.css `--event-color` rules. Pages without a
- * folder colour fall back to DEFAULT_EVENT_COLOR so every chip routes
- * through the same opaque-fill path.
- *
- * Returns CSSProperties so React's `style` prop accepts the result. The cast
- * is required because custom CSS properties aren't part of CSSProperties.
+ * Inline `--event-color` for chips; app.css derives the opaque background and left-edge accent
+ * from it. Folderless pages use DEFAULT_EVENT_COLOR. The cast is needed because custom
+ * properties aren't part of CSSProperties.
  */
 export function chipFolderStyle(folderColor?: string | null): CSSProperties {
   return { "--event-color": folderColor ?? DEFAULT_EVENT_COLOR } as CSSProperties;

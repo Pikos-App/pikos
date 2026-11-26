@@ -8,9 +8,8 @@ const NO_SUBSCRIPTION = () => () => undefined;
 const NO_COUNTS = () => null;
 const NONE: ViewCounts = { folders: {}, inbox: 0, today: 0, upcoming: 0 };
 
-/** The badge counts for today when the view cache serves them, else null. Until the first count
- *  lands they read as zero rather than falling back to counting the in-memory list. Both reads are
- *  values that keep their identity, so a change elsewhere in the store re-renders nothing here. */
+/** Null when the view cache doesn't serve them. Until the first count lands they read as zero rather
+ *  than falling back to counting the in-memory list. */
 export function useCachedCounts(): ViewCounts | null {
   const controller = useViewCacheController();
   const subscribe = controller?.subscribe ?? NO_SUBSCRIPTION;

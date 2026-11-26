@@ -6,13 +6,10 @@ import { postNotice } from "@/shared/events/noticeBus";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { getPlatform } from "@/shared/platform";
 
-/** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
 export type WeekStart = 0 | 1;
 
-/** Reminder lead time options in minutes. 0 = "at start time"; the longer end
- *  (60 / 120 / 1440) is what the schema always accepted — the pickers just never
- *  offered it — and the scheduler's arms do the date arithmetic in SQLite, so a
- *  lead that crosses midnight fires on the right day. */
+/** Reminder lead time options in minutes. 0 = "at start time". The scheduler's arms do the date
+ *  arithmetic in SQLite, so a lead that crosses midnight fires on the right day. */
 export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 1440;
 
 export interface AppSettingsValue {
@@ -21,31 +18,25 @@ export interface AppSettingsValue {
   /** Folder ID to use when no folder context exists. null = Inbox. */
   defaultFolderId: string | null;
   setDefaultFolderId: (v: string | null) => void;
-  /** Global on/off switch for desktop notifications. Default: true. */
   notificationsEnabled: boolean;
   setNotificationsEnabled: (v: boolean) => void;
-  /** Default reminder lead time for pages without per-page reminders. Default: 10. */
   defaultReminderMinutes: ReminderLeadTime;
   setDefaultReminderMinutes: (v: ReminderLeadTime) => void;
   /** Version string the user chose to skip (e.g. "1.2.0"). null = no skip. */
   skippedVersion: string | null;
   setSkippedVersion: (v: string | null) => void;
-  /** Run the auto-updater check on launch. Default: true. Manual re-check works regardless. */
+  /** Run the auto-updater check on launch. A manual re-check works regardless. */
   autoUpdateEnabled: boolean;
   setAutoUpdateEnabled: (v: boolean) => void;
-  /** Daily summary — fire once per day with today + overdue counts. Default: true. */
   overdueAlerts: boolean;
   setOverdueAlerts: (v: boolean) => void;
-  /** Time of day the daily summary fires (HH:MM, 24h). Deferred if inside quiet hours. Default: "07:00". */
+  /** Time of day the daily summary fires (HH:MM, 24h). Deferred if inside quiet hours. */
   summaryTime: string;
   setSummaryTime: (v: string) => void;
-  /** Quiet hours — suppress notifications during a time window. Default: off. */
   quietHoursEnabled: boolean;
   setQuietHoursEnabled: (v: boolean) => void;
-  /** Quiet hours start time (HH:MM, 24h format). Default: "22:00". */
   quietHoursStart: string;
   setQuietHoursStart: (v: string) => void;
-  /** Quiet hours end time (HH:MM, 24h format). Default: "08:00". */
   quietHoursEnd: string;
   setQuietHoursEnd: (v: string) => void;
 }
@@ -90,9 +81,8 @@ function useAppSettingsValue(): AppSettingsValue {
     "08:00"
   );
 
-  // Sync notification settings to the host scheduler whenever they change.
-  // Wrapped in catch — the no-op platform resolves, but a real host can still
-  // reject (scheduler not started yet), and a settings toggle must not throw.
+  // The no-op platform resolves, but a real host can reject (scheduler not started yet), and a
+  // settings toggle must not throw.
   useEffect(() => {
     void getPlatform()
       .applyNotificationSettings({
@@ -105,10 +95,8 @@ function useAppSettingsValue(): AppSettingsValue {
         summaryTime,
       })
       .catch(() => {
-        // The settings persist locally either way, so the panel goes on showing
-        // reminders as on while nothing is scheduled to fire. That gap is the
-        // whole reason this says anything: a reminder that never arrives is
-        // indistinguishable from one that was never set.
+        // The settings persist locally either way, so the panel goes on showing reminders as on while
+        // nothing is scheduled to fire; a reminder that never arrives looks like one never set.
         postNotice("Saved, but reminders may not fire until you restart Pikos.");
       });
   }, [

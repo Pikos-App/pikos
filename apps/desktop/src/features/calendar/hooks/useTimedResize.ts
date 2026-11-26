@@ -8,7 +8,6 @@ interface ResizeRefState {
   pageId: string;
   block: CalendarBlock;
   dayIndex: number;
-  /** Set when resizing a virtual rrule occurrence — keys the override. */
   originalDate?: string;
 }
 
@@ -29,9 +28,8 @@ export interface UseTimedResizeResult {
 }
 
 /**
- * Owns the bottom-edge resize gesture for timed PageBlocks. Live preview
- * tracks the cursor (no snap) via requestAnimationFrame; commit on release
- * snaps to 15-minute via mapYToDate (collapse-aware).
+ * Bottom-edge resize for timed PageBlocks. The live preview tracks the cursor unsnapped via
+ * requestAnimationFrame; commit snaps to 15 minutes via mapYToDate (collapse-aware).
  */
 export function useTimedResize({
   days,
@@ -51,7 +49,6 @@ export function useTimedResize({
   function handleBlockResizeStart({ block, dayIndex, originalDate, pageId }: BlockResizeStartInfo) {
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
-    // Synced events own a locked schedule — never resizable.
     if (block.page.scheduleLocked) return;
 
     disableSelect("dragging-resize");
@@ -69,8 +66,6 @@ export function useTimedResize({
       const scrollRect = scrollEl.getBoundingClientRect();
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const minBottom = state.block.top + metrics.minResizeHeight;
-      // No snapping during live drag — smooth resize. Snap is applied on
-      // commit via mapYToDate.
       const ghostBottom = Math.max(minBottom, Math.min(metrics.gridHeight, cursorYInGrid));
 
       resizeGhostBottomRef.current = ghostBottom;
@@ -106,7 +101,6 @@ export function useTimedResize({
       onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd), state.originalDate);
     }
 
-    /** Platform-cancelled gesture — drop the preview without committing. */
     function onCancel(ev: PointerEvent) {
       if (!ev.isPrimary) return;
       teardown();
