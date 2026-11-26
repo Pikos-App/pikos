@@ -113,7 +113,7 @@ describe("suggestColumnMappings", () => {
   });
 
   it("prevents duplicate field assignments", () => {
-    const headers = ["Title", "Name"]; // both heuristically map to "title"
+    const headers = ["Title", "Name"];
     const rows = [{ Name: "b", Title: "a" }];
     const { mappings } = suggestColumnMappings(headers, rows);
     const titleMappings = mappings.filter((m) => m.pikosField === "title");
@@ -480,7 +480,6 @@ describe("applyMappings — date parsing", () => {
         ["Due", "scheduledStart"],
       ])
     );
-    // Converted to local time — format has no timezone offset
     expect(plan.pages[0]!.scheduledStart).toBeTruthy();
     expect(plan.pages[0]!.scheduledStart).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
@@ -856,9 +855,8 @@ describe("applyMappings — scheduledStart fallback to scheduledEnd", () => {
       ["DEADLINE", "scheduledEnd"],
     ]);
     const plan = applyMappings(rows, config);
-    // DATE is unparseable natural language → falls back to DEADLINE
     expect(plan.pages[0]!.scheduledStart).toBe("2025-06-20");
-    expect(plan.pages[0]!.scheduledEnd).toBeNull(); // cleared after fallback
+    expect(plan.pages[0]!.scheduledEnd).toBeNull();
   });
 
   it("does not fall back when scheduledStart is parseable", () => {
@@ -918,7 +916,6 @@ describe("applyMappings — duration computation", () => {
       valueMappings: [],
     };
     const plan = applyMappings(rows, config);
-    // The date portion "2025-06-15" is parseable, time "11:00" extracted from raw
     expect(plan.pages[0]!.scheduledStart).toBe("2025-06-15T11:00:00");
     expect(plan.pages[0]!.scheduledEnd).toBe("2025-06-15T12:00:00");
   });
@@ -1136,16 +1133,16 @@ describe("end-to-end: TickTick CSV import", () => {
 
   it("maps status values correctly (0=active, 2=archived/done, -1=done)", () => {
     const { plan } = runFullPipeline(ticktickCSV);
-    expect(plan.pages[0]!.status).toBe("not_started"); // Status 0
-    expect(plan.pages[1]!.status).toBe("done"); // Status 2
-    expect(plan.pages[2]!.status).toBe("done"); // Status -1
+    expect(plan.pages[0]!.status).toBe("not_started");
+    expect(plan.pages[1]!.status).toBe("done");
+    expect(plan.pages[2]!.status).toBe("done");
   });
 
   it("maps priority values correctly (0=none, 3=medium, 5=high)", () => {
     const { plan } = runFullPipeline(ticktickCSV);
-    expect(plan.pages[0]!.priority).toBe(2); // TickTick 5 → Pikos high (2)
-    expect(plan.pages[1]!.priority).toBe(3); // TickTick 3 → Pikos medium (3)
-    expect(plan.pages[2]!.priority).toBe(0); // TickTick 0 → Pikos none (0)
+    expect(plan.pages[0]!.priority).toBe(2);
+    expect(plan.pages[1]!.priority).toBe(3);
+    expect(plan.pages[2]!.priority).toBe(0);
   });
 
   it("extracts tags correctly", () => {
@@ -1157,17 +1154,14 @@ describe("end-to-end: TickTick CSV import", () => {
 
   it("maps timed events with start and end dates", () => {
     const { plan } = runFullPipeline(ticktickCSV);
-    // First task: timed event with Start Date + Due Date
     expect(plan.pages[0]!.scheduledStart).toContain("T");
     expect(plan.pages[0]!.scheduledEnd).toContain("T");
   });
 
   it("maps all-day events as date-only (TickTick exports midnight UTC + Is All Day flag)", () => {
     const { plan } = runFullPipeline(ticktickCSV);
-    // Second task: Is All Day = true, Due Date "2026-06-15T00:00:00+0000",
-    // no Start Date. The Is All Day flag forces date-only parsing so the
-    // calendar renders it in the all-day row rather than as a midnight
-    // timed block (which would also shift dates in non-UTC zones).
+    // An "Is All Day" row forces date-only parsing, so the calendar renders it in the all-day row
+    // and not as a midnight timed block, which would also shift dates in non-UTC zones.
     expect(plan.pages[1]!.scheduledStart).toBe("2026-06-15");
     expect(plan.pages[1]!.scheduledEnd).toBeNull();
   });
@@ -1183,10 +1177,10 @@ describe("end-to-end: TickTick CSV import", () => {
   it("preserves created and completed timestamps", () => {
     const { plan } = runFullPipeline(ticktickCSV);
     expect(plan.pages[0]!.createdAt).toBeTruthy();
-    expect(plan.pages[0]!.completedAt).toBeNull(); // not done
+    expect(plan.pages[0]!.completedAt).toBeNull();
 
     expect(plan.pages[1]!.createdAt).toBeTruthy();
-    expect(plan.pages[1]!.completedAt).toBeTruthy(); // done, has Completed Time
+    expect(plan.pages[1]!.completedAt).toBeTruthy();
   });
 
   it("maps sourceId and sourceParentId for parent resolution", () => {
@@ -1195,7 +1189,7 @@ describe("end-to-end: TickTick CSV import", () => {
     expect(plan.pages[0]!.sourceParentId).toBeNull();
 
     expect(plan.pages[2]!.sourceId).toBe("103");
-    expect(plan.pages[2]!.sourceParentId).toBe("101"); // child of task 101
+    expect(plan.pages[2]!.sourceParentId).toBe("101");
   });
 
   it("maps body content", () => {
@@ -1326,15 +1320,12 @@ task,Take out the trash,,3,2,,,every Friday,en,,,,,`;
 
   it("preprocesses: skips meta rows, empty rows, merges notes", () => {
     const { plan } = runFullPipeline(todoistCSV);
-    // meta row, empty row, and note row should be gone
-    // Remaining: 4 task rows
     expect(plan.pages).toHaveLength(4);
   });
 
   it("maps CONTENT to title and DESCRIPTION to body", () => {
     const { plan } = runFullPipeline(todoistCSV);
     expect(plan.pages[0]!.title).toBe("Call important client");
-    // Note merged into description
     expect(plan.pages[0]!.body).toBe("Only on Tuesdays\n\nFollow up next week");
   });
 
@@ -1359,23 +1350,20 @@ task,Take out the trash,,3,2,,,every Friday,en,,,,,`;
 
   it("maps Todoist priority correctly (1=urgent, 3=medium, 4=none)", () => {
     const { plan } = runFullPipeline(todoistCSV);
-    expect(plan.pages[0]!.priority).toBe(1); // Todoist 1 → urgent
-    expect(plan.pages[1]!.priority).toBe(0); // Todoist 4 → none
-    expect(plan.pages[2]!.priority).toBe(0); // Todoist 4 → none
-    expect(plan.pages[3]!.priority).toBe(3); // Todoist 3 → medium
+    expect(plan.pages[0]!.priority).toBe(1);
+    expect(plan.pages[1]!.priority).toBe(0);
+    expect(plan.pages[2]!.priority).toBe(0);
+    expect(plan.pages[3]!.priority).toBe(3);
   });
 
   it("falls back to DEADLINE when DATE is natural language", () => {
     const { plan } = runFullPipeline(todoistCSV);
-    // "today at 11:00" unparseable, DEADLINE "2025-03-31" used
     expect(plan.pages[0]!.scheduledStart).toBeTruthy();
     expect(plan.pages[0]!.scheduledStart).toContain("2025-03-31");
   });
 
   it("computes scheduledEnd from DEADLINE + DURATION + time from DATE", () => {
     const { plan } = runFullPipeline(todoistCSV);
-    // DATE="today at 11:00" → extract 11:00, DEADLINE=2025-03-31, DURATION=30
-    // → start: 2025-03-31T11:00:00, end: 2025-03-31T11:30:00
     const start = plan.pages[0]!.scheduledStart;
     const end = plan.pages[0]!.scheduledEnd;
     expect(start).toBe("2025-03-31T11:00:00");

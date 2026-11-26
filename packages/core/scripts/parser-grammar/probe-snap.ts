@@ -1,14 +1,11 @@
-// Ask the TypeScript `snapAnchorToRule` directly.
+// Asks the TypeScript `snapAnchorToRule` directly; arguments are (rrule, anchor) pairs.
 //
 //   pnpm --filter @pikos/core probe:snap -- "FREQ=DAILY;BYHOUR=14" "2026-03-15T09:00:00"
-//
-// Arguments are read in (rrule, anchor) pairs.
 
 import { snapAnchorToRule } from "../../src/utils/recurrence";
 
 function main(): void {
-  // pnpm forwards its own `--` separator through to argv; drop it so the
-  // pairing below lines up with what was actually typed.
+  // pnpm forwards its own `--` separator; drop it so the pairing lines up.
   const args = process.argv.slice(2).filter((arg) => arg !== "--");
   for (let i = 0; i + 1 < args.length; i += 2) {
     const rrule = args[i]!;

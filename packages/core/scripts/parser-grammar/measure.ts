@@ -1,21 +1,13 @@
-// How much of chrono-node does the quick-add parser actually need?
+// How much of chrono-node does the quick-add parser need? Most of parser.ts is pre-processing
+// that rewrites casual phrasing ("tonight", "last monday") into explicit forms, so what matters
+// is what grammar survives that and reaches chrono: the part with no Rust equivalent.
 //
-// The Rust port's estimate turns on this. parser.ts is 861 lines, but only
-// three of them call chrono, and the file's bulk is pre-processing that
-// rewrites casual phrasing ("tonight", "this afternoon", "last monday") into
-// explicit forms. So the question is not how big parser.ts is — it is what
-// grammar survives that rewriting and reaches chrono, because that is the part
-// with no Rust equivalent.
-//
-// Every input in the parity corpus is run through the real parser with a
-// recording stand-in installed in chrono's place, and the matched text is
-// classified. Re-run it whenever the corpus grows:
+// Every input in the parity corpus runs through the real parser with a recording stand-in in
+// chrono's place, and the matched text is classified. Re-run when the corpus grows:
 //
 //   pnpm --filter @pikos/core measure:parser-grammar
 //
-// Caveat worth keeping in view when reading the output: the corpus is drawn
-// from the test suite, which is what the author thought to test rather than
-// what users actually type. It is a lower bound on the grammar, not a census.
+// The corpus is drawn from the test suite, so it is a lower bound on the grammar, not a census.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -40,7 +32,7 @@ function packageRoot(): string {
   }
 }
 
-/** Fixed reference so the classification is reproducible. */
+/** Fixed, so the classification is reproducible. */
 const NOW = new Date("2026-03-15T12:00:00");
 
 interface CorpusCase {
@@ -51,13 +43,12 @@ const TIME = String.raw`(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2})`;
 const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*";
 const WEEKDAY = "(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*";
 
-/** Grammar families, in the order they are tested. */
+/** In the order tested. */
 function classify(raw: string): string {
   const t = raw.toLowerCase().split(/\s+/).filter(Boolean).join(" ");
   if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return "ISO date";
-  // Ranges are recognised before the single-value families, because every
-  // range is built from two of them. The hyphen form has to allow a meridiem
-  // before the separator ("9am-5pm") as well as a bare digit ("apr 5-9").
+  // Ranges first, since each is built from two single-value families. The hyphen form must allow
+  // a meridiem before the separator ("9am-5pm") as well as a bare digit ("apr 5-9").
   if (/\bto\b|\bthrough\b|–|—|(?<=[\dm])-(?=\d)/.test(t)) return "range";
   if (new RegExp(`^(?:at\\s+)?${TIME}$`).test(t)) return "bare time";
   if (["noon", "midnight", "morning", "afternoon", "evening", "night"].includes(t)) {

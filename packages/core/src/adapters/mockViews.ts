@@ -1,6 +1,5 @@
-// The mock's copy of the database's list reads (`views.rs`, `reads.rs`, `moves.rs` in pikos-db),
-// written as plain sorts over every page, which a mock can afford. The differential suite holds
-// it to the database's answers on the same workspace.
+// The mock's copy of the database's list reads (`views.rs`, `reads.rs`, `moves.rs` in pikos-db) as
+// plain sorts over every page. The differential suite holds it to the database's answers.
 
 import { addDays, format } from "date-fns";
 

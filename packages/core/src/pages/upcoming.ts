@@ -1,12 +1,7 @@
-// Day grouping for the Upcoming smart view.
-//
-// Membership (which pages reach here at all) is `belongsToView(page, "upcoming")`
-// in pageFilters — today through today+6, open only, nothing overdue. This module
-// only decides how that set is cut into days and what each day is called.
-//
-// Only days that actually hold something get a section: an empty day header is a
-// row of furniture that says nothing the next-populated header doesn't already
-// say, and in a virtualised list it costs a real row.
+// Day grouping for Upcoming. Membership is `belongsToView(page, "upcoming")`; this module decides
+// how that set is cut into days and what each is called. Only days that hold something get a
+// section: an empty header says nothing the next populated one doesn't, and in a virtualised list
+// it costs a row.
 
 import { addDays } from "date-fns";
 
@@ -16,18 +11,17 @@ import { viewerStart } from "../utils/syncedTime";
 import { compareByScheduledStart } from "./pageFilters";
 
 export interface UpcomingDaySection {
-  /** 'YYYY-MM-DD' — the row key, and what a test asserts against. */
+  /** 'YYYY-MM-DD'; the row key. */
   date: string;
-  /** "Today", "Tomorrow", then weekday + date ("Thu, Aug 27"). */
+  /** "Today", "Tomorrow", then weekday and date ("Thu, Aug 27"). */
   label: string;
   pages: PageSummary[];
 }
 
-/** Locale is left to the system, the way every other date surface here reads. */
+/** Locale is left to the system. */
 export function upcomingDayLabel(date: string, todayStr: string): string {
   if (date === todayStr) return "Today";
-  // addDays, not +86_400_000: a DST boundary inside the window would otherwise
-  // land "tomorrow" on today or the day after.
+  // addDays, not +86_400_000: across a DST boundary "tomorrow" would land on today or the day after.
   if (date === formatDateOnly(addDays(parseLocalISO(todayStr), 1))) return "Tomorrow";
   return parseLocalISO(date).toLocaleDateString(undefined, {
     day: "numeric",
@@ -36,11 +30,8 @@ export function upcomingDayLabel(date: string, todayStr: string): string {
   });
 }
 
-/**
- * Groups Upcoming's pages by scheduled day, ascending, each day sorted the way
- * the Today view sorts. Pages with no schedule can't be placed on a day and are
- * dropped — `belongsToView` already excludes them, so this is belt-and-braces.
- */
+/** Groups pages by scheduled day, ascending, each day sorted as Today sorts. Unscheduled pages
+ * are dropped; `belongsToView` already excludes them. */
 export function groupUpcomingPages(
   pages: PageSummary[],
   todayStr: string = localToday()

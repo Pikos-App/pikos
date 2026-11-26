@@ -40,8 +40,6 @@ function rowTypes(input: BuildPageListRowsInput) {
   return buildPageListRows(input).rows.map((r) => r.type);
 }
 
-// ── Empty state ─────────────────────────────────────────────────────────────
-
 describe("empty state", () => {
   it("shows empty-state row when no visible pages", () => {
     const types = rowTypes(defaults());
@@ -59,8 +57,6 @@ describe("empty state", () => {
     ]);
   });
 });
-
-// ── Folder / Inbox view ─────────────────────────────────────────────────────
 
 describe("folder view", () => {
   it("creates a page row per visible page", () => {
@@ -80,8 +76,6 @@ describe("folder view", () => {
   });
 });
 
-// ── Today view ──────────────────────────────────────────────────────────────
-
 describe("today view", () => {
   const overduePage = makePage({ id: "od1" });
   const todayPage = makePage({ id: "td1" });
@@ -96,13 +90,7 @@ describe("today view", () => {
         visiblePages: [overduePage, todayPage],
       })
     );
-    expect(types).toEqual([
-      "section-header", // overdue
-      "page", // overdue page
-      "section-header", // today
-      "page", // today page
-      "completed-toggle",
-    ]);
+    expect(types).toEqual(["section-header", "page", "section-header", "page", "completed-toggle"]);
   });
 
   it("hides overdue pages when collapsed", () => {
@@ -115,12 +103,7 @@ describe("today view", () => {
         visiblePages: [overduePage, todayPage],
       })
     );
-    expect(types).toEqual([
-      "section-header", // overdue (collapsed)
-      "section-header", // today
-      "page", // today page
-      "completed-toggle",
-    ]);
+    expect(types).toEqual(["section-header", "section-header", "page", "completed-toggle"]);
   });
 
   it("skips today header when no overdue items", () => {
@@ -132,7 +115,6 @@ describe("today view", () => {
         visiblePages: [todayPage],
       })
     );
-    // No overdue header, no today header — just the page
     expect(types).toEqual(["page", "completed-toggle"]);
   });
 
@@ -166,8 +148,6 @@ describe("today view", () => {
     expect(pageToRowIndex.has("td1")).toBe(true);
   });
 });
-
-// ── Upcoming view (day sections) ────────────────────────────────────────────
 
 describe("upcoming view", () => {
   const a = makePage({ id: "a" });
@@ -231,8 +211,6 @@ describe("upcoming view", () => {
   });
 });
 
-// ── Completed section ───────────────────────────────────────────────────────
-
 describe("completed section", () => {
   it("only shows toggle when collapsed", () => {
     const types = rowTypes(defaults({ completedCollapsed: true, completedPages: [makePage()] }));
@@ -260,8 +238,8 @@ describe("completed section", () => {
       })
     );
     const keys = rows.filter((r) => r.type === "page").map((r) => r.key);
-    expect(keys).toContain("shared-id"); // active page
-    expect(keys).toContain("c-shared-id"); // completed page
+    expect(keys).toContain("shared-id");
+    expect(keys).toContain("c-shared-id");
   });
 
   it("shows load-more only when there are completed pages AND more available", () => {
@@ -285,7 +263,6 @@ describe("completed section", () => {
       })
     );
     expect(types).not.toContain("load-more");
-    // hasMore is true but pages empty — neither load-more nor empty-completed
     expect(types).not.toContain("empty-completed");
   });
 

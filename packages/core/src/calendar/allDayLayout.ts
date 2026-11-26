@@ -4,19 +4,13 @@ import type { PageSummary } from "../types";
 import { isAllDayIso } from "../utils/dates";
 import { ALL_DAY_ROW_HEIGHT, ALL_DAY_TOP_PADDING } from "./calendarConstants";
 
-/**
- * Returns true when scheduledStart is a date-only string ('YYYY-MM-DD').
- * Timed events include 'T' in the ISO string; all-day events are 10 chars with no 'T'.
- */
+/** Whether `scheduledStart` is date-only ('YYYY-MM-DD'). */
 export function isAllDayPage(scheduledStart: string): boolean {
   return isAllDayIso(scheduledStart);
 }
 
-/**
- * Counts midnight boundaries strictly between start and end. An event ending
- * exactly at midnight (e.g. 11pm → next day 00:00) returns 0 — it touches but
- * doesn't cross. DST-safe: walks one calendar day at a time.
- */
+/** Midnights strictly between start and end: an event ending exactly at midnight touches but
+ * doesn't cross, so it returns 0. Walks calendar days, so it is DST-safe. */
 export function crossingMidnightsCount(start: Date, end: Date): number {
   if (end <= start) return 0;
   let count = 0;
@@ -30,17 +24,14 @@ export function crossingMidnightsCount(start: Date, end: Date): number {
 
 export interface AllDayItem {
   page: PageSummary;
-  /** True on days after the event's first day (multi-day events). */
+  /** True on days after the event's first day. */
   isContinuationBefore: boolean;
-  /** True on days before the event's last day — used for right-edge rounding. */
+  /** True on days before the event's last day. */
   isContinuationAfter: boolean;
 }
 
-/**
- * Compares date strings directly to avoid UTC/local midnight ambiguity.
- * Multi-day all-day events appear on every day in [scheduledStart, scheduledEnd];
- * isContinuationBefore/After distinguish the first/last day from middle days.
- */
+/** A multi-day all-day event appears on every day in [scheduledStart, scheduledEnd]. Compares
+ * date strings directly to avoid UTC/local midnight ambiguity. */
 export function buildAllDayItems(pages: PageSummary[], day: Date): AllDayItem[] {
   const dayStr = format(day, "yyyy-MM-dd");
   const results: AllDayItem[] = [];
@@ -59,24 +50,20 @@ export function buildAllDayItems(pages: PageSummary[], day: Date): AllDayItem[] 
 }
 
 /**
- * Assigns each page a stable row index across visible days so that multi-day
- * all-day events render on the same row in every column they touch. Each slot
- * in the returned array is either an AllDayItem (chip) or null (empty row).
- * All days share the same slot count.
+ * Assigns each page one row across the visible days, so a multi-day event sits on the same row
+ * in every column it touches. Each slot is an AllDayItem or null (empty row), and every day has
+ * the same slot count.
  *
- * Row claims track the SPECIFIC day indices a page has items on, not a
- * `start..end` range. Recurring virtual occurrences share the head page's id
- * (see `expandRecurrenceForRange`), so merging by id produces a "span" whose
- * items are non-contiguous (e.g. MWF occurrences). If we claimed every day
- * from min..max, unrelated single-day events on the gap days (Tu/Th) would
- * get pushed to row 1 with a phantom empty row 0 above them.
+ * Row claims track the specific day indices a page has items on, not a start..end range.
+ * Recurring virtual occurrences share the head page's id, so an MWF series is non-contiguous;
+ * claiming min..max would push unrelated single-day events on Tu/Th to row 1 under a phantom
+ * empty row 0.
  */
 export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayItem | null)[][] {
   const first = days[0];
   const last = days[days.length - 1];
   if (!first || !last) return [];
-  // The all-day pages touching these days, found once: each day then scans only them, where it
-  // scanned every page held, most of them timed or dated elsewhere.
+  // Found once so each day scans only these, not every page held.
   const from = format(first, "yyyy-MM-dd");
   const to = format(last, "yyyy-MM-dd");
   const touching = pages.filter((page) => {
@@ -89,9 +76,9 @@ export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayIte
 
   interface Span {
     pageId: string;
-    /** Day indices this page has items on — may be non-contiguous for shared-id virtuals. */
+    /** May be non-contiguous for shared-id virtuals. */
     dayIndices: number[];
-    /** Page createdAt — stable, user-meaningful tiebreaker (pageId is a UUID). */
+    /** A stable tiebreaker that means something to the user, unlike the UUID. */
     createdAt: string;
   }
   const spans: Span[] = [];
@@ -112,10 +99,8 @@ export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayIte
       }
     }
   });
-  // Multi-day spans first so long horizontal bars anchor the top rows and the
-  // single-day stack stays contiguous below (Google/Apple Calendar convention).
-  // Within equal-length groups: earliest start first, then createdAt, then
-  // pageId as a final deterministic fallback (UUID → not user-meaningful).
+  // Multi-day spans first, so long bars anchor the top rows and the single-day stack stays
+  // contiguous below. Ties: earliest start, then createdAt, then pageId for determinism.
   spans.sort(
     (a, b) =>
       b.dayIndices.length - a.dayIndices.length ||
@@ -159,14 +144,10 @@ export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayIte
 }
 
 /**
- * Stable cross-week variant of assignAllDayRows. Expands the computation to
- * cover the full span of every all-day page that overlaps `visibleDays`, so
- * multi-week events land on the same row in every week they appear — the
- * neighboring week's slot layout becomes the same context as the visible one.
- * Returns slots for only `visibleDays`; trailing rows that are empty across
- * every visible day are trimmed to keep the section dense when the stable
- * layout implies otherwise-empty space (e.g. events anchoring row 3 in a
- * prior week disappear in the current week).
+ * `assignAllDayRows` over the full span of every all-day page overlapping `visibleDays`, so a
+ * multi-week event lands on the same row in every week. Returns slots for `visibleDays` only,
+ * with trailing rows that are empty across them trimmed (an event anchoring row 3 in a prior
+ * week would otherwise leave empty space).
  */
 export function assignStableAllDayRows(
   pages: PageSummary[],
@@ -176,9 +157,6 @@ export function assignStableAllDayRows(
   const visibleStart = format(visibleDays[0]!, "yyyy-MM-dd");
   const visibleEnd = format(visibleDays[visibleDays.length - 1]!, "yyyy-MM-dd");
 
-  // Find the outer span covered by any all-day page that overlaps the visible
-  // range. An event extending into an earlier week pulls minStart back; one
-  // extending into a later week pushes maxEnd forward.
   let minStart = visibleStart;
   let maxEnd = visibleEnd;
   for (const page of pages) {
@@ -190,8 +168,7 @@ export function assignStableAllDayRows(
     if (e > maxEnd) maxEnd = e;
   }
 
-  // Fast path: no multi-week event touching the visible range → the result is
-  // identical to the local computation, so skip the expansion work.
+  // Fast path: nothing extends past the visible range, so the local result is identical.
   if (minStart === visibleStart && maxEnd === visibleEnd) {
     return assignAllDayRows(pages, visibleDays);
   }
@@ -209,8 +186,7 @@ export function assignStableAllDayRows(
   const firstVisibleIdx = expandedDays.findIndex((d) => format(d, "yyyy-MM-dd") === visibleStart);
   const visibleSlots = expandedSlots.slice(firstVisibleIdx, firstVisibleIdx + visibleDays.length);
 
-  // Trim trailing rows that are empty across every visible day. Preserves
-  // interior empty rows (those hold a multi-week event's anchor row in place).
+  // Interior empty rows stay: they hold a multi-week event's anchor row in place.
   let maxUsedRow = -1;
   for (const row of visibleSlots) {
     for (let i = row.length - 1; i > maxUsedRow; i--) {
@@ -223,12 +199,8 @@ export function assignStableAllDayRows(
   return visibleSlots.map((row) => row.slice(0, maxUsedRow + 1));
 }
 
-/**
- * Lowest row index that is empty across columns [lo..hi] (inclusive).
- * Used by the drag-to-create ghost so its row matches where the new chip will
- * actually land — assignAllDayRows uses the same first-free-row rule, so the
- * ghost → real chip transition has no visual jump.
- */
+/** Lowest row empty across columns [lo..hi]. Follows the first-free-row rule of
+ * `assignAllDayRows`, so a drag-to-create ghost sits where the new chip lands. */
 export function firstFreeRowInSpan(
   slotsByDay: (AllDayItem | null)[][],
   lo: number,
@@ -248,35 +220,24 @@ export function firstFreeRowInSpan(
   }
 }
 
-/**
- * A single renderable all-day bar — one DOM element per event segment that's
- * visible in the current range. A multi-day event becomes one bar spanning
- * multiple columns; a non-contiguous recurring series (e.g. MWF sharing a page
- * id) becomes three separate bars because the row has nulls at the gap columns.
- */
+/** One renderable bar per visible event segment. A non-contiguous recurring series (MWF sharing
+ * a page id) is several bars, since the row has nulls at the gap columns. */
 export interface AllDayBar {
   page: PageSummary;
-  /** First visible column the bar covers (0-indexed). */
+  /** 0-indexed. */
   startCol: number;
-  /** Number of consecutive visible columns the bar covers (>= 1). */
+  /** Consecutive visible columns covered (>= 1). */
   span: number;
-  /** Stable row index produced by assignStableAllDayRows. */
   row: number;
-  /** True when the event starts before the visible range (hide left edge-resize, cut left radius). */
+  /** The event starts before the visible range. */
   continuesLeft: boolean;
-  /** True when the event ends after the visible range (hide right edge-resize, cut right radius). */
+  /** The event ends after the visible range. */
   continuesRight: boolean;
-  /** Stable React key — unique within a visible range. */
+  /** Unique within a visible range. */
   key: string;
 }
 
-/**
- * Collapses a row-assigned slot grid into one bar per visible event segment.
- * Walks each row left→right; starts a new bar whenever the previous cell was
- * empty or held a different page, extends the bar while the same page id
- * continues in the same row. `continuesLeft/Right` inherit from the edge
- * slots' `isContinuationBefore/After` so week-boundary events are marked.
- */
+/** Collapses a row-assigned slot grid into one bar per visible event segment. */
 export function buildAllDayBars(slotsByDay: (AllDayItem | null)[][]): AllDayBar[] {
   const dayCount = slotsByDay.length;
   if (dayCount === 0) return [];
@@ -293,14 +254,10 @@ export function buildAllDayBars(slotsByDay: (AllDayItem | null)[][]): AllDayBar[
       const startCol = col;
       const pageId = slot.page.id;
       let end = col + 1;
-      // Extend across a day boundary only for a genuine multi-day event
-      // segment: the current day must flag continuation-after AND the next day
-      // must be the same page's continuation-before. Recurring virtual
-      // occurrences share the head's page id but are single-day
-      // (isContinuationAfter === false), so a gap-free series (e.g. a daily
-      // rule) stays as separate per-day bars instead of collapsing into one
-      // "eternal" bar spanning the whole row. MWF-style series were already
-      // split by their gap columns; this also covers the no-gap case.
+      // Extend only across a genuine multi-day segment: this day flags continuation-after and the
+      // next is the same page's continuation-before. Recurring occurrences share the head's page
+      // id but are single-day, so a gap-free daily series stays per-day bars instead of one
+      // bar spanning the row.
       while (
         end < dayCount &&
         slotsByDay[end - 1]?.[row]?.isContinuationAfter === true &&
@@ -325,13 +282,8 @@ export function buildAllDayBars(slotsByDay: (AllDayItem | null)[][]): AllDayBar[
   return bars;
 }
 
-/**
- * When a multi-day all-day event is dragged to a new start day, return the new
- * end date string that preserves its original duration. Returns `undefined`
- * when the event has no end, the end isn't all-day, or the span is zero —
- * callers should pass `undefined` to onReschedule in those cases so the chip
- * remains a single-day event.
- */
+/** The end date that keeps a multi-day event's duration after a drag to `newStart`; `undefined`
+ * when it has no all-day end or spans one day, so the chip stays single-day. */
 export function shiftAllDayEnd(
   originalStart: string | null | undefined,
   originalEnd: string | null | undefined,
@@ -344,11 +296,8 @@ export function shiftAllDayEnd(
   return format(addDays(newStart, span), "yyyy-MM-dd");
 }
 
-/**
- * Given an anchor date (the edge not being dragged) and the grabbed edge's new
- * date, returns the (start, end) pair for the new span. When the grabbed edge
- * crosses the anchor, the roles flip via min/max so the range stays valid.
- */
+/** The span between the fixed edge and the dragged edge; the roles flip when the dragged edge
+ * crosses the anchor, so the range stays valid. */
 export function computeAllDayEdgeResize(
   anchorDate: string,
   grabbedDate: string
@@ -358,25 +307,16 @@ export function computeAllDayEdgeResize(
     : { end: grabbedDate, start: anchorDate };
 }
 
-/**
- * Absolute-position box for one all-day bar. Structurally a subset of React's
- * `CSSProperties` so a caller can spread it straight onto a `style` prop —
- * spelled out locally because core stays framework-agnostic and may not name
- * a React type, not even in an `import type`.
- */
+/** A subset of React's `CSSProperties`, spelled out because core may not name a React type,
+ * so a caller can spread it onto a `style` prop. */
 export interface AllDayBarPosition {
   left: string;
   top: number;
   width: string;
 }
 
-/**
- * Keeps the `AllDayBar` component ignorant of column-count math — only the
- * section that owns layout needs to know.
- *
- * Row geometry comes in rather than being read as constants, because the strip
- * zooms with the rest of the calendar; the constants are the unzoomed defaults.
- */
+/** Row geometry is a parameter because the strip zooms with the calendar; the constants are the
+ * unzoomed defaults. */
 export function barPositionStyle(
   bar: AllDayBar,
   columnCount: number,
@@ -389,8 +329,7 @@ export function barPositionStyle(
   return {
     left: `${leftPct}%`,
     top: topPadding + bar.row * rowHeight,
-    // Terminating bars shrink 2px for a visual gap next to the day boundary.
-    // Bars that continue off-view stay flush so they read as "runs off-screen".
+    // Bars that continue off-view stay flush; the rest leave a gap at the day boundary.
     width: bar.continuesRight ? `${widthPct}%` : `calc(${widthPct}% - 2px)`,
   };
 }

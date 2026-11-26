@@ -4,17 +4,12 @@ import { StorageError, type StorageErrorKind } from "../errors";
 import type { Page, PageSummary } from "../types";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
-// ─── Setup ───────────────────────────────────────────────────────────────────
-
 let adapter: MockStorageAdapter;
 
 beforeEach(() => {
   adapter = new MockStorageAdapter();
 });
 
-/** Assert a storage op rejects with a StorageError of the given kind (and, if
- *  provided, a message matching `messageRe`). Keeps the parity tests lint-clean:
- *  matcher helpers like `expect.stringMatching` type as `any` inside toMatchObject. */
 async function expectRejection(
   promise: Promise<unknown>,
   kind: StorageErrorKind,
@@ -30,7 +25,6 @@ async function expectRejection(
   if (messageRe) expect(se.message).toMatch(messageRe);
 }
 
-/** One paragraph of `text`, as the editor saves it. */
 function paragraphDoc(text: string): string {
   return JSON.stringify({
     content: [{ content: [{ text, type: "text" }], type: "paragraph" }],
@@ -38,7 +32,6 @@ function paragraphDoc(text: string): string {
   });
 }
 
-/** Creates a page with sensible defaults and returns it; `body` is its text as one paragraph. */
 async function createTestPage(overrides: Partial<Page> & { body?: string } = {}): Promise<Page> {
   return adapter.createPage({
     content:
@@ -50,8 +43,6 @@ async function createTestPage(overrides: Partial<Page> & { body?: string } = {})
     title: overrides.title ?? "Untitled",
   });
 }
-
-// ─── _refreshDenorm ──────────────────────────────────────────────────────────
 
 describe("_refreshDenorm", () => {
   it("denormalises scheduledStart onto the page from the next future schedule", async () => {
@@ -125,12 +116,9 @@ describe("_refreshDenorm", () => {
   });
 
   it("falls back to the earliest past schedule when no future schedule exists", async () => {
-    // Regression: previously the mock stripped denorm to null when only past
-    // schedules existed. That caused just-created past-date multi-day events
-    // to appear momentarily and then "revert" — the debounced updatePage
-    // write re-read the adapter's stripped record and overwrote React's
-    // optimistic state. Rust adapter (schedules.rs:refresh_schedule_denorm)
-    // falls back to the earliest past — this mock must match.
+    // With only past schedules the denorm must fall back to the earliest past one (as
+    // `refresh_schedule_denorm` does); stripping it let the debounced updatePage overwrite
+    // React's optimistic state, so a just-created chip appeared and then reverted.
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 2, 15, 12, 0, 0));
 
@@ -148,8 +136,6 @@ describe("_refreshDenorm", () => {
     vi.useRealTimers();
   });
 });
-
-// ─── listPagesToday ──────────────────────────────────────────────────────────
 
 describe("listPagesToday", () => {
   it("returns pages with schedules <= today, excludes done", async () => {
@@ -216,13 +202,10 @@ describe("listPagesToday", () => {
   });
 });
 
-// ─── listPageSchedulesForRules ───────────────────────────────────────────────
-
 describe("listPageSchedulesForRules", () => {
   it("returns a rule's override rows regardless of moved position", async () => {
     const page = await createTestPage();
-    // Two overrides for rule-A: one in-week, one moved months away — the
-    // exclusion set needs both, so position must not filter the moved one out.
+    // The exclusion set needs both overrides, so position must not filter out the moved one.
     await adapter.createPageSchedule({
       originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
@@ -235,7 +218,6 @@ describe("listPageSchedulesForRules", () => {
       ruleId: "rule-A",
       scheduledStart: "2026-09-01T11:00:00",
     });
-    // A plain (non-override) block and another rule's override are both excluded.
     await adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-10T10:00:00" });
     await adapter.createPageSchedule({
       originalDate: "2026-03-17T09:00:00",
@@ -263,8 +245,6 @@ describe("listPageSchedulesForRules", () => {
     expect(await adapter.listPageSchedulesForRules([])).toEqual([]);
   });
 });
-
-// ─── searchPages ─────────────────────────────────────────────────────────────
 
 describe("searchPages", () => {
   it("returns empty results for empty query", async () => {
@@ -370,8 +350,6 @@ describe("searchPages", () => {
   });
 });
 
-// ─── matchesFilter (tested via listPages) ────────────────────────────────────
-
 describe("matchesFilter (via listPages)", () => {
   it("filters by folderId", async () => {
     await createTestPage({ folderId: "f1", title: "in folder" });
@@ -437,8 +415,6 @@ describe("matchesFilter (via listPages)", () => {
   });
 
   it("compound: status=done + hasSchedule=true returns completed scheduled pages only", async () => {
-    // This is the calendar's use case — pulls done items that occupy a
-    // time slot without also loading every unscheduled completed page.
     const doneSched = await createTestPage({ status: "done", title: "done+sched" });
     await adapter.createPageSchedule({ pageId: doneSched.id, scheduledStart: "2026-03-15" });
     await createTestPage({ status: "done", title: "done no sched" });
@@ -487,8 +463,6 @@ describe("matchesFilter (via listPages)", () => {
   });
 });
 
-// ─── searchTags ──────────────────────────────────────────────────────────────
-
 describe("searchTags", () => {
   it("returns tags matching the prefix", async () => {
     await createTestPage({ tags: ["work", "workout", "personal"] });
@@ -514,8 +488,6 @@ describe("searchTags", () => {
   });
 });
 
-// ─── listCompletedPages ─────────────────────────────────────────────────────
-
 describe("listCompletedPages", () => {
   it("returns only completed pages, sorted by completedAt descending", async () => {
     await createTestPage({ title: "Active" });
@@ -538,7 +510,7 @@ describe("listCompletedPages", () => {
     const page1 = await adapter.listCompletedPages({ limit: 2, offset: 0 });
     expect(page1.total).toBe(5);
     expect(page1.pages).toHaveLength(2);
-    expect(page1.pages[0]!.title).toBe("Done 4"); // most recent first
+    expect(page1.pages[0]!.title).toBe("Done 4");
 
     const page2 = await adapter.listCompletedPages({ limit: 2, offset: 2 });
     expect(page2.total).toBe(5);
@@ -594,8 +566,6 @@ describe("listCompletedPages", () => {
   });
 });
 
-// ─── softDelete / restore ────────────────────────────────────────────────────
-
 describe("softDelete / restore", () => {
   it("soft-deleted page is hidden from listPages, restored page reappears", async () => {
     const page = await createTestPage({ title: "recoverable" });
@@ -609,8 +579,6 @@ describe("softDelete / restore", () => {
     expect(results.map((p) => p.title)).toContain("recoverable");
   });
 });
-
-// ─── trash ───────────────────────────────────────────────────────────────────
 
 describe("trash", () => {
   it("lists newest deletion first, names the folder, and marks a mirror", async () => {
@@ -720,8 +688,6 @@ describe("clearPendingDescription", () => {
   });
 });
 
-// ─── completeRecurringPage ───────────────────────────────────────────────────
-
 describe("completeRecurringPage", () => {
   it("clones head as done, advances head to next occurrence", async () => {
     const head = await createTestPage({
@@ -732,7 +698,6 @@ describe("completeRecurringPage", () => {
       title: "Standup",
     });
 
-    // Manually set scheduledStart on head (simulating what QuickAddDialog does)
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
 
     await adapter.createRecurrenceRule({
@@ -744,7 +709,6 @@ describe("completeRecurringPage", () => {
 
     const result = await adapter.completeRecurringPage({ pageId: head.id });
 
-    // Clone should be done with the completed occurrence date
     expect(result.clone.status).toBe("done");
     expect(result.clone.scheduledStart).toBe("2026-03-16T09:00:00");
     expect(result.clone.title).toBe("Standup");
@@ -755,7 +719,6 @@ describe("completeRecurringPage", () => {
     expect(result.clone.seriesId).toBe(head.id);
     expect(result.head.seriesId ?? null).toBeNull();
 
-    // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);
     expect(result.head.status).toBe("not_started");
     expect(result.head.scheduledStart).toBe("2026-03-23T09:00:00");
@@ -765,7 +728,6 @@ describe("completeRecurringPage", () => {
   it("marks head as done when the series is exhausted", async () => {
     const head = await createTestPage({ title: "Limited series" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
-    // A single-occurrence series: completing it leaves no next occurrence.
     await adapter.createRecurrenceRule({
       pageId: head.id,
       rrule: "FREQ=DAILY;COUNT=1",
@@ -793,7 +755,6 @@ describe("completeRecurringPage", () => {
 
     const result = await adapter.completeRecurringPage({ pageId: head.id });
 
-    // Clone should have the content snapshot
     const cloneFull = await adapter.getPage(result.clone.id);
     expect(cloneFull?.content).toBe(content);
   });
@@ -809,24 +770,21 @@ describe("completeRecurringPage", () => {
       timezone: "America/New_York",
     });
 
-    // Complete 3 times — the head recomputes one Monday forward each time.
     await adapter.completeRecurringPage({ pageId: originalId });
     await adapter.completeRecurringPage({ pageId: originalId });
     const result3 = await adapter.completeRecurringPage({ pageId: originalId });
 
-    // Head ID unchanged
     expect(result3.head.id).toBe(originalId);
     expect(result3.head.scheduledStart).toBe("2026-04-06");
 
-    // 3 clones created (all done)
     const allPages = await adapter.listPages();
     const donePages = allPages.filter((p) => p.status === "done" && p.title === "Recurring");
     expect(donePages).toHaveLength(3);
   });
 
   it("a supplied occurrence key routes a detached (unlocked) series through the occurrence path", async () => {
-    // Mirrors the backend's unlocked-with-key branch: a detached series' moved
-    // override completes on its own date, leaving the oldest-open head in place.
+    // As the backend's unlocked-with-key branch: a detached series' moved override completes on
+    // its own date, leaving the oldest-open head in place.
     const head = await createTestPage({ title: "Detached series" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
     await adapter.createRecurrenceRule({
@@ -835,8 +793,7 @@ describe("completeRecurringPage", () => {
       scheduledStart: "2026-03-16T09:00:00",
       timezone: "America/New_York",
     });
-    // Connected long before the series' own dates, so the head floor never binds and
-    // the assertion below is about the occurrence path rather than about the floor.
+    // Connected long before the series' dates, so the head floor never binds.
     adapter.markPageSynced(head.id, { state: "detached", syncedSince: "2000-01-01" });
 
     const result = await adapter.completeRecurringPage({
@@ -859,11 +816,8 @@ describe("completeRecurringPage", () => {
   });
 });
 
-// ─── skipOccurrence (exdates) ────────────────────────────────────────────────
-
 describe("recurrence exdates (skip occurrence)", () => {
-  // First test in this block cold-loads the rrule library via dynamic import,
-  // which can exceed 5s on slow CI runners.
+  // The first test here cold-loads the rrule library, which can exceed 5s on slow CI runners.
   it("adding a date to exdates excludes it from expansion", { timeout: 15_000 }, async () => {
     const { expandRecurrenceForRange } = await import("../utils/recurrence");
 
@@ -876,7 +830,6 @@ describe("recurrence exdates (skip occurrence)", () => {
       timezone: "America/New_York",
     });
 
-    // Expand 3 weeks: should get 3 occurrences
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 23);
     const { content: _c, ...pageSummary } = head;
@@ -885,7 +838,6 @@ describe("recurrence exdates (skip occurrence)", () => {
     let occs = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
     expect(occs).toHaveLength(3);
 
-    // Skip March 9
     const updated = await adapter.updateRecurrenceRule(rule.id, {
       rruleExdates: ["2026-03-09"],
     });
@@ -912,7 +864,6 @@ describe("recurrence exdates (skip occurrence)", () => {
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 23);
 
-    // Skip then undo
     await adapter.updateRecurrenceRule(rule.id, { rruleExdates: ["2026-03-09"] });
     const restored = await adapter.updateRecurrenceRule(rule.id, { rruleExdates: [] });
 
@@ -947,7 +898,6 @@ describe("expandRecurrenceRange (batched raw expansion)", () => {
 
     const forA = out.find((r) => r.ruleId === ruleA.id);
     expect(forA?.occurrences.map((o) => o.originalDate)).toEqual(["2026-03-09"]);
-    // Rule B's only in-range occurrence (Mar 11) is EXDATE'd, so it expands to nothing.
     const forB = out.find((r) => r.ruleId === ruleB.id);
     expect(forB?.occurrences).toEqual([]);
   });
@@ -961,14 +911,11 @@ describe("expandRecurrenceRange (batched raw expansion)", () => {
       scheduledStart: "2026-03-09T09:00:00",
       timezone: "America/New_York",
     });
-    // Complete Mar 9 → it lands in the completed set, NOT in rrule_exdates, so the
-    // rule row passed here still carries no EXDATEs.
+    // A completed date lands in the completed set, not rrule_exdates, so the rule still has none.
     await adapter.completeRecurringPage({ pageId: page.id });
 
     const out = await adapter.expandRecurrenceRange([rule], "2026-03-09", "2026-03-12");
 
-    // The completed Mar 9 still appears in the RAW expansion — the union is applied
-    // later, client-side. Only rule EXDATEs (none here) would remove it.
     expect(out[0]?.occurrences.map((o) => o.originalDate)).toEqual([
       "2026-03-09",
       "2026-03-10",
@@ -976,8 +923,6 @@ describe("expandRecurrenceRange (batched raw expansion)", () => {
     ]);
   });
 });
-
-// ─── Page reminders ─────────────────────────────────────────────────────────
 
 describe("page reminders", () => {
   it("creates and lists reminders sorted by minutesBefore", async () => {
@@ -1088,11 +1033,9 @@ describe("page reminders", () => {
   it("replacing none sentinel with real reminders", async () => {
     const page = await createTestPage({ title: "none-then-add" });
 
-    // Set "None"
     await adapter.createPageReminder({ minutesBefore: -1, pageId: page.id });
     expect(await adapter.listPageReminders(page.id)).toHaveLength(1);
 
-    // Switch to a real reminder — clear all then add
     await adapter.deletePageReminders(page.id);
     await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
 
@@ -1101,8 +1044,6 @@ describe("page reminders", () => {
     expect(list[0]?.minutesBefore).toBe(10);
   });
 });
-
-// ─── Notification history ────────────────────────────────────────────────────
 
 describe("notification history", () => {
   it("is empty until the scheduler's stand-in seeds it", async () => {
@@ -1145,7 +1086,6 @@ describe("notification history", () => {
     expect(all.map((h) => h.id)).toEqual(["n2", "n1", "n3"]);
     expect(all[0]?.pageTitle).toBe("Standup");
     expect(all[0]?.action).toBe("opened");
-    // The summary marker names no page, so it joins to no title.
     expect(all[2]?.pageTitle).toBeNull();
 
     expect((await adapter.listNotificationHistory(1)).map((h) => h.id)).toEqual(["n2"]);
@@ -1170,10 +1110,8 @@ describe("notification history", () => {
   });
 });
 
-// ─── SQLite parity guarantees ────────────────────────────────────────────────
-// These tests pin behaviour the Rust adapter enforces via SQL — UNIQUE
-// constraints, FTS surface, soft-delete cascade. Drift here causes mock-only
-// passes that break in prod.
+// Pins behaviour the Rust adapter enforces in SQL (UNIQUE constraints, the FTS surface, soft-delete
+// cascade), so the mock can't pass what prod would reject.
 
 describe("parity: searchPages indexes the body's text, not raw Tiptap JSON", () => {
   it("does not match structural tokens inside the content JSON", async () => {
@@ -1184,8 +1122,7 @@ describe("parity: searchPages indexes the body's text, not raw Tiptap JSON", () 
       }),
       title: "Untitled",
     });
-    // Rust FTS would never match "paragraph" — that token lives in the structural
-    // schema, not the indexed text.
+    // "paragraph" lives in the structural schema, not the indexed text, so FTS never matches it.
     const { results } = await adapter.searchPages("paragraph");
     expect(results).toHaveLength(0);
   });
@@ -1300,8 +1237,6 @@ describe("parity: soft-delete cascades to schedules and rules", () => {
   });
 });
 
-// ─── Page CRUD ─────────────────────────────────────────────────────────────
-
 describe("page CRUD", () => {
   it("clear() empties every store", async () => {
     const page = await createTestPage({ title: "A" });
@@ -1354,8 +1289,6 @@ describe("page CRUD", () => {
   });
 });
 
-// ─── Filter: schedule-window bounds ────────────────────────────────────────
-
 describe("matchesFilter schedule bounds (via listPages)", () => {
   it("scheduledAfter excludes pages scheduled before the bound", async () => {
     const early = await createTestPage({ title: "early" });
@@ -1377,8 +1310,6 @@ describe("matchesFilter schedule bounds (via listPages)", () => {
     expect(results.map((p) => p.title)).toEqual(["early"]);
   });
 });
-
-// ─── Folder CRUD ───────────────────────────────────────────────────────────
 
 describe("folder CRUD", () => {
   it("getFolder returns the folder or null", async () => {
@@ -1412,8 +1343,6 @@ describe("folder CRUD", () => {
     expect((await adapter.listFolders()).map((f) => f.name)).toEqual(["B", "A"]);
   });
 });
-
-// ─── Schedule + rule updates ───────────────────────────────────────────────
 
 describe("schedule and rule updates", () => {
   it("updatePageSchedule changes start, clears end on null, and rejects when missing", async () => {
@@ -1477,8 +1406,8 @@ describe("schedule and rule updates", () => {
       scheduledStart: "2026-01-01T09:00:00",
       timezone: "America/Los_Angeles",
     });
-    // A pre-existing provider/legacy exdate must survive — native completion
-    // records the completed date in the set, never in rrule_exdates.
+    // A provider exdate survives: native completion records the date in the set, never in
+    // rrule_exdates.
     await adapter.addRuleExdates(rule.id, ["2026-01-05"]);
 
     const result = await adapter.completeRecurringPage({ pageId: page.id });
@@ -1487,7 +1416,6 @@ describe("schedule and rule updates", () => {
     expect((await adapter.getPage(page.id))?.completedOccurrences).toEqual({
       "2026-01-01": result.clone.id,
     });
-    // Head advanced past the completed date and the legacy exdate.
     expect((await adapter.getPage(page.id))?.scheduledStart).toBe("2026-01-02T09:00:00");
   });
 
@@ -1543,8 +1471,8 @@ describe("schedule and rule updates", () => {
   });
 
   it("rescheduleVirtualOccurrence moves an existing override row instead of cloning", async () => {
-    // A detached series' provider-moved instance. Re-timing it moves that row —
-    // cloning would leave the row to be re-mirrored on re-link, beside the clone.
+    // Re-timing a provider-moved instance moves its row; cloning would leave the row to be
+    // re-mirrored on re-link beside the clone.
     const page = await createTestPage();
     const rule = await adapter.createRecurrenceRule({
       pageId: page.id,
@@ -1553,7 +1481,7 @@ describe("schedule and rule updates", () => {
       timezone: "America/Los_Angeles",
     });
     const override = await adapter.createPageSchedule({
-      originalDate: "2026-01-03T09:00:00", // stored as full wall-clock; matched by day
+      originalDate: "2026-01-03T09:00:00",
       pageId: page.id,
       ruleId: rule.id,
       scheduledStart: "2026-01-03T17:00:00",
@@ -1574,14 +1502,13 @@ describe("schedule and rule updates", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.id).toBe(override.id);
     expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
-    // original_date survives, so a re-link can still claim this occurrence.
     expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
     expect(rows[0]?.timezone).toBeUndefined();
   });
 
   it("rescheduleVirtualOccurrence mints an override row on a detached series, no clone", async () => {
-    // Sync origin picks the arm: the occurrence stays in-series so a re-link
-    // reclaims it, rather than stranding a clone beside the re-mirrored slot.
+    // A synced origin stays in-series so a re-link reclaims it, not stranding a clone beside the
+    // re-mirrored slot.
     const page = await createTestPage();
     const rule = await adapter.createRecurrenceRule({
       pageId: page.id,
@@ -1606,16 +1533,14 @@ describe("schedule and rule updates", () => {
     const rows = await adapter.listPageSchedulesForRules([rule.id]);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
-    // The rule's time-of-day, matching what a provider's RECURRENCE-ID carries.
     expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
     expect(rows[0]?.timezone).toBeUndefined();
   });
 });
 
 describe("synced occurrence completion (via unified completeRecurringPage)", () => {
-  // A synced series carries a rule (seeded while unlocked, mirroring the reconciler).
-  // The completeRecurringPage guard rejects a non-recurring page, so the rule must
-  // exist before markPageSynced locks it.
+  // The rule is seeded before markPageSynced locks the page, because completeRecurringPage
+  // rejects a non-recurring one.
   async function seedSyncedSeries(): Promise<Page> {
     const series = await createTestPage({ title: "Weekly 1:1" });
     await adapter.createRecurrenceRule({
@@ -1687,17 +1612,13 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
   });
 });
 
-// ─── Command-layer guard parity ──────────────────────────────────────────────
-// Guards the fidelity gap that once let a synced completion pass green here
-// while the backend rejected it. Locked-mirror ops reject with kind "Conflict";
-// completeRecurringPage validates the occurrence before minting a clone. See
-// ensure_page_schedule_unlocked (sync.rs) and complete_recurring_page (pages.rs).
+// Locked-mirror ops reject with kind "Conflict", and completeRecurringPage validates the
+// occurrence before minting a clone (`ensure_page_schedule_unlocked`, `complete_recurring_page`).
 
 describe("command-layer guard parity (locked synced mirror)", () => {
   const READONLY = /synced from an external calendar/;
 
-  /** An active synced series with a schedule + rule seeded while still unlocked
-   *  (mirroring the reconciler's raw-SQL writes), then locked. */
+  /** Seeded while unlocked, as the reconciler writes it, then locked. */
   async function seedLockedSeries() {
     const page = await createTestPage({ title: "Synced 1:1" });
     const schedule = await adapter.createPageSchedule({
@@ -1721,7 +1642,6 @@ describe("command-layer guard parity (locked synced mirror)", () => {
       adapter.updatePage(page.id, { scheduledStart: "2026-03-10T14:00:00" }),
       "Conflict"
     );
-    // Body stays editable on a synced page.
     const ok = await adapter.updatePage(page.id, { content: "notes" });
     expect(ok.content).toBe("notes");
   });
@@ -1823,12 +1743,11 @@ describe("completeRecurringPage occurrence validation", () => {
     const page = await createTestPage({ title: "Synced" });
     await adapter.createRecurrenceRule({
       pageId: page.id,
-      rrule: "FREQ=WEEKLY", // Mondays from 2026-03-09
+      rrule: "FREQ=WEEKLY",
       scheduledStart: "2026-03-09T14:00:00",
       timezone: "Europe/London",
     });
     adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
-    // 2026-03-10 is a Tuesday — not an occurrence of the weekly-Monday rule.
     await expectRejection(
       adapter.completeRecurringPage({
         occurrenceDate: "2026-03-10",
@@ -1882,7 +1801,7 @@ describe("markPageSynced (test seam)", () => {
   });
 
   it("ownership survives a re-stamp, as the column does", async () => {
-    // A resync rewrites mirror metadata; it never clears the user's claim.
+    // A resync rewrites mirror metadata but never clears the user's claim.
     const page = await createTestPage();
     adapter.markPageSynced(page.id, { state: "active", userModified: true });
     adapter.markPageSynced(page.id, { location: "Room 2", state: "active" });
@@ -1918,7 +1837,7 @@ describe("calendar sync — connect / disconnect dormancy", () => {
 
     const again = await adapter.connectCaldavAccount(conn("me · https://x"));
     expect(again.id).toBe(first.id);
-    expect(again.calendars).toHaveLength(2); // reused, not a fresh discovery
+    expect(again.calendars).toHaveLength(2);
     const status = await adapter.getSyncStatus();
     expect(status).toHaveLength(1);
     expect(status[0]?.id).toBe(first.id);
@@ -1953,8 +1872,6 @@ describe("calendar sync — teardown keeps the user's work", () => {
     username: "me",
   };
 
-  /** Connect, enable "Personal", and mirror one event into its folder. A rule has
-   *  to exist before the mirror locks, exactly as the reconciler writes it. */
   async function syncedPage(opts: { recurring?: boolean; title?: string } = {}) {
     const account = await adapter.connectCaldavAccount(conn);
     const cal = account.calendars[0]!;
@@ -2006,9 +1923,8 @@ describe("calendar sync — teardown keeps the user's work", () => {
   });
 
   it("a mirror seeded already-owned detaches without anything touching it here", async () => {
-    // The seam the synced-calendar seed uses: a fixture can hand teardown a page
-    // the user "already" edited, which before this was only reachable by editing
-    // it in the test — so a seeded workspace lost a page the real writer keeps.
+    // A fixture can hand teardown a page the user "already" edited, which only editing it in the
+    // test could reach.
     const { calendarId, pageId } = await syncedPage();
     adapter.markPageSynced(pageId, { state: "active", userModified: true });
 
@@ -2161,11 +2077,8 @@ describe("calendar sync — a staged CalDAV server", () => {
   });
 });
 
-// ─── Focus sessions ──────────────────────────────────────────────────────────
-//
-// The mock is where every UI test sees this write, so its two refusals have to
-// match the Rust writer's — a mock that accepts a zero-second session lets a
-// timer bug through and only shows up as a settings total nobody can explain.
+// The mock is where every UI test sees this write, so its two refusals must match the Rust
+// writer's: a mock accepting a zero-second session lets a timer bug through.
 
 describe("createFocusSession", () => {
   it("records a session and counts it into the usage stats", async () => {
@@ -2186,14 +2099,12 @@ describe("createFocusSession", () => {
 
     const stats = await adapter.getUsageStats(1);
     expect(stats.total_focus_sessions).toBe(2);
-    expect(stats.total_focus_minutes).toBe(40); // (1500 + 900) / 60
+    expect(stats.total_focus_minutes).toBe(40);
     expect(stats.has_focus_sessions).toBe(true);
   });
 
-  /// Each of these read a different source than the totals beside them, and two
-  /// of them disagreed with the writer until 2026-08-19: `has_priorities` tested
-  /// for a non-null priority, which every page has, and `has_subtasks` was a
-  /// hardcoded false.
+  /// Each reads a different source than the totals beside it. `has_priorities` must test for a
+  /// real priority (every page has a non-null one) and `has_subtasks` must be derived.
   it("derives every adoption flag the writer does", async () => {
     const plain = await adapter.getUsageStats(1);
     expect(plain.has_priorities).toBe(false);

@@ -126,7 +126,7 @@ describe("planMoveOverdueToToday — exclusions", () => {
   });
 
   it("skips a page already dated today without reporting it as left behind", () => {
-    // A 9:00 read at 14:00 sits in the Overdue section but has nowhere to go.
+    // A 9:00 page read at 14:00 sits in Overdue but has nowhere to go.
     const plan = planMoveOverdueToToday(
       [makePage({ scheduledStart: "2026-03-25T09:00:00" })],
       TODAY

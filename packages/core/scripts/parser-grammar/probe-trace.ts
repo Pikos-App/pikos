@@ -1,9 +1,6 @@
-// Trace what each of chrono's parsers and refiners did to one string.
-//
-// chrono takes a `debug` handler and calls it with a closure per decision:
-// which parser extracted what, which refiner merged or dropped what. When two
-// implementations disagree on a string, this says where they parted company —
-// far faster than bisecting the input.
+// Traces what each of chrono's parsers and refiners did to one string, via its `debug` handler.
+// When two implementations disagree on a string, this shows where they parted, faster than
+// bisecting the input.
 //
 //   pnpm --filter @pikos/core probe:trace -- "may 2 to 10 2026-04-01"
 

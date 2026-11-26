@@ -81,8 +81,8 @@ describe("folderIdForRestoredPage", () => {
     expect(folderIdForRestoredPage("work", FOLDERS, "home")).toBe("work");
   });
 
-  // The folder went to the trash with the page, or was emptied from it while the
-  // page waited. Either way the remembered id names nothing.
+  // The remembered folder was trashed with the page or emptied while it waited, so it names
+  // nothing.
   it("falls to the default when the remembered folder is gone", () => {
     expect(folderIdForRestoredPage("deleted", FOLDERS, "home")).toBe("home");
   });
@@ -99,8 +99,8 @@ describe("folderIdForRestoredPage", () => {
     expect(folderIdForRestoredPage(null, FOLDERS, "home")).toBeNull();
   });
 
-  // A synced page's calendar folder is deliberately unwritable. Judging the keep
-  // test by writability would evict every mirror from the calendar it belongs to.
+  // A synced page's calendar folder is unwritable; judging the keep test by that would evict
+  // every mirror from its calendar.
   it("keeps a synced page in its calendar folder", () => {
     expect(folderIdForRestoredPage("fastmail", FOLDERS, "home")).toBe("fastmail");
   });

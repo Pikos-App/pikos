@@ -1,15 +1,8 @@
-// The two halves of the error contract live in different languages and nothing
-// compiles them together: `AppError::kind()` in Rust decides what goes on the
-// wire, and `StorageErrorKind` here decides what the UI can branch on. A kind in
-// one and not the other is not a type error, it is a downgrade to "Unknown" and a
-// user told "Something went wrong" about a problem the backend had named.
-//
-// That is not hypothetical: `Network` reached the frontend for months as
-// "Unknown", so an offline calendar connect read exactly like a bug.
-//
-// Read from the Rust source for the same reason the adapter's command test does:
-// a list maintained by hand here would go stale in precisely the case worth
-// catching.
+// Nothing compiles the two halves together: `AppError::kind()` in Rust decides what goes on the
+// wire and `StorageErrorKind` decides what the UI can branch on. A kind in one and not the other
+// is not a type error but a downgrade to "Unknown" ("Something went wrong" about a problem the
+// backend named), as `Network` once was. It reads the Rust source because a hand-kept list would
+// go stale in exactly the case worth catching.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -24,7 +17,6 @@ const ERROR_RS = resolve(
   "../../../crates/pikos-db/src/error.rs"
 );
 
-/** The string literals `AppError::kind()` maps its variants to. */
 function rustKinds(): string[] {
   const source = readFileSync(ERROR_RS, "utf8");
   const body = source.split("pub fn kind(&self)")[1];
@@ -49,8 +41,7 @@ describe("StorageErrorKind matches AppError", () => {
       "saving"
     );
 
-    // Internal is deliberately the catch-all's twin: there is nothing useful to
-    // say about it that "something went wrong" does not already say.
+    // Internal is the catch-all's twin: "something went wrong" already says everything about it.
     const share = rustKinds().filter(
       (kind) =>
         kind !== "Internal" &&

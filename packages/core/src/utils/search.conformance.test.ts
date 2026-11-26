@@ -1,6 +1,5 @@
-// Query tokenization, run against the table `fts_tokens` also runs. Neither side is
-// the authority — FTS5's `unicode61` is — so they need one expectation between them.
-// Rust owns the why, at `fts_tokens`.
+// The same table `fts_tokens` runs. Neither side is the authority (FTS5's `unicode61` is), so
+// they share one expectation. Rust owns the why, at `fts_tokens`.
 
 import { describe, expect, it } from "vitest";
 

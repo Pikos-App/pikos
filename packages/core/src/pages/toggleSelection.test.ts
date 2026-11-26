@@ -13,7 +13,6 @@ describe("partitionToggleSelection", () => {
       [page("a", "not_started"), page("b", "not_started"), page("c", "not_started")],
       () => false
     );
-    // All in one bulk group → one transactional write, no per-page race.
     expect(groups.toComplete).toEqual(["a", "b", "c"]);
     expect(groups.toUncomplete).toEqual([]);
     expect(groups.recurring).toEqual([]);

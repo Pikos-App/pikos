@@ -16,18 +16,14 @@ import { listOccurrences, type RecurrenceFreq } from "../utils/recurrence";
 
 type PagePriority = "urgent" | "high" | "medium" | "low";
 
-/**
- * The `page_reminders.minutes_before` value that means "the day before, at 09:00
- * local" rather than a lead time in minutes — `pikos_db::DAY_BEFORE_MINUTES`,
- * mirrored here so the parser can hand back the value the row will carry.
- */
+/** The `page_reminders.minutes_before` value meaning "the day before, at 09:00 local" and not a
+ * lead time: `pikos_db::DAY_BEFORE_MINUTES`, mirrored so the parser returns the row's value. */
 export const DAY_BEFORE_MINUTES = -2;
 
 /**
- * What a chrono match has to pin to be read as the page's date. chrono also
- * matches a bare "morning" or "evening", pinning only a meridiem, and that word
- * belongs to the title ("Evening review today 8pm"), so the date is the first
- * match that pins one of these.
+ * What a chrono match must pin to count as the page's date. chrono also matches a bare "morning"
+ * or "evening", pinning only a meridiem, and that word belongs to the title ("Evening review
+ * today 8pm"), so the date is the first match that pins one of these.
  */
 const DATE_OR_TIME_COMPONENTS: readonly chrono.Component[] = [
   "year",
@@ -46,17 +42,12 @@ export interface ParsedInput {
   tags: string[];
   folderQuery?: string;
   priority?: PagePriority | null; // null = explicitly cleared (!0); undefined = not mentioned
-  /**
-   * Reminder rows to write, as `minutes_before` values: ascending, deduped, and
-   * already resolved against the schedule shape (see the reminder section of
-   * `parseInput`). Absent when nothing was asked for — or when what was asked
-   * for has no schedule to anchor to, in which case the words stay in the title.
-   */
+  /** Reminder rows to write as `minutes_before` values: ascending, deduped, and resolved against
+   * the schedule shape. Absent when nothing was asked, or when there is no schedule to anchor
+   * to, in which case the words stay in the title. */
   reminderMinutes?: number[];
-  /**
-   * Page body, plain text, taken verbatim from after the first ` // `. Absent
-   * when the input carried no separator (or nothing after it).
-   */
+  /** Plain text taken verbatim from after the first ` // `; absent when there is no separator or
+   * nothing after it. */
   content?: string;
 }
 
@@ -65,7 +56,7 @@ export type ParseResult =
   | { type: "finite"; inputs: ParsedInput[]; count: number }
   | { type: "recurring"; input: ParsedInput; rrule: string };
 
-/** Weekday index in the rrule convention: 0 = Monday … 6 = Sunday. */
+/** rrule convention: 0 = Monday ... 6 = Sunday. */
 type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 const MO = 0 as Weekday;
@@ -76,7 +67,6 @@ const FR = 4 as Weekday;
 const SA = 5 as Weekday;
 const SU = 6 as Weekday;
 
-/** Weekday codes in rrule index order, for RRULE serialization. */
 const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const;
 
 const DAY_MAP: Record<string, Weekday> = {
@@ -113,15 +103,15 @@ const DAY_MAP: Record<string, Weekday> = {
 const WEEKDAY_DAYS = [MO, TU, WE, TH, FR];
 const WEEKEND_DAYS = [SA, SU];
 
-/** Map rrule weekday (0=MO … 6=SU) to JS Date.getDay() (0=SU … 6=SA). */
+/** rrule weekday (0 = MO) to JS `Date.getDay()` (0 = SU). */
 const RRULE_TO_JS_DAY: Record<number, number> = {
-  0: 1, // MO
-  1: 2, // TU
-  2: 3, // WE
-  3: 4, // TH
-  4: 5, // FR
-  5: 6, // SA
-  6: 0, // SU
+  0: 1,
+  1: 2,
+  2: 3,
+  3: 4,
+  4: 5,
+  5: 6,
+  6: 0,
 };
 
 function nextWeekdayOccurrence(ref: Date, weekday: Weekday): Date {
@@ -129,21 +119,17 @@ function nextWeekdayOccurrence(ref: Date, weekday: Weekday): Date {
   const current = ref.getDay();
   let daysAhead = targetJsDay - current;
   if (daysAhead < 0) daysAhead += 7;
-  if (daysAhead === 0) daysAhead = 7; // same day → next week (consistent with chrono "monday" behavior)
+  if (daysAhead === 0) daysAhead = 7;
   return addDays(ref, daysAhead);
 }
 
-/**
- * Serializes recurrence parts into an RRULE string (no "RRULE:" prefix, no
- * DTSTART — matching the data-model convention). INTERVAL is emitted only
- * when > 1, mirroring the historical rrule.js serializer on this path.
- */
+/** An RRULE string without "RRULE:" prefix or DTSTART, per the data-model convention. INTERVAL
+ * is emitted only above 1. */
 function serializeRrule(opts: {
   freq: RecurrenceFreq;
   byweekday?: Weekday[] | undefined;
   interval?: number | undefined;
   count?: number | undefined;
-  /** Compact UNTIL value, e.g. "20260628T235959". */
   until?: string | undefined;
 }): string {
   let out = `FREQ=${opts.freq}`;
@@ -159,11 +145,8 @@ function serializeRrule(opts: {
   return out;
 }
 
-/**
- * Compact UNTIL value ("YYYYMMDDTHHMMSS") from a Date's local wall-clock fields.
- * Floating, not UTC: the data model is timezone-naive, and RFC 5545 asks for a
- * floating UNTIL beside the floating DTSTART these rules anchor to.
- */
+/** Compact UNTIL ("YYYYMMDDTHHMMSS") from local wall-clock fields. Floating, not UTC: the data
+ * model is timezone-naive, and RFC 5545 asks for a floating UNTIL beside a floating DTSTART. */
 function untilFromLocalDate(d: Date, endOfDay: boolean): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
@@ -173,34 +156,26 @@ function untilFromLocalDate(d: Date, endOfDay: boolean): string {
   return `${date}T${time}`;
 }
 
-/**
- * Date phrases chrono misreads or can't read, rewritten into forms it can.
- */
+/** Date phrases chrono misreads or can't read, rewritten into forms it can. */
 function rewriteDatePhrases(input: string, ref: Date): string {
   let text = input;
 
-  // --- -1. Casual time-of-day mapping ───────────────────────────────────────
-  // chrono sets a meridiem for "morning" / "afternoon" / "evening" / "night"
-  // but not hour-certainty, so the parser's hasTime branch (which gates on
-  // isCertain) skips them. Pre-rewrite to explicit clock times so chrono
-  // reports certain hours and the parser produces a timed event. Times are
-  // chosen for productivity defaults: morning=9am, afternoon=3pm, evening=6pm,
-  // night=8pm. "tonight" maps to today 8pm.
+  // chrono sets a meridiem for "morning"/"evening" but not hour-certainty, so the hasTime branch
+  // (gated on isCertain) skips them. Rewriting to explicit times (morning 9am, afternoon 3pm,
+  // evening 6pm, night 8pm, productivity defaults) yields a timed event.
   const CASUAL_TIME_OF_DAY: Record<string, { time: string; hour: number }> = {
     afternoon: { hour: 15, time: "3pm" },
     evening: { hour: 18, time: "6pm" },
     morning: { hour: 9, time: "9am" },
     night: { hour: 20, time: "8pm" },
   };
-  // "tonight" → "today at 8pm" if still future, else "tomorrow at 8pm" so a
-  // late-night quick-add doesn't schedule into the past.
+  // "tonight" is today 8pm if still future, else tomorrow, so a late-night quick-add doesn't
+  // schedule into the past.
   text = text.replace(/\btonight\b/gi, () => {
     return ref.getHours() < 20 ? "today at 8pm" : "tomorrow at 8pm";
   });
-  // "<prefix> <period>" → "<prefix> at <time>" where prefix ∈ {today, tomorrow,
-  // this, <weekday>}. For "this" / "today" the parser shifts to tomorrow when
-  // the implied hour has already passed in `ref`; chrono can't make that call
-  // because it doesn't know our productivity defaults.
+  // With "this" or "today" the parser shifts to tomorrow when the implied hour has passed in
+  // `ref`; chrono can't make that call because it doesn't know our defaults.
   const PREFIX_DAY =
     "(?:today|tomorrow|this|weekday|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)";
   text = text.replace(
@@ -215,11 +190,8 @@ function rewriteDatePhrases(input: string, ref: Date): string {
     }
   );
 
-  // --- -0.5. "last <weekday>" → concrete past date ───────────────────────────
-  // chrono is invoked with forwardDate: true, which forces parsing into the
-  // future. That's correct for "monday" / "next monday" but wrong for
-  // "last monday", which becomes "next monday" without intervention. Resolve
-  // the previous occurrence ourselves and substitute a concrete date string.
+  // forwardDate: true is right for "monday" but turns "last monday" into "next monday", so the
+  // previous occurrence is resolved here and substituted as a concrete date.
   text = text.replace(
     /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
     (_, weekday: string) => {
@@ -234,11 +206,8 @@ function rewriteDatePhrases(input: string, ref: Date): string {
     }
   );
 
-  // --- -0.45. "[by] [the] end of [the|this|next] month" ─────────────────────
-  // chrono reads "end of next month" as "next month", one month from today, and
-  // leaves "by the end of" in the title. Resolve the month's last day ourselves.
-  // Only months: where a week ends depends on the user's week-start setting,
-  // which the parser doesn't know.
+  // chrono reads "end of next month" as one month from today and leaves "by the end of" in the
+  // title. Months only: where a week ends depends on a week-start setting the parser doesn't know.
   text = text.replace(
     /\b(?:by\s+)?(?:the\s+)?end\s+of\s+(?:(the|this|next)\s+)?month\b/gi,
     (_, which: string | undefined) => {
@@ -247,18 +216,12 @@ function rewriteDatePhrases(input: string, ref: Date): string {
     }
   );
 
-  // --- -0.4. Day-of-month phrases chrono can't parse on its own ──────────────
-  // chrono parses "May 24" but not bare day-of-month forms: "on the 24th" /
-  // "by the 1st", or weekday+number like "Sat 24". Resolve each to a concrete
-  // "MMM d yyyy" date (forward-dated: this month, else the next month that has
-  // the day) and substitute it so chrono can attach any trailing time and the
-  // title-strip removes the whole phrase — connector word included.
+  // chrono parses "May 24" but not "on the 24th" or "Sat 24". Each resolves to a concrete forward
+  // date (this month, else the next with that day) so chrono can attach a trailing time and the
+  // title-strip removes the whole phrase, connector included.
   //
-  // Day-of-month wins when a weekday name disagrees ("Sat 24" while the 24th is
-  // a Sunday): the number is the specific signal, the weekday a loose hint, so
-  // the weekday is dropped. Bare ordinals without a connector ("3rd draft",
-  // "the 1st time") are intentionally left alone — too overloaded to treat as
-  // dates safely.
+  // The day number wins over a disagreeing weekday ("Sat 24" on a Sunday): it is the specific
+  // signal. Bare ordinals without a connector ("3rd draft") are left alone as too overloaded.
   const resolveDayOfMonth = (n: number): Date | null => {
     for (let offset = 0; offset <= 2; offset++) {
       const month = addMonths(ref, offset);
@@ -274,9 +237,8 @@ function rewriteDatePhrases(input: string, ref: Date): string {
     }
     return null;
   };
-  // "on/by [the] Nth" — calendar prepositions disambiguate the ordinal as a date.
-  // "of" goes with it when a cadence follows ("on the 1st of every month"), or
-  // the cadence strip below leaves it stranded in the title.
+  // "of" goes with it when a cadence follows ("on the 1st of every month"), or the cadence strip
+  // strands it in the title.
   text = text.replace(
     /\b(?:on|by)\s+(?:the\s+)?(3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)(?:\s+of(?=\s+(?:every|each)\b))?\b/gi,
     (match, dayStr: string) => {
@@ -284,8 +246,7 @@ function rewriteDatePhrases(input: string, ref: Date): string {
       return target ? ` ${format(target, "MMM d yyyy")} ` : match;
     }
   );
-  // "<weekday> N[th]" — e.g. "Sat 24", "fri 13th". Guard against a leading
-  // "every" so recurrence phrases ("every friday …") aren't consumed here.
+  // Guarded against a leading "every" so "every friday ..." isn't consumed here.
   text = text.replace(
     /(?<!\bevery\s)\b(?:mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)?\b/gi,
     (match, dayStr: string) => {
@@ -294,12 +255,9 @@ function rewriteDatePhrases(input: string, ref: Date): string {
     }
   );
 
-  // --- 0. Normalize "<Month> <day> through/thru [<Month>] <day>" to "... to ...".
-  // chrono handles "May 2 to 10" as a date range but mis-parses "May 2 through 10"
-  // as the time range 2–10 (am). The window parser below consumes "through <word>"
-  // for bounded recurrence, but bare "through <digit>" falls through to chrono.
-  // Rewriting to "to" lets chrono emit the span we want, and leaves cadence uses
-  // like "practice piano through june" / "every monday through april 30" alone.
+  // chrono reads "May 2 through 10" as the time range 2-10 am. The window parser consumes
+  // "through <word>" for bounded recurrence but bare "through <digit>" falls to chrono, so it
+  // becomes "to", leaving cadence uses ("every monday through april 30") alone.
   text = text.replace(
     /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(st|nd|rd|th)?\s+(?:through|thru)\s+((?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(\d{1,2})(st|nd|rd|th)?\b/gi,
     (_, m1: string, d1: string, _s1: string | undefined, m2: string | undefined, d2: string) =>
@@ -311,11 +269,10 @@ function rewriteDatePhrases(input: string, ref: Date): string {
 
 export interface ParseOptions {
   /**
-   * The input renames a page that already has its date and body, such as a block
-   * dragged onto the calendar, whose slot wins over a date typed in its title.
-   * Only tags, folder, priority and a repeat are read; words for a date, time,
-   * duration, reminder or body stay in the title, so a rename can't lose a word
-   * nothing was done with. A repeat still applies, anchored on the page's slot.
+   * The input renames a page that already has its date and body (a block dragged onto the
+   * calendar), whose slot wins over a date typed in its title. Only tags, folder, priority and a
+   * repeat are read; date, time, duration, reminder and body words stay in the title so a rename
+   * can't lose a word. A repeat anchors on the page's slot.
    */
   rename?: boolean;
 }
@@ -328,12 +285,9 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     return { input: { tags: [], title: "" }, type: "single" };
   }
 
-  // --- -2. Body split: "buy a gift // she likes the blue one" ────────────────
-  // Everything after the FIRST whitespace-delimited "//" is the page body, kept
-  // verbatim: no tag, folder, date or cadence is read out of it, so a "#word" in
-  // a note stays literal text. The separator has to sit on a whitespace boundary
-  // (or a string edge) on both sides, which is what keeps "https://example.com"
-  // a URL and a later "//" part of the body it belongs to.
+  // Everything after the first whitespace-delimited "//" is the body, verbatim: no tag, folder,
+  // date or cadence is read from it, so "#word" in a note stays text. Whitespace on both sides
+  // keeps "https://example.com" a URL and a later "//" part of the body.
   let content: string | undefined;
   let text = raw;
   const bodySplit = rename ? null : /(?:^|\s)\/\/(?:\s|$)/.exec(raw);
@@ -345,28 +299,24 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
 
   if (!rename) text = rewriteDatePhrases(text, ref);
 
-  // --- 1. Tags: #word ---
   const tags: string[] = [];
   text = text.replace(/#(\w+)/g, (_, tag: string) => {
     tags.push(tag);
     return " ";
   });
 
-  // --- 2. Folder: ~word (last wins, mirrors priority semantics) ---
   let folderQuery: string | undefined;
   text = text.replace(/~(\w+)/g, (_, folder: string) => {
     folderQuery = folder;
     return " ";
   });
 
-  // --- 3. Priority: !urgent !high !medium !low ---
   let priority: PagePriority | null | undefined;
   text = text.replace(/!(urgent|high|medium|low)\b/gi, (_, p: string) => {
     priority = p.toLowerCase() as PagePriority;
     return " ";
   });
 
-  // Numeric priority: !0 (none/clear) through !4 (low)
   const NUMERIC_PRIORITY_MAP: Record<string, PagePriority | null> = {
     "0": null,
     "1": "urgent",
@@ -382,12 +332,10 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     return " ";
   });
 
-  // --- 3.5. Reminders: "remind 30m before", "remind me the day before", "!r1h" ---
-  // Extracted before chrono so a lead ("1d before") is never mistaken for the
-  // event's own date, and stashed behind a placeholder rather than removed: a
-  // reminder needs a schedule to anchor to, and whether one exists isn't known
-  // until chrono has run. The placeholder is control characters only, so no rule
-  // between here and the restore can match inside it.
+  // Extracted before chrono so a lead ("1d before") isn't mistaken for the event's date, and
+  // stashed behind a placeholder, since whether a schedule exists to anchor it isn't known until
+  // chrono has run. The placeholder is control characters only, so no rule before the restore can
+  // match inside it.
   const REMINDER_UNIT_MINUTES: Record<string, number> = {
     d: 1440,
     day: 1440,
@@ -411,8 +359,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
   function stashReminder(match: string, num: string | undefined, unit: string): string {
     const per = REMINDER_UNIT_MINUTES[unit.toLowerCase()];
     if (per === undefined) return match;
-    // A bare unit means one of it: "remind day before" is a one-day lead, which
-    // the resolution step below turns into the all-day anchor when it can.
+    // A bare unit means one of it: "remind day before" is a one-day lead.
     const count = num === undefined ? 1 : parseFloat(num);
     reminderLeads.push(Math.max(0, Math.round(count * per)));
     reminderTokens.push(match.trim());
@@ -423,9 +370,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     new RegExp(`!r(\\d+(?:\\.\\d+)?)\\s*${REMINDER_UNIT}?\\b`, "gi"),
     (match, num: string, unit: string | undefined) => stashReminder(match, num, unit ?? "m")
   );
-  // Phrase: "remind"/"reminder" + generous filler + a strict unit, with the
-  // trailing "before" optional. Filler deliberately excludes "in", so
-  // "remind me in 2 days" stays a date for chrono rather than becoming a lead.
+  // The filler excludes "in", so "remind me in 2 days" stays a date for chrono, not a lead.
   text = text.replace(
     new RegExp(
       `\\bremind(?:er)?s?\\b(?:\\s+(?:please|about|one|the|an|us|me|at|a))*\\s*(\\d+(?:\\.\\d+)?)?\\s*${REMINDER_UNIT}\\b(?:\\s+(?:beforehand|before|ahead|prior|early|in\\s+advance)\\b)?`,
@@ -434,7 +379,6 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     (match, num: string | undefined, unit: string) => stashReminder(match, num, unit)
   );
 
-  // --- 4. Duration: for Xh, for Xmin, for X hours, for X minutes ---
   let durationMinutes: number | undefined;
   text = text.replace(
     /\bfor\s+(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)\b/gi,
@@ -451,7 +395,6 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   );
 
-  // --- 5. Finite window: for X weeks/days/months, X times, through <date> ---
   type WindowSpec =
     | { kind: "count"; count: number }
     | { kind: "until"; date: Date }
@@ -459,13 +402,11 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
 
   let windowSpec: WindowSpec | undefined;
 
-  // "X times"
   text = text.replace(/\b(\d+)\s+times\b/gi, (_, n: string) => {
     windowSpec = { count: parseInt(n, 10), kind: "count" };
     return " ";
   });
 
-  // "for X weeks/days/months"
   text = text.replace(
     /\bfor\s+(\d+)\s*(day|days|week|weeks|month|months)\b/gi,
     (_, n: string, unit: string) => {
@@ -476,14 +417,13 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
       } else if (u === "week" || u === "weeks") {
         windowSpec = { count: count * 7, kind: "days" };
       } else {
-        // months: approximate
+        // Approximate.
         windowSpec = { count: count * 30, kind: "days" };
       }
       return " ";
     }
   );
 
-  // "through <date>" / "until <date>" / "till <date>"
   text = text.replace(
     /\b(?:through|until|till)\s+([a-z]+\s*\d*(?:st|nd|rd|th)?)/gi,
     (match, dateStr: string) => {
@@ -496,7 +436,6 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   );
 
-  // --- 6. Recurrence detection ---
   type RecurrenceSpec =
     | { kind: "infinite"; freq: RecurrenceFreq; byday?: Weekday[]; interval?: number }
     | { kind: "finite-slash"; days: Weekday[] }
@@ -504,9 +443,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
 
   let recurrenceSpec: RecurrenceSpec | undefined;
 
-  // "every N <unit>" or "every other <unit>" — interval-based cadence.
-  // Checked before "every <day>" so "every 2 weeks" / "every other day" match
-  // here instead of falling through to the day-word regex.
+  // Before "every <day>", so "every 2 weeks" and "every other day" match here.
   const INTERVAL_UNIT_FREQ: Record<string, RecurrenceFreq> = {
     day: "DAILY",
     month: "MONTHLY",
@@ -523,10 +460,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   );
 
-  // "every other <weekday>" / "every N <weekday>(s)" — interval cadence
-  // anchored to a specific weekday. Emits FREQ=WEEKLY;INTERVAL=N;BYDAY=...
-  // Must run before the bare "every <weekday>" regex so "every other tuesday"
-  // doesn't fall through and lose the interval.
+  // Interval cadence on a weekday. Before bare "every <weekday>", or "every other tuesday" loses
+  // its interval.
   text = text.replace(
     /\bevery\s+(other|\d+)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b/gi,
     (_, intervalStr: string, weekday: string) => {
@@ -538,18 +473,12 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   );
 
-  // "every <day>" or "every weekday/weekend/day/week/month/year" — handles
-  // comma, "and", and Oxford comma separators:
-  //   "every monday and wednesday", "every mon, wed, and fri"
+  // "every <day>" with comma, "and" and Oxford-comma separators.
   const DAY_WORD =
     "(?:weekday|weekend|day|week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|mo|tu|we|th|fr|sa|su)";
   const SEP = "(?:\\s*,\\s*|\\s+and\\s+|\\s*,\\s*and\\s+)"; // comma, "and", or ", and"
-  // Negative lookahead (?!\/) so a slash-separated day list ("every mon/wed/fri")
-  // is left intact for the slash-days rule below — otherwise this regex eats
-  // "every mon" and strands "/wed/fri", collapsing an intended infinite rule
-  // into a finite [Wed, Fri] series. Single-letter forms (m/w/f) never reach
-  // here (DAY_WORD has no single letters), so this only matters for full/short
-  // day names written with slashes.
+  // The lookahead (?!\/) leaves a slash list ("every mon/wed/fri") to the slash-days rule; else
+  // this eats "every mon" and strands "/wed/fri", turning an infinite rule into a finite series.
   const everyDayRe = new RegExp(`\\bevery\\s+(${DAY_WORD}(?:${SEP}${DAY_WORD})*)\\b(?!\\/)`, "gi");
   text = text.replace(everyDayRe, (_, dayStr: string) => {
     const parts = dayStr.toLowerCase().split(/\s*,?\s*and\s+|\s*,\s*/);
@@ -582,8 +511,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     return " ";
   });
 
-  // "biweekly" / "fortnightly" → every 2 weeks. Must run before "weekly" so
-  // the longer match wins.
+  // Before "weekly", so the longer match wins.
   if (!recurrenceSpec) {
     text = text.replace(/\b(?:biweekly|fortnightly)\b/gi, () => {
       recurrenceSpec = { freq: "WEEKLY", interval: 2, kind: "infinite" };
@@ -591,7 +519,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     });
   }
 
-  // "bimonthly" → every 2 months. Must run before "monthly".
+  // Before "monthly".
   if (!recurrenceSpec) {
     text = text.replace(/\bbimonthly\b/gi, () => {
       recurrenceSpec = { freq: "MONTHLY", interval: 2, kind: "infinite" };
@@ -599,9 +527,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     });
   }
 
-  // "daily", "weekly", "monthly", "yearly", "annually" — only consume if no
-  // recurrence already found. Prevents stripping "daily" from
-  // "daily standup every monday" where "every monday" is the specifier.
+  // Only when no recurrence was found, so "daily standup every monday" keeps "every monday" as the
+  // specifier.
   if (!recurrenceSpec) {
     text = text.replace(/\bdaily\b/gi, () => {
       recurrenceSpec = { freq: "DAILY", kind: "infinite" };
@@ -630,10 +557,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     });
   }
 
-  // Slash-separated days: m/w/f, mon/wed/fri, t/th/f etc.
-  // Must look like word/word patterns — no spaces.
-  // A leading "every " OR a pre-existing infinite-weekly recurrenceSpec
-  // promotes the day-list to BYDAY on an infinite rule; otherwise it's finite.
+  // Slash-separated days (m/w/f, mon/wed/fri), word/word with no spaces. A leading "every " or an
+  // existing infinite-weekly spec makes the list BYDAY on an infinite rule; otherwise it's finite.
   const SLASH_DAY =
     "(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|mo|tu|we|th|fr|sa|su|m|t|w|f)";
   const slashDaysRe = new RegExp(`(\\bevery\\s+)?\\b((?:${SLASH_DAY}\\/)+${SLASH_DAY})\\b`, "gi");
@@ -661,9 +586,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     return " ";
   });
 
-  // Plural day names imply recurrence: "mondays", "on tuesdays and thursdays".
-  // Augments an existing infinite-weekly-no-byday spec (e.g. "every week mondays").
-  // Must run before bare "weekdays" and before chrono to avoid false date parsing.
+  // Plural day names imply recurrence and augment an infinite-weekly spec with no byday. Before
+  // bare "weekdays" and chrono, to avoid false date parsing.
   {
     const PLURAL_DAY = "(?:mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays)";
     const pluralDayRe = new RegExp(
@@ -690,12 +614,11 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
         recurrenceSpec = { byday: days, freq: "WEEKLY", kind: "infinite" };
         return " ";
       }
-      // Another recurrenceSpec already set (e.g. finite-slash); leave plural in title.
+      // A spec is already set: leave the plural in the title.
       return match;
     });
   }
 
-  // bare "weekdays" (without "every")
   if (!rename) {
     text = text.replace(/\bweekdays\b/gi, () => {
       if (!recurrenceSpec) {
@@ -705,19 +628,14 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     });
   }
 
-  // --- 7 & 8. Date and time (combined via chrono-node) ---
-  // Replace @ prefix markers for chrono
   if (!rename) text = text.replace(/@(\S+)/g, (_, token: string) => token);
 
   let scheduledStart: string | undefined;
   let hasTime = false;
-  // Captured from chrono's end component when a time range is parsed
-  // (e.g. "3pm to 5pm"). Applied to scheduledEnd below.
+  // From chrono's end component when a time range is parsed.
   let chronoEnd: Date | undefined;
-  // Captured when chrono parses a multi-day date range (e.g. "April 18-25",
-  // "from Mon to Fri"). Applied to scheduledEnd as a date-only string. Only
-  // used when the start is also date-only — multi-day timed ranges are
-  // intentionally not supported (ambiguous semantics).
+  // A multi-day date range, applied to scheduledEnd date-only. Only when the start is date-only:
+  // multi-day timed ranges are ambiguous and unsupported.
   let chronoEndDate: Date | undefined;
 
   const result = rename
@@ -738,7 +656,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
 
     hasTime = result.start.isCertain("hour") || result.start.isCertain("minute");
 
-    // Bare weekday names ("monday", "this wednesday") are certain on "weekday" but not "day".
+    // Bare weekday names are certain on "weekday" but not "day".
     const hasDate =
       result.start.isCertain("day") ||
       result.start.isCertain("month") ||
@@ -746,8 +664,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
       result.start.isCertain("weekday");
 
     if (hasTime && !hasDate) {
-      // When recurrence specifies a weekday, anchor to the next occurrence of that
-      // day instead of defaulting to today/tomorrow.
+      // A recurrence weekday anchors to that day's next occurrence, not today or tomorrow.
       if (
         recurrenceSpec?.kind === "infinite" &&
         recurrenceSpec.byday &&
@@ -761,7 +678,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
         });
         scheduledStart = formatLocalISO(target);
       } else {
-        // Time without date: today if future, tomorrow if past
+        // A time without a date is today if future, else tomorrow.
         const todayWithTime = set(ref, {
           hours: parsed.getHours(),
           milliseconds: 0,
@@ -780,11 +697,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
       scheduledStart = formatDateOnly(parsed);
     }
 
-    // Remove matched text from the string. chrono inconsistently includes a
-    // leading connector in its match ("on friday" / "at 9am" get absorbed, but
-    // "on May 24" / "by May 1" / "for tomorrow" / "from <date>" do not), so
-    // extend the strip backward to swallow a dangling connector — otherwise it
-    // leaks into the title.
+    // chrono includes a leading connector inconsistently ("on friday" yes, "on May 24" no), so the
+    // strip extends back over a dangling one, or it leaks into the title.
     let consumeStart = result.index;
     const connectorPrefix = text.substring(0, result.index).match(/\b(?:from|on|at|by|for)\s+$/i);
     if (connectorPrefix) consumeStart -= connectorPrefix[0].length;
@@ -792,8 +706,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
       text.substring(0, consumeStart) + " " + text.substring(result.index + result.text.length);
   }
 
-  // When "every week" is used (FREQ=WEEKLY, no BYDAY) and chrono parsed a weekday,
-  // inject BYDAY so the rrule is self-documenting ("every week on Monday" vs bare "every week").
+  // "every week" plus a parsed weekday gets BYDAY, so the rrule says "every week on Monday".
   if (
     recurrenceSpec?.kind === "infinite" &&
     recurrenceSpec.freq === "WEEKLY" &&
@@ -802,7 +715,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     result.start.isCertain("weekday")
   ) {
     const jsDay = result.start.get("weekday");
-    // chrono weekday: 0=Sun … 6=Sat → map to the rrule 0=Mon … 6=Sun index.
+    // chrono's 0 = Sun maps to the rrule 0 = Mon index.
     const JS_TO_RRULE: Record<number, Weekday> = {
       0: SU,
       1: MO,
@@ -817,8 +730,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   }
 
-  // When recurrence has a byday but chrono found no date at all, anchor scheduledStart
-  // to the next occurrence of the first specified weekday.
+  // A byday with no chrono date anchors to the next occurrence of the first weekday.
   if (
     !rename &&
     !scheduledStart &&
@@ -830,17 +742,12 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     scheduledStart = formatDateOnly(target);
   }
 
-  // --- 8.5. Reminder resolution ---
-  // Every reminder arm of the scheduler joins `page_schedules`, so a lead on an
-  // unscheduled page could never fire: without a parsed schedule the words go
-  // back into the title verbatim rather than turning into a row that never
-  // rings. With one, the schedule's own shape decides what the row holds —
-  // resolved here, not by the consumer, because this is where the shape is known:
-  //   • all-day  → every lead collapses onto DAY_BEFORE_MINUTES, the single
-  //     anchor such a page can carry (an all-day page has no start time to count
-  //     minutes back from, which is why the reminder dropdown offers it one
-  //     option too);
-  //   • timed    → the minutes as typed, so "1d before" is a 1440-minute lead.
+  // Every reminder arm of the scheduler joins `page_schedules`, so a lead on an unscheduled page
+  // could never fire: without a schedule the words go back into the title. With one, its shape
+  // decides what the row holds, resolved here because this is where the shape is known:
+  //   - all-day: every lead collapses onto DAY_BEFORE_MINUTES, the only anchor such a page can
+  //     carry, since it has no start time to count back from;
+  //   - timed: the minutes as typed, so "1d before" is a 1440-minute lead.
   let reminderMinutes: number[] | undefined;
   if (reminderTokens.length > 0) {
     if (scheduledStart !== undefined) {
@@ -855,20 +762,13 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   }
 
-  // --- 9. Title: remaining text ---
-  // Collapse runs of whitespace, then clean up punctuation orphans left
-  // behind when inline tokens (#tag, !urgent, ~folder, a date) were stripped:
-  //   - an orphaned "." at end-of-string ended the sentence the tokens were in,
-  //     not the title, so it goes: "call ." → "call". A "." the title ends with
-  //     itself ("Call mum.") has no gap before it and stays;
-  //   - "!" and "?" at end-of-string carry meaning, so they stay but lose the
-  //     whitespace gap before them: "ship it !" → "ship it!";
-  //   - separator punct (",", ";", ":") at end-of-string is dropped entirely
-  //     since it was acting as a token separator: "note ," → "note";
-  //   - mid-string separator punct surrounded by whitespace is dropped too:
-  //     "x , y" → "x y" (handles tag-list commas left over after strip).
-  // Mid-word punctuation like "!5" stays — only whitespace-isolated orphans
-  // are touched.
+  // Collapse whitespace and clean punctuation orphaned by stripped tokens:
+  //   - a trailing "." ended the sentence the tokens were in, not the title, so it goes
+  //     ("call ." to "call"), while one the title ends with itself ("Call mum.") stays;
+  //   - a trailing "!" or "?" carries meaning, so it stays and loses its gap ("ship it !");
+  //   - separator punctuation (",", ";", ":") at the end goes, and mid-string when
+  //     whitespace-isolated ("x , y" to "x y"), as leftover tag-list commas.
+  // Mid-word punctuation like "!5" stays.
   const title = text
     .replace(/\s+/g, " ")
     .replace(/\s+\.\s*$/, "")
@@ -891,16 +791,13 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     baseInput.scheduledStart = scheduledStart;
 
     if (durationMinutes !== undefined && hasTime) {
-      // Compute scheduledEnd from explicit "for Xh" duration.
       const startDate = new Date(scheduledStart);
       if (!isNaN(startDate.getTime())) {
         baseInput.scheduledEnd = formatLocalISO(addMinutes(startDate, durationMinutes));
       }
     } else if (chronoEnd && hasTime) {
-      // Time range ("3pm to 5pm") — apply end-time to the same date as start.
-      // For ranges that cross midnight (e.g. "9pm to 5am"), the naive
-      // same-day end is before the start; push it to the next day so the
-      // duration is positive and the event reads correctly.
+      // A range crossing midnight ("9pm to 5am") would end before it starts on the same day, so it
+      // moves to the next.
       const startDate = new Date(scheduledStart);
       if (!isNaN(startDate.getTime())) {
         let endDate = set(startDate, {
@@ -920,8 +817,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
         }
       }
     } else if (chronoEndDate && !hasTime && isAllDayIso(scheduledStart)) {
-      // Multi-day all-day range ("April 18-25", "from Mon to Fri").
-      // Only when start is date-only — multi-day timed events aren't supported.
+      // Only when the start is date-only.
       const endDateStr = formatDateOnly(chronoEndDate);
       if (endDateStr > scheduledStart) {
         baseInput.scheduledEnd = endDateStr;
@@ -929,21 +825,17 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     }
   }
 
-  // --- Determine result type ---
-
-  // A window ("10 times", "for N weeks", "through <date>") without an explicit
-  // cadence defaults to daily recurrence. Keeps the count/boundary signal the
-  // user typed instead of silently stripping it from the title.
+  // A window ("10 times", "for N weeks", "through <date>") with no cadence defaults to daily, which
+  // keeps the count or boundary the user typed instead of stripping it from the title.
   if (windowSpec && !recurrenceSpec) {
     recurrenceSpec = { freq: "DAILY", kind: "infinite" };
   }
 
   const isInfiniteRec = recurrenceSpec?.kind === "infinite";
 
-  // Bounded recurrence: "every X" + window → ONE recurring page with an RRULE
-  // containing COUNT or UNTIL. Expansion happens virtually at render time.
+  // "every X" plus a window is one recurring page with COUNT or UNTIL, expanded at render time.
   if (isInfiniteRec && windowSpec) {
-    // `windowSpec` is narrowed by the if; alias keeps the inner branches readable.
+    // `windowSpec` is narrowed by the if; the alias keeps the inner branches readable.
     const win = windowSpec;
     const spec = recurrenceSpec as {
       kind: "infinite";
@@ -957,9 +849,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     if (win.kind === "count") {
       count = win.count;
     } else {
-      // UNTIL at end-of-day of the boundary date — matches buildRrule()
-      // convention so parse→expand round-trips through the same rrule the
-      // editor produces.
+      // End of the boundary day, as `buildRrule()`, so parse and expand round-trip.
       let boundary: Date;
       if (win.kind === "until") {
         boundary = win.date;
@@ -1000,9 +890,8 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
   }
 
   if (recurrenceSpec && recurrenceSpec.kind !== "infinite") {
-    // Finite recurrence (finite-slash or finite-weekdays): emits N concrete
-    // pages, one per expanded date. Only reached when the user didn't use
-    // "every" — bare "m/w/f" or bare "weekdays".
+    // Finite recurrence emits one page per expanded date; reached only without "every" (bare
+    // "m/w/f" or "weekdays").
     const days = recurrenceSpec.kind === "finite-weekdays" ? WEEKDAY_DAYS : recurrenceSpec.days;
 
     const windowStart = scheduledStart
@@ -1032,8 +921,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     ).map(parseLocalISO);
 
     const inputs: ParsedInput[] = dates.map((d) => {
-      // Arrays are copied, not shared: each page owns its own tags and reminders,
-      // so a later per-page edit can't reach into its siblings.
+      // Copied, so a later edit to one page can't reach its siblings.
       const inp: ParsedInput = {
         ...baseInput,
         tags: [...tags],
@@ -1072,8 +960,7 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
       byday?: Weekday[];
       interval?: number;
     };
-    // No DTSTART — the data model stores RRULE without it (the anchor lives
-    // on the page), matching buildRrule()'s convention.
+    // No DTSTART: the anchor lives on the page, as in `buildRrule()`.
     const rruleStr = serializeRrule({
       byweekday: spec.byday,
       freq: spec.freq,
@@ -1087,6 +974,5 @@ export function parseInput(raw: string, now?: Date, options: ParseOptions = {}):
     };
   }
 
-  // Single
   return { input: baseInput, type: "single" };
 }

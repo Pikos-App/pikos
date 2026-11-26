@@ -10,7 +10,6 @@ function key(folderId: string): ViewKey {
   return { dates: null, scope: { folderId, kind: "folder" }, sort: "manual", zone: "UTC" };
 }
 
-/** Three folders of three pages each, shown f1 then f2 then f3. */
 function loaded() {
   const cache = new ViewCache({ windowSize: 50 });
   const store = new PageStore();

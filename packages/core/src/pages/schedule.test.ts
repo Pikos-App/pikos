@@ -80,7 +80,6 @@ describe("computeScheduleTransition", () => {
     });
   });
 
-  // ─── Cases migrated from the calendar aggregate suite ──────────────────────
   it("all-day → timed: collapses to single day (end undefined)", () => {
     const result = computeScheduleTransition(
       { end: "2026-03-18", start: "2026-03-15" },
@@ -118,7 +117,6 @@ describe("computeScheduleTransition", () => {
       { end: "2026-03-15T10:30:00", start: "2026-03-15T09:00:00" },
       "2026-03-15T14:00:00"
     );
-    // 90-min duration preserved.
     expect(result).toEqual({ end: "2026-03-15T15:30:00", start: "2026-03-15T14:00:00" });
   });
 
@@ -163,7 +161,6 @@ describe("normalizeEndInput", () => {
     );
   });
 
-  // ─── Cases migrated from the calendar aggregate suite ──────────────────────
   it("null end → undefined (end cleared)", () => {
     expect(normalizeEndInput("2026-03-15", null)).toBeUndefined();
   });

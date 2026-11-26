@@ -11,10 +11,7 @@ import {
   toISODateTime,
 } from "./dateTimePicker";
 
-// `formatTriggerLabel` produces the chip's visible text (and aria-label suffix).
-// These cases guard the branches that caused the multi-day regression — the
-// function used to emit "May 2 · 9d" for all-day spans; we now want the
-// explicit range "May 2 – 10".
+// An all-day span reads as the explicit range ("May 2 – 10"), not a day count.
 
 describe("formatTriggerLabel", () => {
   beforeAll(() => {

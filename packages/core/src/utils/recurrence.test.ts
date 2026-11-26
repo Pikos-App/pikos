@@ -16,8 +16,6 @@ import {
   snapAnchorToRule,
 } from "./recurrence";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
@@ -45,23 +43,20 @@ function makeRule(overrides: Partial<PageRecurrenceRule> = {}): PageRecurrenceRu
     pageId: "page-1",
     rrule: "FREQ=WEEKLY;BYDAY=MO",
     rruleExdates: [],
-    scheduledEnd: "2026-03-02T10:00:00", // Monday 10am
-    scheduledStart: "2026-03-02T09:00:00", // Monday 9am
+    scheduledEnd: "2026-03-02T10:00:00",
+    scheduledStart: "2026-03-02T09:00:00",
     timezone: "America/New_York",
     ...overrides,
   };
 }
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("expandRecurrenceForRange", () => {
   it("expands weekly recurrence for a one-week range", () => {
     const page = makePage();
     const rule = makeRule();
 
-    // Range: Mon Mar 2 – Sun Mar 8
-    const rangeStart = new Date(2026, 2, 2); // March 2
-    const rangeEnd = new Date(2026, 2, 9); // March 9 (exclusive)
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 2, 9);
 
     const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
 
@@ -78,7 +73,6 @@ describe("expandRecurrenceForRange", () => {
     const page = makePage();
     const rule = makeRule();
 
-    // Range: 3 weeks
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 23);
 
@@ -106,8 +100,7 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes a synced timed exdate stored as full wall-clock (day-keyed)", () => {
-    // A synced cancelled instance stores its exdate as '...THH:MM:SS'; occurrences
-    // key by day, so it must be day-keyed to match — else Mar 9 ghosts.
+    // A synced cancelled instance stores its exdate as full wall clock; without day-keying Mar 9 ghosts.
     const page = makePage();
     const rule = makeRule({ rruleExdates: ["2026-03-09T09:00:00"] });
 
@@ -122,8 +115,6 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes dates completed on a recurring series (completedOccurrences)", () => {
-    // A completed recurring occurrence is hidden — its done clone renders in its
-    // place. Applies to both native and synced under the unified sets model.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       detachIsReversible: false,
@@ -140,9 +131,6 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes an exdate AND a completed occurrence in the same expansion", () => {
-    // A single locked synced series can carry both exclusion sources at once: a
-    // skipped date in rruleExdates and a separately completed date in
-    // completedOccurrences. Both must drop out while an untouched date survives.
     const page = makePage({
       completedOccurrences: { "2026-03-16": "clone-1" },
       detachIsReversible: false,
@@ -161,9 +149,6 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes completedOccurrences on a native/detached series too", () => {
-    // Under the unified sets model the completion map is keyed by page and
-    // survives detach — a detached series' completed occurrence stays hidden
-    // (its done clone renders), no longer gated on scheduleLocked.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       detachIsReversible: false,
@@ -182,7 +167,6 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes skippedOccurrences from expansion", () => {
-    // A user-dismissed occurrence lives in skip_set, surfaced as skippedOccurrences.
     const page = makePage({ scheduleLocked: false, skippedOccurrences: ["2026-03-09"] });
     const rule = makeRule();
 
@@ -224,8 +208,7 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes a synced override whose original_date is full wall-clock (day-keyed)", () => {
-    // A synced moved instance stores original_date as '...THH:MM:SS'; day-keying
-    // it is what excludes the original Mar 9 slot beside the moved block.
+    // A synced moved instance stores original_date as full wall clock; day-keying excludes the original slot.
     const page = makePage();
     const rule = makeRule();
     const overrideSchedule: PageSchedule = {
@@ -256,7 +239,7 @@ describe("expandRecurrenceForRange", () => {
     const { scheduledEnd: _removed, ...base } = makeRule();
     const rule: PageRecurrenceRule = {
       ...base,
-      scheduledStart: "2026-03-02", // date-only = all-day
+      scheduledStart: "2026-03-02",
     };
 
     const rangeStart = new Date(2026, 2, 2);
@@ -283,7 +266,6 @@ describe("expandRecurrenceForRange", () => {
     const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
 
     expect(occurrences).toHaveLength(3);
-    // Each occurrence preserves 30-min duration
     for (const occ of occurrences) {
       expect(occ.scheduledStart).toMatch(/T09:00:00$/);
       expect(occ.scheduledEnd).toMatch(/T09:30:00$/);
@@ -292,9 +274,8 @@ describe("expandRecurrenceForRange", () => {
 
   it("returns empty array when no occurrences in range", () => {
     const page = makePage();
-    const rule = makeRule(); // Monday only
+    const rule = makeRule();
 
-    // Range: Tue–Thu only
     const rangeStart = new Date(2026, 2, 3);
     const rangeEnd = new Date(2026, 2, 6);
 
@@ -325,12 +306,11 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("biweekly INTERVAL=2 skips alternate weeks", () => {
-    // Anchor Mon Mar 2; INTERVAL=2 should yield Mar 2, Mar 16, Mar 30, …
     const page = makePage();
     const rule = makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2" });
 
     const rangeStart = new Date(2026, 2, 2);
-    const rangeEnd = new Date(2026, 3, 13); // through Apr 12 (5+ weeks)
+    const rangeEnd = new Date(2026, 3, 13);
 
     const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
 
@@ -344,11 +324,9 @@ describe("expandRecurrenceForRange", () => {
   it("returns empty when range is entirely after UNTIL", () => {
     const page = makePage();
     const rule = makeRule({
-      // UNTIL is 2026-03-09 end-of-day UTC: only Mar 2 and Mar 9 are valid.
       rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309T235959Z",
     });
 
-    // Range entirely past UNTIL.
     const rangeStart = new Date(2026, 2, 16);
     const rangeEnd = new Date(2026, 2, 30);
 
@@ -360,7 +338,6 @@ describe("expandRecurrenceForRange", () => {
     const page = makePage();
     const rule = makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=2" });
 
-    // Range covers 4 Mondays — only the first 2 should expand.
     const rangeStart = new Date(2026, 2, 2);
     const rangeEnd = new Date(2026, 2, 30);
 
@@ -370,26 +347,22 @@ describe("expandRecurrenceForRange", () => {
 
   it("does not generate occurrences before the rule's scheduledStart", () => {
     const page = makePage();
-    const rule = makeRule(); // anchored on Mon Mar 2
+    const rule = makeRule();
 
-    // Range starts a week BEFORE the anchor. rrule.js shouldn't produce dates
-    // before DTSTART.
-    const rangeStart = new Date(2026, 1, 23); // Feb 23
-    const rangeEnd = new Date(2026, 2, 9); // Mar 9 (exclusive)
+    const rangeStart = new Date(2026, 1, 23);
+    const rangeEnd = new Date(2026, 2, 9);
 
     const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02"]);
   });
 });
 
-// ─── nextOccurrenceAfter ──────────────────────────────────────────────────
-
 describe("nextOccurrenceAfter", () => {
   it("returns next Monday after a given date", () => {
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO",
-      "2026-03-02T09:00:00", // Monday 9am
-      new Date(2026, 2, 2) // Monday March 2
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 2)
     );
 
     expect(result).not.toBeNull();
@@ -398,12 +371,10 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("skips missed occurrences — returns next future from afterDate", () => {
-    // Rule: every Monday. afterDate = Wednesday March 18.
-    // Should skip March 16 (past) and return March 23.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO",
       "2026-03-02T09:00:00",
-      new Date(2026, 2, 18) // Wednesday
+      new Date(2026, 2, 18)
     );
 
     expect(result).not.toBeNull();
@@ -412,11 +383,7 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("handles all-day recurrence", () => {
-    const result = nextOccurrenceAfter(
-      "FREQ=WEEKLY;BYDAY=FR",
-      "2026-03-06", // date-only = all-day
-      new Date(2026, 2, 6) // Friday March 6
-    );
+    const result = nextOccurrenceAfter("FREQ=WEEKLY;BYDAY=FR", "2026-03-06", new Date(2026, 2, 6));
 
     expect(result).not.toBeNull();
     expect(result!.scheduledStart).toBe("2026-03-13");
@@ -424,11 +391,7 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("handles daily recurrence", () => {
-    const result = nextOccurrenceAfter(
-      "FREQ=DAILY",
-      "2026-03-02T08:00:00",
-      new Date(2026, 2, 5) // Thursday
-    );
+    const result = nextOccurrenceAfter("FREQ=DAILY", "2026-03-02T08:00:00", new Date(2026, 2, 5));
 
     expect(result).not.toBeNull();
     expect(result!.scheduledStart).toContain("2026-03-06");
@@ -439,38 +402,33 @@ describe("nextOccurrenceAfter", () => {
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260310T000000Z",
       "2026-03-02T09:00:00",
-      new Date(2026, 2, 15) // after UNTIL
+      new Date(2026, 2, 15)
     );
 
     expect(result).toBeNull();
   });
 
   it("returns null when COUNT has been exhausted (weekly BYDAY)", () => {
-    // COUNT=2: only Mar 2 and Mar 9 exist. afterDate = Mar 9 → no more.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO;COUNT=2",
       "2026-03-02T09:00:00",
-      new Date(2026, 2, 9, 23, 59) // Monday Mar 9 end of day
+      new Date(2026, 2, 9, 23, 59)
     );
 
     expect(result).toBeNull();
   });
 
   it("returns null when COUNT is exhausted (daily, single occurrence)", () => {
-    // FREQ=DAILY;COUNT=1 produces exactly one occurrence (the DTSTART itself).
-    // After completing it, asking for the next one must return null so the
-    // caller (completeRecurringPage) marks the head done instead of advancing.
     const result = nextOccurrenceAfter(
       "FREQ=DAILY;COUNT=1",
       "2026-03-02T09:00:00",
-      new Date(2026, 2, 2) // same day as DTSTART
+      new Date(2026, 2, 2)
     );
 
     expect(result).toBeNull();
   });
 
   it("returns next within COUNT bound when not yet exhausted", () => {
-    // COUNT=3: Mar 2, Mar 9, Mar 16. afterDate = Mar 5 → next is Mar 9.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO;COUNT=3",
       "2026-03-02T09:00:00",
@@ -482,7 +440,6 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("returns the final occurrence when COUNT > 1 and we ask after the second-to-last", () => {
-    // FREQ=DAILY;COUNT=3 → Mar 2, 3, 4. afterDate = Mar 3 → expect Mar 4.
     const result = nextOccurrenceAfter(
       "FREQ=DAILY;COUNT=3",
       "2026-03-02T09:00:00",
@@ -493,17 +450,10 @@ describe("nextOccurrenceAfter", () => {
     expect(result!.scheduledStart).toContain("2026-03-04");
   });
 
-  // ─── exdate handling ──────────────────────────────────────────────────────
-  //
-  // exdates represent dates a user has already taken out of the series — they
-  // were materialised into a real page via drag-reschedule, or explicitly
-  // skipped via the popover. Advance must skip past them or the head lands
-  // on a date that already has its own real page, producing two chips on the
-  // same calendar day. Regression here was the original "head advance lands
-  // on materialised date" bug fixed in the recurring-completion feature.
+  // Advance must skip exdates, or the head lands on a date that already has its own page and the
+  // day shows two chips.
 
   it("skips a single exdate when advancing", () => {
-    // Daily from Mar 2. afterDate = Mar 2. With Mar 3 excluded, expect Mar 4.
     const result = nextOccurrenceAfter("FREQ=DAILY", "2026-03-02T09:00:00", new Date(2026, 2, 2), [
       "2026-03-03",
     ]);
@@ -513,7 +463,6 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("skips multiple consecutive exdates", () => {
-    // Daily from Mar 2. afterDate = Mar 2. Mar 3, 4, 5 excluded → Mar 6.
     const result = nextOccurrenceAfter("FREQ=DAILY", "2026-03-02T09:00:00", new Date(2026, 2, 2), [
       "2026-03-03",
       "2026-03-04",
@@ -525,8 +474,6 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("ignores exdates that don't match a rule-generated date", () => {
-    // Weekly Mondays. afterDate = Mar 2 (Mon). Exdate Mar 5 (Thu, not in rule).
-    // Next Mon is Mar 9 — exdate has no effect.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO",
       "2026-03-02T09:00:00",
@@ -539,7 +486,6 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("preserves wall-clock time after skipping an exdate", () => {
-    // Daily anchored 9am. Exdate skips Mar 3 → return Mar 4 at 9am, not midnight.
     const result = nextOccurrenceAfter("FREQ=DAILY", "2026-03-02T09:00:00", new Date(2026, 2, 2), [
       "2026-03-03",
     ]);
@@ -548,8 +494,6 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("returns null when every remaining occurrence within COUNT is excluded", () => {
-    // FREQ=DAILY;COUNT=3 from Mar 2 → Mar 2, 3, 4. afterDate = Mar 2 means
-    // the only candidates are Mar 3 + Mar 4. Excluding both leaves nothing.
     const result = nextOccurrenceAfter(
       "FREQ=DAILY;COUNT=3",
       "2026-03-02T09:00:00",
@@ -561,12 +505,10 @@ describe("nextOccurrenceAfter", () => {
   });
 
   it("completing same day returns next week, not same day", () => {
-    // Rule: every Monday. Completing on Monday March 2 at 8am (before 9am event).
-    // Should return March 9, not March 2 again.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO",
       "2026-03-02T09:00:00",
-      new Date(2026, 2, 2, 8, 0) // Monday 8am
+      new Date(2026, 2, 2, 8, 0)
     );
 
     expect(result).not.toBeNull();
@@ -574,16 +516,12 @@ describe("nextOccurrenceAfter", () => {
   });
 });
 
-// ─── snapAnchorToRule ─────────────────────────────────────────────────────
-
 describe("snapAnchorToRule", () => {
-  // 2026-06-07 is a Sunday; 06-08 Mon, 06-10 Wed, 06-12 Fri.
   it("moves a Sunday anchor onto the first allowed weekday for an M/W/F rule", () => {
     expect(snapAnchorToRule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-07")).toBe("2026-06-08");
   });
 
   it("leaves an anchor untouched when it already satisfies the rule", () => {
-    // 06-08 is a Monday, which BYDAY=MO,WE,FR permits.
     expect(snapAnchorToRule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-08")).toBe("2026-06-08");
   });
 
@@ -606,8 +544,6 @@ describe("snapAnchorToRule", () => {
   });
 
   it("returns the anchor unchanged when the rule yields no occurrence on/after it", () => {
-    // BYDAY=MO with UNTIL 06-10: the next Monday (06-15) is past UNTIL, so the
-    // rule has no permitted occurrence on/after a Tuesday 06-09 anchor.
     expect(snapAnchorToRule("FREQ=WEEKLY;BYDAY=MO;UNTIL=20260610T235959Z", "2026-06-09")).toBe(
       "2026-06-09"
     );
@@ -618,12 +554,8 @@ describe("snapAnchorToRule", () => {
   });
 });
 
-// ─── alignWeeklyRuleToAnchor ──────────────────────────────────────────────
-
 describe("alignWeeklyRuleToAnchor", () => {
-  // 2099-01-05 is a Monday; 01-07 Wed; 01-06 Tue.
   it("rewrites a single-BYDAY weekly rule to the moved weekday", () => {
-    // Monday rule, anchor moved to Wednesday → BYDAY follows.
     expect(alignWeeklyRuleToAnchor("FREQ=WEEKLY;BYDAY=MO", "2099-01-07")).toBe(
       "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE"
     );
@@ -636,7 +568,6 @@ describe("alignWeeklyRuleToAnchor", () => {
   });
 
   it("returns the rule unchanged when the anchor is already on the BYDAY weekday", () => {
-    // Still a Monday — same-day time move shouldn't touch BYDAY.
     expect(alignWeeklyRuleToAnchor("FREQ=WEEKLY;BYDAY=MO", "2099-01-05T14:00:00")).toBe(
       "FREQ=WEEKLY;BYDAY=MO"
     );
@@ -664,8 +595,6 @@ describe("alignWeeklyRuleToAnchor", () => {
   });
 });
 
-// ─── computeNextEnd ──────────────────────────────────────────────────────
-
 describe("computeNextEnd", () => {
   it("preserves end time on new date", () => {
     const result = computeNextEnd("2026-03-02T10:00:00", "2026-03-09T09:00:00");
@@ -678,14 +607,10 @@ describe("computeNextEnd", () => {
   });
 
   it("handles end time earlier than start time (wraps to next day)", () => {
-    // Base end is 01:00 (after midnight), next start is 22:00
-    // → next end should be 01:00 next day
     const result = computeNextEnd("2026-03-03T01:00:00", "2026-03-09T22:00:00");
     expect(result).toBe("2026-03-10T01:00:00");
   });
 });
-
-// ─── rruleToLabel ─────────────────────────────────────────────────────────
 
 describe("rruleToLabel", () => {
   it("converts FREQ=WEEKLY;BYDAY=MO to human-readable", () => {
@@ -752,8 +677,6 @@ describe("rruleEditWouldDegrade", () => {
     ["a sub-daily BY* term", "FREQ=DAILY;BYHOUR=9"],
     ["an unparseable rule", "FREQ=NONSENSE"],
     ["a BYMONTH outside 1–12, which the carrier normalises away", "FREQ=YEARLY;BYMONTH=13"],
-    // The editor rebuilds UNTIL as end-of-day, so a provider cut-off mid-day would
-    // gain that day's final occurrence.
     ["a UTC UNTIL mid-day", "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T090000Z"],
     [
       "a wall-clock UNTIL mid-day, as the reconciler rewrites it",
@@ -775,8 +698,6 @@ describe("rruleEditWouldDegrade", () => {
     ["an ordinal on one weekday of a BYDAY set", "FREQ=MONTHLY;BYDAY=MO,2WE"],
     ["BYMONTH (15 March, annually)", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15"],
     ["BYMONTH beside a weekly BYDAY", "FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7"],
-    // BYSETPOS round-trips losslessly, so the editor can no longer degrade it — and the
-    // Ends handler that once dropped it now rebuilds through optionsWithEnd.
     ["BYSETPOS", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3"],
     ["a from-end BYSETPOS over a weekday set", "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"],
     ["WKST", "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU"],
@@ -801,8 +722,6 @@ describe("rruleEditWouldDegrade", () => {
     expect(rruleEditWouldDegrade(rrule)).toBe(false);
   });
 });
-
-// ─── optionsWithEnd ───────────────────────────────────────────────────────
 
 describe("optionsWithEnd", () => {
   it("keeps bymonthday when setting a count", () => {
@@ -842,8 +761,6 @@ describe("optionsWithEnd", () => {
     expect(buildRrule(next)).toBe("FREQ=WEEKLY;INTERVAL=1;BYDAY=MO");
   });
 });
-
-// ─── rruleToShortLabel ────────────────────────────────────────────────────
 
 describe("rruleToShortLabel", () => {
   it("FREQ=DAILY → Daily", () => {
@@ -889,8 +806,6 @@ describe("rruleToShortLabel", () => {
   });
 });
 
-// ─── parseRrule ───────────────────────────────────────────────────────────────
-
 describe("parseRrule", () => {
   it("parses FREQ and defaults interval to 1", () => {
     expect(parseRrule("FREQ=DAILY")).toEqual({ freq: "DAILY", interval: 1 });
@@ -925,12 +840,9 @@ describe("parseRrule", () => {
   });
 
   it("returns null when FREQ is missing", () => {
-    // rrule.js accepts INTERVAL-only strings but we require a FREQ.
     expect(parseRrule("INTERVAL=2")).toBeNull();
   });
 });
-
-// ─── buildRrule ───────────────────────────────────────────────────────────────
 
 describe("buildRrule", () => {
   it("builds a weekly rule with FREQ", () => {
@@ -978,7 +890,6 @@ describe("buildRrule", () => {
       "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
       "FREQ=MONTHLY;COUNT=12",
       "FREQ=YEARLY;UNTIL=20301231T235959Z",
-      // Fields the editor save path once silently dropped (BYSETPOS/BYMONTHDAY/WKST).
       "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
       "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU",
       "FREQ=MONTHLY;BYMONTHDAY=15",
@@ -988,8 +899,6 @@ describe("buildRrule", () => {
       const parsed = parseRrule(original);
       expect(parsed).not.toBeNull();
       const rebuilt = buildRrule(parsed!);
-      // Re-parse rebuilt and compare options structurally — string order may
-      // differ (rrule.js doesn't preserve field order).
       expect(parseRrule(rebuilt)).toEqual(parsed);
     }
   });
@@ -1056,15 +965,6 @@ describe("optionsForFreq", () => {
   });
 });
 
-// ─── Timezone-independence matrix ──────────────────────────────────────────
-//
-// The engine stores naive wall-clock and must expand identically regardless of
-// the runner's timezone — sync feeds it zoned data, so any TZ-dependence is
-// silent corruption. Default runner TZ is pinned to UTC; this re-runs expansion
-// under four zones (one with DST, one half-hour offset, one DST-free) and
-// asserts the wall-clock never shifts. Cases use times that exist in every
-// zone; a non-existent spring-forward instant is out of scope.
-
 const TZ_MATRIX = ["UTC", "America/Los_Angeles", "Asia/Kolkata", "America/Phoenix"] as const;
 
 function withTz<T>(tz: string, fn: () => T): T {
@@ -1077,7 +977,6 @@ function withTz<T>(tz: string, fn: () => T): T {
   }
 }
 
-// 2026-03-08 is the US spring-forward Sunday; 2026-11-01 is the fall-back Sunday.
 const MATRIX_CASES: { name: string; run: () => unknown }[] = [
   {
     name: "weekly timed Sunday 09:00 spanning the spring-forward day",
@@ -1179,7 +1078,6 @@ describe("timezone-independence matrix", () => {
   for (const c of MATRIX_CASES) {
     it(`${c.name} — byte-identical wall-clock across all zones`, () => {
       const baseline = withTz("UTC", c.run);
-      // Guard against a vacuous pass if expansion returns nothing.
       expect(baseline).not.toEqual([]);
       expect(baseline).not.toBeNull();
       for (const tz of TZ_MATRIX) {

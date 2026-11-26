@@ -1,16 +1,11 @@
-// Ground truth for the Rust date engine, recorded in situ.
+// Ground truth for the Rust date engine, recorded in situ. `date-corpus.ts` pins what each
+// expression resolves to, but the engine is handed a whole title ("call the plumber tomorrow at
+// 3pm"), where the match extent matters (the parser cuts `[index, index + text.length)` out of
+// the title) and so does choosing among several date-ish candidates.
 //
-// `date-corpus.ts` runs the 92 distinct date expressions on their own. That
-// pins what each pattern resolves to, but not what the engine will actually be
-// handed: a whole title with a date somewhere inside it ("call the plumber
-// tomorrow at 3pm"). The match *extent* only matters in that setting — the
-// parser cuts `[index, index + text.length)` out of the title — and so does
-// picking the right candidate when several parts of a sentence look date-ish.
-//
-// So this records the real thing. Every corpus input is run through the real
-// parser with the recording stand-in installed in chrono's place, at every
-// pinned reference time, and the first `parse` call is captured: the text as
-// chrono received it (after the parser's own rewriting) and the result in full.
+// Every corpus input runs through the real parser with the recording stand-in in chrono's place,
+// at every pinned reference time, and the first `parse` call is captured: the text as chrono
+// received it (after the parser's rewriting) and the full result.
 //
 // Re-run with `pnpm --filter @pikos/core gen:date-calls`.
 
@@ -20,7 +15,7 @@ import { dirname, resolve } from "node:path";
 import { parseInput } from "../../src/nlp/parser";
 import { calls, type RecordedResult } from "./chrono-recorder";
 
-/** Matches the reference times in the parser corpus. */
+/** The parser corpus's reference times. */
 const REFERENCES: { id: string; iso: string }[] = [
   { id: "sun_noon", iso: "2026-03-15T12:00:00" },
   { id: "wed_noon", iso: "2026-03-18T12:00:00" },
@@ -49,12 +44,12 @@ function packageRoot(): string {
 }
 
 interface Case {
-  /** The quick-add input the user typed. Context only — not the engine's input. */
+  /** What the user typed; context only, not the engine's input. */
   input: string;
   ref: string;
-  /** What chrono was handed, after the parser's pre-processing. */
+  /** What chrono was handed, after the parser's rewriting. */
   text: string;
-  /** Null when chrono found no date in it. */
+  /** Null when chrono found no date. */
   result: RecordedResult | null;
 }
 
@@ -68,10 +63,8 @@ function main(): void {
   const corpus = JSON.parse(readFileSync(corpusPath, "utf8")) as { cases: { input: string }[] };
   const inputs = [...new Set(corpus.cases.map((c) => c.input))].sort();
 
-  // The same (text, ref) pair can arise from different inputs — the parser
-  // rewrites casual phrasings into shared explicit forms. Keep one case each,
-  // so the corpus grades distinct engine behaviour rather than counting
-  // duplicates as coverage.
+  // Different inputs can yield the same (text, ref) after the parser's rewriting. One case each,
+  // so the corpus grades distinct engine behaviour and duplicates don't count as coverage.
   const seen = new Set<string>();
   const cases: Case[] = [];
 

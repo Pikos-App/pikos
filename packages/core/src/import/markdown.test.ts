@@ -173,7 +173,6 @@ created: "2025-06-15T14:30:00"
 ---
 Body`;
     const { frontmatter } = parseFrontmatter(raw);
-    // ISO format passes through directly
     expect(frontmatter.created).toBe("2025-06-15T14:30:00");
   });
 
@@ -184,8 +183,8 @@ Body`;
   });
 
   it("ignores fractional priority (must be a whole number, not force-cast to i64)", () => {
-    // Regression: `2.5` passed the 1–4 range check and was cast straight
-    // through to create_page's i64 priority arg, aborting the whole import.
+    // `2.5` passed the 1-4 range check and was cast through to create_page's i64 priority arg,
+    // aborting the whole import.
     expect(parseFrontmatter("---\npriority: 2.5\n---\n").frontmatter.priority).toBe(0);
     expect(parseFrontmatter("---\npriority: 1.0\n---\n").frontmatter.priority).toBe(1);
   });
@@ -314,7 +313,6 @@ Task body`,
     ];
 
     const plan = parseMarkdownVault(files);
-    // Images are now handled (extracted as imageRefs), only mermaid triggers a warning
     expect(plan.warnings).toHaveLength(1);
     expect(plan.warnings[0]!.type).toBe("unsupported_content");
     expect(plan.warnings[0]!.message).toContain("mermaid diagram");
@@ -403,7 +401,6 @@ Content`,
 
 describe("end-to-end: Obsidian vault import", () => {
   const vaultFiles: VaultFile[] = [
-    // Root file → inbox
     {
       content: `---
 tags: [idea, quick]
@@ -412,7 +409,6 @@ created: 2025-01-15
 Just a quick thought with a [[Reference Page]] link.`,
       path: "Quick Note.md",
     },
-    // Nested folder
     {
       content: `---
 status: done
@@ -430,7 +426,6 @@ The Q2 report covers all departments.
 See [[Budget Sheet]] for numbers.`,
       path: "Projects/Work/Quarterly Report.md",
     },
-    // Different folder, Obsidian Linter dates
     {
       content: `---
 scheduled: 2025-04-01
@@ -443,14 +438,12 @@ Morning routine:
 - Running`,
       path: "Areas/Health/Exercise Plan.md",
     },
-    // Empty content file
     {
       content: `---
 tags: [todo]
 ---`,
       path: "Projects/Work/Empty Task.md",
     },
-    // File with unsupported content
     {
       content: `---
 created: 2025-05-01
@@ -465,7 +458,6 @@ graph TD
 And an embedded image: ![[screenshot.png]]`,
       path: "Areas/Research/Diagrams.md",
     },
-    // Non-md file (should be filtered by vault reader, but parser also filters)
     {
       content: "binary data",
       path: "image.png",
@@ -520,11 +512,11 @@ And an embedded image: ![[screenshot.png]]`,
   it("maps status and priority from frontmatter", () => {
     const report = plan.pages.find((p) => p.title === "Quarterly Report");
     expect(report!.status).toBe("done");
-    expect(report!.priority).toBe(2); // high
+    expect(report!.priority).toBe(2);
 
     const exercise = plan.pages.find((p) => p.title === "Exercise Plan");
     expect(exercise!.status).toBe("not_started");
-    expect(exercise!.priority).toBe(3); // medium
+    expect(exercise!.priority).toBe(3);
   });
 
   it("parses ISO dates for scheduled/created", () => {
@@ -554,7 +546,6 @@ And an embedded image: ![[screenshot.png]]`,
     );
     expect(mermaidWarning).toBeTruthy();
 
-    // Embedded images are now handled via imageRefs, not warned about
     const diagrams = plan.pages.find((p) => p.title === "Diagrams");
     expect(diagrams!.imageRefs.length).toBeGreaterThan(0);
   });
@@ -798,10 +789,7 @@ describe("transformCallouts", () => {
   });
 });
 
-// ─── Date format variants ─────────────────────────────────────────────────────
-// Coverage for every format in DATE_FORMATS, plus failure cases. The Linter
-// without-seconds branch and the abbreviated/slash formats had no direct tests,
-// so a regression in DATE_FORMATS could silently drop user dates.
+// Every DATE_FORMATS entry, plus failures; a regression there could silently drop user dates.
 
 describe("parseFrontmatter date formats", () => {
   it("parses Linter format without seconds", () => {
@@ -836,7 +824,6 @@ describe("parseFrontmatter date formats", () => {
 
   it("parses ISO with T separator and minutes only", () => {
     const raw = `---\ncreated: "2025-06-15T14:30"\n---\n`;
-    // ISO patterns pass through directly without reformatting
     expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-06-15T14:30");
   });
 
@@ -855,9 +842,6 @@ describe("parseFrontmatter date formats", () => {
     expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-06-15");
   });
 });
-
-// ─── Status / priority edge cases ─────────────────────────────────────────────
-// The toLowerCase() path is exercised but never with truly mixed-case input.
 
 describe("parseFrontmatter status/priority casing", () => {
   it("normalizes uppercase status", () => {
@@ -879,16 +863,13 @@ describe("parseFrontmatter status/priority casing", () => {
   });
 
   it("treats fractional priority as out-of-range", () => {
-    // Number("2.5") === 2.5 is not a valid PagePriority — it must default to 0,
-    // not be force-cast through to create_page's i64 arg.
+    // `2.5` isn't a valid PagePriority: it must default to 0, not be force-cast.
     const p = parseFrontmatter("---\npriority: 2.5\n---\n").frontmatter.priority;
     expect(p).toBe(0);
   });
 });
 
-// ─── Frontmatter robustness ────────────────────────────────────────────────────
-// Body content containing `---` and CRLF inputs round-trip through Pikos and
-// other tools. Malformed frontmatter (no closing fence) shouldn't crash.
+// Bodies with `---` and CRLF inputs round-trip; frontmatter with no closing fence must not crash.
 
 describe("parseFrontmatter robustness", () => {
   it("handles CRLF line endings", () => {
@@ -934,7 +915,6 @@ describe("extractWikilinks edge cases", () => {
   });
 
   it("ignores empty wikilinks", () => {
-    // [[]] has no target chars, regex requires ≥1 non-]/| char, so no match
     expect(extractWikilinks("[[]]")).toEqual([]);
   });
 });
@@ -957,9 +937,7 @@ describe("extractImageRefs edge cases", () => {
   });
 
   it("does not match standard image syntax with title metadata", () => {
-    // ![alt](path.png "title") — the title trailing causes the regex not to
-    // match. Lock the current behavior so a future change to the regex is
-    // explicit.
+    // A trailing title makes the image regex not match; pinned so a regex change is deliberate.
     const refs = extractImageRefs('![alt](image.png "title")');
     expect(refs).toHaveLength(0);
   });
@@ -977,14 +955,11 @@ describe("extractImageRefs edge cases", () => {
   });
 });
 
-// ─── parseMarkdownVault: frontmatter survives transformations ─────────────────
-// These guard against regressions where wikilink/image extraction mutates the
-// body before frontmatter is read, or where callout transformation strips
-// content the user authored.
+// Extraction must not mutate the body before frontmatter is read, and callout transformation must
+// not strip authored content.
 
 describe("parseMarkdownVault transformation order", () => {
   it("extracts wikilinks BEFORE callout transformation", () => {
-    // A callout body containing a wikilink — both should round-trip.
     const files: VaultFile[] = [
       { content: "> [!note] See also\n> Read [[Other Page]] first", path: "n.md" },
     ];
@@ -1002,9 +977,8 @@ describe("parseMarkdownVault transformation order", () => {
   });
 
   it("does not transform callouts inside fenced code blocks (current behavior)", () => {
-    // The CALLOUT_RE matches `^> [!type]` at line start globally; fenced code
-    // is not currently parsed structurally. Lock the current behavior so any
-    // future structural pass is intentional.
+    // CALLOUT_RE matches at line start globally and fenced code isn't parsed structurally; pinned so
+    // a structural pass is deliberate.
     const files: VaultFile[] = [{ content: "```md\n> [!note] inside fence\n```", path: "n.md" }];
     const plan = parseMarkdownVault(files);
     expect(plan.pages[0]!.body).toContain("**Note:** inside fence");

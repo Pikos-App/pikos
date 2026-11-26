@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { formatCompactTime, formatLongDate, formatPageDate, isDueSoon } from "./pageDateLabel";
 
-// Vitest pins TZ=UTC, so local wall-clock equals the instants below.
+// Vitest pins TZ=UTC, so local wall clock equals the instants below.
 const NOW = new Date("2026-06-15T12:00:00Z");
 
 beforeEach(() => {

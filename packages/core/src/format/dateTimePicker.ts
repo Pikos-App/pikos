@@ -53,9 +53,8 @@ export function formatTriggerLabel(
   const isPast = isAllDay ? endsAt < startOfDay(now) : endsAt < now;
   const dueSoon = !isPast && !isDone && date < addHours(now, 48);
 
-  // Multi-day all-day: show the explicit range ("May 2 – 10"). Skipping the
-  // Today/Tomorrow relative labels — a span isn't "today", and the end date is
-  // the more informative signal.
+  // Multi-day all-day shows the explicit range, not Today/Tomorrow: a span isn't "today" and the
+  // end date says more.
   if (isAllDaySpan) {
     return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: formatDateRange(iso, endIso) };
   }
@@ -108,7 +107,7 @@ export const DURATION_PRESETS = [
   { label: "2h", minutes: 120 },
 ] as const;
 
-// Span length presets for all-day events. "2d" = start + 1 day (2-day span).
+// "2d" is start plus one day.
 export const DAYS_PRESETS = [
   { days: 2, label: "2d" },
   { days: 3, label: "3d" },
@@ -138,10 +137,8 @@ export function parseCustomTimeStr(input: string): { hour24: number; minute: num
   return { hour24: hours, minute: minutes };
 }
 
-// Custom duration parser: accepts plain numbers as minutes ("90") and
-// hour/minute units in any combination, with or without spaces: "90m",
-// "90 min", "1h", "1.5h", "1hr", "1 hour 30 mins", "1h30m", "1hr 20min".
-// Hours: h/hr/hrs/hour/hours. Minutes: m/min/mins/minute/minutes.
+// Plain numbers are minutes ("90"); units combine with or without spaces ("1h30m", "1 hour 30
+// mins"). Hours: h/hr/hrs/hour/hours. Minutes: m/min/mins/minute/minutes.
 
 const DURATION_HOUR_UNIT = "(?:hours|hour|hrs|hr|h)";
 const DURATION_MIN_UNIT = "(?:minutes|minute|mins|min|m)";

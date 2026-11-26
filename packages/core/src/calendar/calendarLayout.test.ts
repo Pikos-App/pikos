@@ -27,8 +27,6 @@ import {
 } from "./calendarLayout";
 import { CALENDAR_DENSITY_STEPS, type CalendarDensity } from "./dayCount";
 
-// ─── collapseUnderWidth ──────────────────────────────────────────────────────
-
 describe("collapseUnderWidth", () => {
   function makeBlock(
     pageId: string,
@@ -59,7 +57,6 @@ describe("collapseUnderWidth", () => {
   });
 
   it("all blocks above threshold → no pill", () => {
-    // Column width 200, two blocks at 50% each = 100px each (above threshold).
     const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
     const result = collapseUnderWidth(blocks, 200);
     expect(result.visible).toHaveLength(2);
@@ -67,9 +64,6 @@ describe("collapseUnderWidth", () => {
   });
 
   it("pill anchors at rightmost collapsed slot, expanded to PILL_MIN_WIDTH_PX", () => {
-    // Column 200 → min pill = (64/200)*100 = 32%. Slot is at 86/14 (only
-    // 28px wide), expand left so the pill has a readable 32% width and
-    // stays right-anchored. Pill is chip-shaped — anchored at slotHost.top.
     const blocks = [
       makeBlock("wide", 0, 60, 0, 300),
       makeBlock("n1", 60, 13, 100),
@@ -85,10 +79,8 @@ describe("collapseUnderWidth", () => {
   });
 
   it("pill widthPct caps at 50% on extremely narrow columns", () => {
-    // Column 80px → uncapped floor would be 80%. Cap kicks in at 50%.
     const blocks = [makeBlock("a", 0, 30), makeBlock("b", 30, 30), makeBlock("c", 60, 40)];
     const [pill] = collapseUnderWidth(blocks, 80).pills;
-    // All three are under the 60px collapse threshold (24, 24, 32 px); the first stays.
     expect(pill?.widthPct).toBe(50);
     expect(pill?.leftPct).toBe(50);
   });
@@ -99,11 +91,8 @@ describe("collapseUnderWidth", () => {
       makeBlock("n1", 50, 20, 100, 40),
       makeBlock("n2", 70, 20, 200, 60),
     ];
-    // Compact: hourHeight=40 → compactBlockHeight=10, but the floor kicks in.
     expect(collapseUnderWidth(blocks, 100, 10).pills[0]?.height).toBe(14);
-    // Normal: hourHeight=64 → compactBlockHeight=16.
     expect(collapseUnderWidth(blocks, 100, 16).pills[0]?.height).toBe(16);
-    // Spacious: hourHeight=88 → compactBlockHeight=22.
     expect(collapseUnderWidth(blocks, 100, 22).pills[0]?.height).toBe(22);
   });
 
@@ -113,7 +102,6 @@ describe("collapseUnderWidth", () => {
   });
 
   it("uses OVERFLOW_MIN_WIDTH_PX as the threshold", () => {
-    // Block at exactly threshold passes; one pixel under collapses.
     const ok = makeBlock("ok", 0, OVERFLOW_MIN_WIDTH_PX);
     const bad = makeBlock("bad", 50, OVERFLOW_MIN_WIDTH_PX - 1);
     const { pills, visible } = collapseUnderWidth([ok, bad], 100);
@@ -122,12 +110,11 @@ describe("collapseUnderWidth", () => {
   });
 
   it("conservation: every input block ends up either visible or in the pill", () => {
-    // Mixed cluster — wide host, narrow chips of various widthPct/leftPct.
     const blocks = [
-      makeBlock("a", 0, 60, 0, 400), // wide → visible
-      makeBlock("b", 60, 12, 100), // narrow → collapsed
-      makeBlock("c", 72, 14, 200), // narrow → collapsed
-      makeBlock("d", 86, 14, 300), // narrow → collapsed
+      makeBlock("a", 0, 60, 0, 400),
+      makeBlock("b", 60, 12, 100),
+      makeBlock("c", 72, 14, 200),
+      makeBlock("d", 86, 14, 300),
     ];
     const { pills, visible } = collapseUnderWidth(blocks, 200);
     const seen = new Set<string>([
@@ -139,8 +126,6 @@ describe("collapseUnderWidth", () => {
   });
 
   it("depth past MAX_VISIBLE_CASCADE_DEPTH collapses even on wide columns", () => {
-    // One block per cascade depth, all 90 px wide (well above
-    // OVERFLOW_MIN_WIDTH_PX) so width never gates collapse — only depth.
     const blocks = [
       makeBlock("h", 0, 30, 0, 600, 0),
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
@@ -159,9 +144,6 @@ describe("collapseUnderWidth", () => {
   });
 
   it("depth ≤ MAX_VISIBLE_CASCADE_DEPTH stays visible regardless of column width", () => {
-    // Blocks at every depth ≤ MAX in a narrow column. Width would normally
-    // collapse them, but the test confirms depth alone doesn't push them out.
-    // (Width rule still composes — both rules can fire independently.)
     const blocks = [
       makeBlock("h", 0, 50, 0, 60, 0),
       ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
@@ -269,10 +251,8 @@ describe("collapseUnderWidth", () => {
   });
 });
 
-// ─── buildDayBlocks ──────────────────────────────────────────────────────────
-
 describe("buildDayBlocks", () => {
-  const day = new Date(2026, 2, 15); // March 15
+  const day = new Date(2026, 2, 15);
 
   it("single timed event → full-width, left 0", () => {
     const pages = [
@@ -293,9 +273,8 @@ describe("buildDayBlocks", () => {
   });
 
   it("synced (locked) timed event renders absolute in the viewer zone; native floats", () => {
-    // A native 3pm event floats — positioned at 15:00. A synced 3pm Los_Angeles
-    // event is absolute: 15:00 PDT = 22:00 UTC, and the UTC test runner is the
-    // viewer zone, so it positions 7h later. The shift is gated on scheduleLocked.
+    // A native 3pm event floats; a synced one is absolute, so with a UTC viewer 15:00 PDT sits
+    // at 22:00. The shift is gated on scheduleLocked.
     const native = makePage({
       id: "native",
       scheduledStart: "2026-03-15T15:00:00",
@@ -327,8 +306,6 @@ describe("buildDayBlocks", () => {
       timezone: "Asia/Tokyo",
       title: "All-day synced",
     });
-    // All-day pages aren't timed blocks — buildDayBlocks excludes them, proving
-    // the date-only path is never routed through the zoned conversion.
     expect(buildDayBlocks([synced], day)).toHaveLength(0);
   });
 
@@ -406,7 +383,6 @@ describe("buildDayBlocks", () => {
     expect(byId["a"]!.widthPct).toBe(50);
     expect(byId["b"]!.leftPct).toBe(50);
     expect(byId["b"]!.widthPct).toBe(50);
-    // c past second slot → marked for the pill, not cascaded inside the 50%.
     expect(byId["c"]!.cascadeDepth).toBeGreaterThan(MAX_VISIBLE_CASCADE_DEPTH);
   });
 
@@ -454,24 +430,18 @@ describe("buildDayBlocks", () => {
     );
     const blocks = buildDayBlocks(pages, day);
     const byId = Object.fromEntries(blocks.map((b) => [b.page.id, b]));
-    // p0 = host on the left half, depth 0.
     expect(byId["p0"]!.leftPct).toBe(0);
     expect(byId["p0"]!.widthPct).toBe(50);
     expect(byId["p0"]!.cascadeDepth).toBe(0);
-    // p1 = next-most-prominent guest on the full right half, depth 1.
     expect(byId["p1"]!.leftPct).toBe(50);
     expect(byId["p1"]!.widthPct).toBe(50);
     expect(byId["p1"]!.cascadeDepth).toBe(1);
-    // p2..p5 marked past MAX_VISIBLE_CASCADE_DEPTH so collapseUnderWidth folds
-    // them into the pill rather than stacking visual clutter inside the 50%.
     for (let i = 2; i < 6; i++) {
       expect(byId[`p${i}`]!.cascadeDepth).toBeGreaterThan(MAX_VISIBLE_CASCADE_DEPTH);
     }
   });
 
   it("cascade is capped (depth ≥ 4 events all sit at CASCADE_MAX_LEFT_PCT)", () => {
-    // Five events with tops 1h apart. Depths 0..3 cascade; depth 4 lands at
-    // the cap — leftPct stops growing so the deepest still has width.
     const pages = Array.from({ length: 5 }, (_, i) =>
       makePage({
         id: `p${i}`,
@@ -486,7 +456,6 @@ describe("buildDayBlocks", () => {
     expect(byId["p1"]!.leftPct).toBe(CASCADE_OFFSET_PCT);
     expect(byId["p2"]!.leftPct).toBe(2 * CASCADE_OFFSET_PCT);
     expect(byId["p3"]!.leftPct).toBe(3 * CASCADE_OFFSET_PCT);
-    // p4 is depth 4 — leftPct caps; widthPct stays at 100 - cap.
     expect(byId["p4"]!.leftPct).toBeLessThanOrEqual(60);
     expect(byId["p4"]!.widthPct).toBeGreaterThanOrEqual(40);
   });
@@ -525,11 +494,9 @@ describe("buildDayBlocks", () => {
       }),
     ];
     const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
-    // e0/e1 collide on top → split 50/50.
     expect(byId["e0"]!.widthPct).toBe(50);
     expect(byId["e1"]!.widthPct).toBe(50);
     expect(new Set([byId["e0"]!.leftPct, byId["e1"]!.leftPct])).toEqual(new Set([0, 50]));
-    // e2-e4 are spread out → cascade. None should be as narrow as a 5-way split.
     for (const id of ["e2", "e3", "e4"]) {
       expect(byId[id]!.widthPct).toBeGreaterThanOrEqual(100 - 60);
     }
@@ -558,12 +525,10 @@ describe("buildDayBlocks", () => {
     expect(host.widthPct).toBe(100);
     expect(guest.leftPct).toBe(CASCADE_OFFSET_PCT);
     expect(guest.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
-    // Both keep their own time-accurate top/height.
     expect(host.top).toBe(9 * HOUR_HEIGHT);
     expect(host.height).toBe(2 * HOUR_HEIGHT);
     expect(guest.top).toBe(10 * HOUR_HEIGHT);
     expect(guest.height).toBe(0.5 * HOUR_HEIGHT);
-    // DOM order: host (depth 0) before guest (depth 1) so guest paints on top.
     expect(blocks.indexOf(host)).toBeLessThan(blocks.indexOf(guest));
   });
 
@@ -608,7 +573,7 @@ describe("buildDayBlocks", () => {
       blocks.find((b) => b.page.title === title)!.leftPct;
 
     const before = buildDayBlocks([standup, review], day);
-    // Completing the standup swaps it for a clone carrying a fresh uuid.
+    // Completing swaps the page for a clone with a fresh uuid.
     const after = buildDayBlocks([{ ...standup, id: "z9", status: "done" }, review], day);
 
     expect(leftOf(after, "Standup")).toBe(leftOf(before, "Standup"));
@@ -616,11 +581,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("long host + chips: header-overlapping chip splits 50/50, body chips cascade", () => {
-    // Sunday meal prep (12-2 PM) with three reminder chips. The first chip
-    // (12:30) lands inside the host's title/time area (32px below host top
-    // < CASCADE_MIN_TOP_GAP_PX) so it splits 50/50 with the host. Later chips
-    // (1pm, 1:30pm) are well below the header and cascade like normal nested
-    // events at sweep-line depth 1.
     const pages = [
       makePage({
         id: "host",
@@ -633,13 +593,10 @@ describe("buildDayBlocks", () => {
       makePage({ id: "c3", scheduledStart: "2026-03-15T13:30:00", title: "Pack lunch" }),
     ];
     const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
-    // Host + first chip collide (chip in host's header) → 50/50 split.
     expect(byId["host"]!.leftPct).toBe(0);
     expect(byId["host"]!.widthPct).toBe(50);
     expect(byId["c1"]!.leftPct).toBe(50);
     expect(byId["c1"]!.widthPct).toBe(50);
-    // Other chips don't collide (chip-vs-chip threshold is much tighter, and
-    // their gap to the host > CASCADE_MIN_TOP_GAP_PX) → cascade depth 1.
     for (const id of ["c2", "c3"]) {
       expect(byId[id]!.leftPct).toBe(CASCADE_OFFSET_PCT);
       expect(byId[id]!.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
@@ -675,10 +632,8 @@ describe("buildDayBlocks", () => {
       }),
     ];
     const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
-    // Solo is its own cluster — full width, independent of the later pile.
     expect(byId["solo"]!.leftPct).toBe(0);
     expect(byId["solo"]!.widthPct).toBe(100);
-    // The pile has close tops → host 50%, second guest 50%, third folds.
     expect(byId["p1"]!.leftPct).toBe(0);
     expect(byId["p1"]!.widthPct).toBe(50);
     expect(byId["p2"]!.leftPct).toBe(50);
@@ -687,10 +642,8 @@ describe("buildDayBlocks", () => {
   });
 
   it("third event doesn't fall back to col 0 when col 1 is still alive (cascade visibility)", () => {
-    // A 8:30–10:30, B 9:30–12:30, C 11:00–12:00. A ends before C starts so
-    // col 0 is technically free, BUT col 1 (B) is still alive at 11:00. C
-    // must NOT reuse col 0 — otherwise it'd render at leftPct=0/widthPct=100
-    // and B's cascade would cover it (the bug). Force C to a fresh col 2.
+    // Column 0 is free when C starts, but B in column 1 is still live. C must not reuse column 0,
+    // or B's cascade would cover it.
     const pages = [
       makePage({
         id: "a",
@@ -777,9 +730,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("multi-day timed event renders as one segment per day (Mon → Thu = 4 segments)", () => {
-    // 9 AM Sun → 5 PM Wed: present on Sun, Mon, Tue, Wed columns. Sun gets
-    // segment from 9am to grid bottom (continuation after). Mon/Tue are
-    // full-grid continuations both ways. Wed runs from grid top to 5pm.
     const pages = [
       makePage({
         id: "trip",
@@ -815,8 +765,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("multi-day timed event: present on every spanned day, absent on adjacent days", () => {
-    // Sun 9 AM → Wed 5 PM. Should appear on Sun/Mon/Tue/Wed, NOT on the
-    // day before (Sat) or after (Thu).
     const pages = [
       makePage({
         id: "trip",
@@ -858,8 +806,6 @@ describe("buildDayBlocks", () => {
     const pages = [makePage({ scheduledStart: null, title: "No schedule" })];
     expect(buildDayBlocks(pages, day)).toHaveLength(0);
   });
-
-  // ── Cross-day events ──────────────────────────────────────────────────────
 
   it("event spanning midnight shows on both days", () => {
     const pages = [
@@ -905,8 +851,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("one-midnight event renders as split segments on both spanned days", () => {
-    // Single midnight crossed → segment A on day 1 runs to bottom of grid;
-    // segment B on day 2 runs from top of grid to event end.
     const pages = [
       makePage({
         scheduledEnd: "2026-03-16T02:45:00",
@@ -915,13 +859,11 @@ describe("buildDayBlocks", () => {
       }),
     ];
 
-    // Day 1 (segment A): start = 18:15, end = bottom of grid.
     const day1 = buildDayBlocks(pages, day);
     expect(day1).toHaveLength(1);
     expect(day1[0]!.isContinuationAfter).toBe(true);
     expect(day1[0]!.isContinuationBefore).toBeUndefined();
 
-    // Day 2 (segment B): start = top, end = 02:45.
     const day2 = buildDayBlocks(pages, new Date(2026, 2, 16));
     expect(day2).toHaveLength(1);
     expect(day2[0]!.isContinuationBefore).toBe(true);
@@ -1000,17 +942,15 @@ describe("buildDayBlocks", () => {
   it("24-hour event (1 midnight): split as 1h on day 1 + 23h on day 2", () => {
     const pages = [
       makePage({
-        scheduledEnd: "2026-03-16T23:00:00", // Mon 11pm
-        scheduledStart: "2026-03-15T23:00:00", // Sun 11pm
+        scheduledEnd: "2026-03-16T23:00:00",
+        scheduledStart: "2026-03-15T23:00:00",
         title: "Day-long",
       }),
     ];
-    // Sunday — segment A: 11pm to bottom (1h before midnight).
     const sun = buildDayBlocks(pages, day);
     expect(sun).toHaveLength(1);
     expect(sun[0]!.isContinuationAfter).toBe(true);
     expect(sun[0]!.top).toBe(23 * HOUR_HEIGHT);
-    // Monday — segment B: top to 11pm.
     const mon = buildDayBlocks(pages, new Date(2026, 2, 16));
     expect(mon).toHaveLength(1);
     expect(mon[0]!.isContinuationBefore).toBe(true);
@@ -1019,8 +959,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("cross-day event with same-day overlap cascades when tops are far apart", () => {
-    // Overnight visually starts at midnight (top=0), Morning at 8am.
-    // Top gap >> CASCADE_MIN_TOP_GAP_PX → cascade.
     const pages = [
       makePage({
         scheduledEnd: "2026-03-16T10:00:00",
@@ -1043,9 +981,6 @@ describe("buildDayBlocks", () => {
   });
 
   it("clipping invariant: every block stays inside its column (leftPct + widthPct ≤ 100)", () => {
-    // A pathological mix: deep cascade, close-top split, point clusters,
-    // and a containment guest. None of these should produce a block whose
-    // rendered width extends past the day-column right edge.
     const pages = [
       makePage({
         id: "host",
@@ -1141,9 +1076,6 @@ describe("remapBlocksForCollapse — boundary cases", () => {
   }
 
   it("block straddling top boundary clamps top to just past the band's pill", () => {
-    // event 5am-9am: starts in collapsed top band, ends in middle. The block's
-    // visual top sits 1px below the pill's bottom edge so straddling events all
-    // emerge from the same y while still rendering slightly into the band.
     const expectedTop = g.topBandHeight - collapsedBandInnerOffset(g.topBandHeight) + 1;
     const r = remapBlocksForCollapse([block(64 * 5, 64 * 4, "boundary")], g);
     expect(r.visible).toHaveLength(1);
@@ -1154,8 +1086,6 @@ describe("remapBlocksForCollapse — boundary cases", () => {
   });
 
   it("multiple top-straddling blocks share the same visual top", () => {
-    // 5:00–8:00, 5:15–6:15, 5:30–6:30, 5:45–6:45 should all start at the same
-    // anchor below the pill, not cascade by start-minute within the band.
     const expectedTop = g.topBandHeight - collapsedBandInnerOffset(g.topBandHeight) + 1;
     const r = remapBlocksForCollapse(
       [
@@ -1173,8 +1103,6 @@ describe("remapBlocksForCollapse — boundary cases", () => {
   });
 
   it("block straddling bottom boundary clamps bottom to just past the band's pill", () => {
-    // event 21:00–24:00: starts in middle, ends in collapsed bottom band. The
-    // block's visual bottom mirrors the top: 1px above the pill's top edge.
     const expectedBottom = g.middleEnd + collapsedBandInnerOffset(g.bottomBandHeight) - 1;
     const r = remapBlocksForCollapse([block(64 * 21, 64 * 3, "late")], g);
     expect(r.visible).toHaveLength(1);
@@ -1238,8 +1166,6 @@ describe("remapBlocksForCollapse — boundary cases", () => {
   });
 
   it("a 24h continuation segment straddles both bands", () => {
-    // Multi-day continuation: top=0, height=24h. Both straddle flags set so
-    // top+bottom corners square (matching the existing isContinuation* path).
     const r = remapBlocksForCollapse([block(0, 64 * 24, "all-day-timed")], g);
     expect(r.visible).toHaveLength(1);
     expect(r.visible[0]!.straddlesTopBand).toBe(true);
@@ -1286,9 +1212,8 @@ describe("block treatment across the calendar text-size ladder", () => {
     };
   }
 
-  // Every block at every size is thousands of layouts: about a second alone, and past vitest's
-  // five-second default when it shares the machine with the rest of the verify gate, which twice
-  // failed a commit on a timeout with nothing wrong. Its length says nothing about correctness.
+  // Thousands of layouts: about a second alone, and past vitest's five-second default when it
+  // shares the machine with the verify gate. The length says nothing about correctness.
   it("gives every block the treatment it has at the default text size", { timeout: 30_000 }, () => {
     for (const density of DENSITIES) {
       for (let start = 7 * 60; start < 21 * 60; start += 15) {

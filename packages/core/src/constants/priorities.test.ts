@@ -1,14 +1,9 @@
-// priorities — shared NLP priority mapping + UI labels. Tests pin the
-// contract between the parser's PagePriority strings and the schema's
-// numeric priority values.
-
 import { describe, expect, it } from "vitest";
 
 import { NLP_PRIORITY_MAP, PRIORITY_COLORS, PRIORITY_LABELS } from "./priorities";
 
 describe("NLP_PRIORITY_MAP", () => {
   it("maps every parser-produced priority string to a numeric PagePriority", () => {
-    // Source of truth: the parser's PagePriority union ('urgent' | 'high' | 'medium' | 'low').
     const parserStrings = ["urgent", "high", "medium", "low"] as const;
     for (const s of parserStrings) {
       expect(NLP_PRIORITY_MAP[s]).toBeDefined();

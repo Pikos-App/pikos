@@ -1,11 +1,7 @@
-// PlatformAdapter for environments with no host shell — unit tests and the
-// VITE_TEST_MODE browser build the e2e suite drives.
-//
-// Every method resolves rather than throws, and each answer is chosen to match
-// what the call sites already saw when the raw Tauri call failed in these
-// environments: pickers cancel, permission is unknown rather than denied, and
-// the shell verbs quietly do nothing. That keeps the mock path byte-identical
-// to the behaviour the tests were written against.
+// PlatformAdapter for environments with no host shell (unit tests, the VITE_TEST_MODE browser
+// build). Every method resolves rather than throws, with the answer call sites saw when the raw
+// Tauri call failed there: pickers cancel, permission is unknown rather than denied, and shell
+// verbs do nothing.
 
 import type {
   NativeFileDrop,
@@ -17,7 +13,7 @@ import type {
 } from "../platform";
 
 export class NoopPlatformAdapter implements PlatformAdapter {
-  /** Every call, in order, for tests that want to assert on the interaction. */
+  /** Every call, in order, for assertions on the interaction. */
   readonly calls: { method: string; args: unknown[] }[] = [];
 
   private record(method: string, ...args: unknown[]): void {
@@ -54,7 +50,7 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve();
   }
 
-  /** Unknown, not denied — there is no OS here to have an opinion. */
+  /** Unknown, not denied: there is no OS to have an opinion. */
   checkNotificationPermission(): Promise<boolean | null> {
     this.record("checkNotificationPermission");
     return Promise.resolve(null);
@@ -105,8 +101,7 @@ export class NoopPlatformAdapter implements PlatformAdapter {
     return Promise.resolve();
   }
 
-  /** Echoes the source path back: there is no store to copy into, and the
-   *  editor only ever feeds the result to `assetUrl`, which is also identity. */
+  /** Echoes the source path: there is no store to copy into, and `assetUrl` is identity too. */
   saveAsset(sourcePath: string): Promise<string> {
     this.record("saveAsset", sourcePath);
     return Promise.resolve(sourcePath);
