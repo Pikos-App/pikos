@@ -71,6 +71,9 @@
 use log::LevelFilter;
 use tauri_plugin_log::{Builder, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
+/// Old files kept beside `pikos.log`, at up to 2 MB each.
+const LOG_FILES_KEPT: usize = 5;
+
 /// Build the configured `tauri-plugin-log` plugin. Call once during
 /// `tauri::Builder::default().plugin(...)`.
 pub fn build_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -101,7 +104,10 @@ pub fn build_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         // Panic hook target — always surface panics.
         .level_for("panic", LevelFilter::Error)
         .max_file_size(2 * 1024 * 1024)
-        .rotation_strategy(RotationStrategy::KeepOne)
+        // `KeepOne` dropped the whole history each time the file filled, and a sync bug
+        // reported weeks later needs the weeks before it. `pikos.log` stays the current
+        // file, so everything that opens it by name still finds it.
+        .rotation_strategy(RotationStrategy::KeepSome(LOG_FILES_KEPT))
         .timezone_strategy(TimezoneStrategy::UseUtc);
 
     // RUST_LOG overrides for fine-grained control.

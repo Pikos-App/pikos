@@ -168,15 +168,26 @@ async fn apply_event(
     if ended_before_window(ev, ctx.window_start) {
         return match existing {
             Some((page_sync_id, page_id, _, state, _)) if state == "active" => {
-                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream, Some(ENDED))
+                    .await?;
                 Ok(Some(page_id))
             }
-            _ => Ok(None),
+            _ => {
+                log::info!(
+                    "calendar_sync_refused event={} why={ENDED}",
+                    ev.core.external_id
+                );
+                Ok(None)
+            }
         };
     }
 
     // A full enumerate is already windowed by the provider's own query.
     if !full_enumerate && existing.is_none() && one_off_ended_before_window(ev, ctx.window_start) {
+        log::info!(
+            "calendar_sync_refused event={} why=one_off_before_window",
+            ev.core.external_id
+        );
         return Ok(None);
     }
 
@@ -369,7 +380,7 @@ async fn carry_past_end(
     else {
         return Ok(());
     };
-    let ticked = move_occurring_dates(
+    let (ticked, ticks_left) = move_occurring_dates(
         tx,
         "SELECT occurrence_date FROM completed_set
          WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
@@ -379,7 +390,7 @@ async fn carry_past_end(
         to_page,
     )
     .await?;
-    let skipped = move_occurring_dates(
+    let (skipped, skips_left) = move_occurring_dates(
         tx,
         "SELECT occurrence_date FROM skip_set
          WHERE page_id = ? AND substr(occurrence_date, 1, 10) >= ?",
@@ -389,7 +400,16 @@ async fn carry_past_end(
         to_page,
     )
     .await?;
-    if ticked || skipped {
+    // Dates left behind are the case worth finding in the log. A pass that sees both
+    // halves checks the pair twice, and the second finds nothing left to move.
+    if ticked + skipped + ticks_left + skips_left > 0 {
+        log::info!(
+            "calendar_sync_split_carry from={from_page} to={to_page} after={ends} \
+             ticks={ticked} skips={skipped} left_behind={}",
+            ticks_left + skips_left
+        );
+    }
+    if ticked + skipped > 0 {
         crate::recurrence_derive::recompute_recurring_schedule(tx, from_page).await?;
         crate::recurrence_derive::recompute_recurring_schedule(tx, to_page).await?;
     }
@@ -397,7 +417,7 @@ async fn carry_past_end(
 }
 
 /// Moves each date `select` reads off `from_page` from `from_day` on that `to_page` has
-/// an occurrence on. Returns whether any moved.
+/// an occurrence on. Returns how many moved and how many stayed.
 async fn move_occurring_dates(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     select: &str,
@@ -405,25 +425,25 @@ async fn move_occurring_dates(
     from_page: &str,
     from_day: &str,
     to_page: &str,
-) -> AppResult<bool> {
+) -> AppResult<(usize, usize)> {
     let dates: Vec<String> = sqlx::query_scalar(select)
         .bind(from_page)
         .bind(from_day)
         .fetch_all(&mut **tx)
         .await?;
-    let mut moved = false;
-    for date in dates {
-        if crate::pages::synced_occurrence_is_valid(tx, to_page, &date).await? {
+    let mut moved = 0;
+    for date in &dates {
+        if crate::pages::synced_occurrence_is_valid(tx, to_page, date).await? {
             sqlx::query(update)
                 .bind(to_page)
                 .bind(from_page)
-                .bind(&date)
+                .bind(date)
                 .execute(&mut **tx)
                 .await?;
-            moved = true;
+            moved += 1;
         }
     }
-    Ok(moved)
+    Ok((moved, dates.len() - moved))
 }
 
 /// Whether a one-off event was over before `window`, the first day the sync reaches.
@@ -511,7 +531,14 @@ pub async fn remove_ended_series(
         let mut removed = 0;
         for (page_sync_id, page_id, rrule, start, tz, moved_in) in rows {
             if !moved_in && rule_ended(&rrule, &start, &tz, ctx.window_start) {
-                detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+                detach_or_delete(
+                    &mut tx,
+                    &page_sync_id,
+                    &page_id,
+                    Severed::Upstream,
+                    Some(ENDED),
+                )
+                .await?;
                 removed += 1;
             }
         }
@@ -904,7 +931,14 @@ async fn apply_removal(
     if state != "active" {
         return Ok(false);
     }
-    detach_or_delete(tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+    detach_or_delete(
+        tx,
+        &page_sync_id,
+        &page_id,
+        Severed::Upstream,
+        Some("removed_upstream"),
+    )
+    .await?;
     Ok(true)
 }
 
@@ -928,16 +962,27 @@ impl Severed {
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
 /// full-enumerate sweep: an owned page detaches (keeps its dormant identity for a
 /// later resync re-link); a bare mirror hard-deletes.
+/// The reason a series that ended before the window was refused or removed, as logged.
+const ENDED: &str = "series_ended_before_window";
+
+/// `why` names the cause in the log, so a page that left a calendar can be traced to
+/// it. Ids only, never a title.
 async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
     page_id: &str,
     by: Severed,
+    why: Option<&str>,
 ) -> AppResult<()> {
-    if is_owned(tx, page_id).await? {
+    let owned = is_owned(tx, page_id).await?;
+    if owned {
         detach_sync(tx, page_sync_id, page_id, by).await?;
     } else {
         hard_delete_page(tx, page_id).await?;
+    }
+    if let Some(why) = why {
+        let what = if owned { "detached" } else { "deleted" };
+        log::info!("calendar_sync_{what} page={page_id} why={why}");
     }
     Ok(())
 }
@@ -999,7 +1044,14 @@ pub async fn sweep_absent(
         ) {
             continue;
         }
-        detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::Upstream).await?;
+        detach_or_delete(
+            &mut tx,
+            &page_sync_id,
+            &page_id,
+            Severed::Upstream,
+            Some("absent_from_full_enumerate"),
+        )
+        .await?;
         removed += 1;
     }
 
@@ -1139,7 +1191,8 @@ async fn teardown_page_batch(
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
-            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff).await?,
+            // Asked for by the user, page by page through a whole calendar: unlogged.
+            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff, None).await?,
         }
     }
 
