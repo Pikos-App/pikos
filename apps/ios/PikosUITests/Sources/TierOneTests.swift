@@ -973,6 +973,23 @@ final class TierOneTests: PikosUITestCase {
         XCTAssertFalse(app.navigationBars["Water the plants"].exists, "without opening the page")
     }
 
+    func testAnUndatedPagesHeaderOffersADate() {
+        showView("Inbox")
+        quickAdd("Sort the receipts")
+        assertRowExists("Sort the receipts")
+        app.collectionViews.staticTexts["Sort the receipts"].firstMatch.tap()
+        XCTAssertTrue(textInput("Title").waitForExistence(timeout: Self.timeout))
+
+        let schedule = app.buttons["Set schedule"].firstMatch
+        XCTAssertTrue(schedule.waitForExistence(timeout: Self.timeout), "a page with no date can be given one")
+        schedule.tap()
+        app.buttons["Tomorrow"].firstMatch.tap()
+
+        XCTAssertTrue(waitForDisappearance(of: schedule), "the page now has a date")
+        let reminders = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Reminders:'")).firstMatch
+        XCTAssertTrue(reminders.waitForExistence(timeout: Self.timeout), "and the header shows what a dated page does")
+    }
+
     // qa: IOS-67
     /// `PKOS-0204`: Delete ends the left swipe and goes to the trash with Undo.
     func testARowSwipesLeftToDeleteWithUndo() {

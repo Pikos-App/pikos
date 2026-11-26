@@ -158,6 +158,8 @@ struct EditorHeader: View {
                 if let start = page.scheduledStart {
                     dateChip(start)
                     ReminderChip(pageId: page.id, isAllDay: CalendarGeometry.isAllDay(start))
+                } else {
+                    scheduleChip
                 }
                 if let priority = PagePriority(stored: page.priority) {
                     priorityChip(priority)
@@ -211,6 +213,20 @@ struct EditorHeader: View {
             .touchTarget()
         }
         .buttonStyle(.plain)
+    }
+
+    private var scheduleChip: some View {
+        Button {
+            actions.sheet = .schedule(facts)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "calendar")
+                Text("Schedule")
+            }
+            .touchTarget()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Set schedule")
     }
 
     private func priorityChip(_ priority: PagePriority) -> some View {
