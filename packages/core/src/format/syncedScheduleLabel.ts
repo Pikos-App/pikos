@@ -5,17 +5,13 @@ import { resolveSyncedInstant } from "../utils/syncedTime";
 import { formatTriggerLabel } from "./dateTimePicker";
 
 /**
- * Read-only schedule label for a synced (locked) event, shared by the editor
- * byline and the calendar block popover. Timed events resolve to the viewer's
- * zone (absolute) — the returned time IS the user's local time, so no zone
- * qualifier is shown (a "4pm in Tokyo" tag reads as Tokyo time, the opposite of
- * what's meant). All-day synced events never shift.
+ * Read-only schedule label for a synced (locked) event, shared by the editor byline and the
+ * calendar block popover. A timed event resolves to the viewer's zone, so the time is the
+ * user's local time and no zone qualifier shows ("4pm in Tokyo" reads as Tokyo time, the
+ * opposite of what's meant). All-day events never shift.
  *
- * Gated on `scheduleLocked`, the same as `viewerStart` and the calendar grid's
- * `resolveBlockInstant`. Every call site already wraps this in a locked branch, so
- * the gate changes nothing today — it is here so the three paths cannot drift into
- * disagreeing about what "absolute" means, which is how a native page came to be
- * converted as if it were a meeting.
+ * Gated on `scheduleLocked`, like `viewerStart` and `resolveBlockInstant`, so the three paths
+ * can't disagree about what "absolute" means.
  */
 export function syncedScheduleLabel(page: PageSummary): string | null {
   const start = page.scheduledStart;

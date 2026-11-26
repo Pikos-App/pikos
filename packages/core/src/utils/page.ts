@@ -1,7 +1,5 @@
-// Single-page predicates plus the projections and lookups every page-list owner
-// needs. Kept here so a future PageStatus addition (e.g. "in_progress") — or a
-// change to how a done clone is linked back to its series — has one place to
-// update instead of every list/filter/context site.
+// Page predicates and projections every list owner needs, kept in one place so a new PageStatus or
+// a change to how a done clone links back to its series has one site to update.
 
 import { CONTENT_SCHEMA_VERSION } from "../types";
 import type { Page, PageSummary, Tag } from "../types";
@@ -22,14 +20,13 @@ export function isBodyFromNewerBuild(page: Pick<Page, "contentSchemaVersion">): 
   return page.contentSchemaVersion > CONTENT_SCHEMA_VERSION;
 }
 
-/** Drop the body — list state holds summaries, never full pages. */
+/** List state holds summaries, never full pages. */
 export function toPageSummary(page: Page): PageSummary {
   const { content: _, ...summary } = page;
   return summary;
 }
 
-/** Tags are derived from pages[].tags on every read, never stored separately —
- * there is no tags table to drift from the pages that carry them. */
+/** Derived from `pages[].tags` on every read, so there is no tags table to drift. */
 export function deriveTags(pages: PageSummary[]): Tag[] {
   const map = new Map<string, { count: number; ids: string[] }>();
   for (const page of pages) {
@@ -51,12 +48,9 @@ export function deriveTags(pages: PageSummary[]): Tag[] {
 }
 
 /**
- * Find the recurring series + date a done clone belongs to, or null — native or
- * synced. Scans the loaded series' completion maps — reliable because active
- * series are always in the page list (the loader fetches all active pages with
- * no folder/range filter), and the done clone's series is active. Skips pages
- * with no completion map in O(1) each, so an uncheck costs ~one property read
- * per page.
+ * The recurring series and date a done clone belongs to, or null, native or synced. Scans the
+ * loaded series' completion maps, which is reliable because active series are always in the page
+ * list and a done clone's series is active.
  */
 export function findRecurringOccurrenceClone(
   pages: PageSummary[],

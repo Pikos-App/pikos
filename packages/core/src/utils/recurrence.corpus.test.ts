@@ -1,18 +1,10 @@
-// ─── Conformance corpus — a regression fixture, no longer a live oracle ───────
+// The committed JSON is rrule.js output, and the Rust engine must keep matching it byte for
+// byte. `recurrence.ts` calls the engine under test, so `GEN_CORPUS=1` would re-bless whatever
+// the engine currently does: regenerate only against a real rrule.js install (see
+// `scripts/gen-rrule-goldens.mjs`) and treat `rrule_js_goldens.rs` as the external oracle.
 //
-// The committed JSON is genuine rrule.js output, captured when `recurrence.ts`
-// still wrapped it, and the Rust engine must keep matching it byte for byte. What
-// changed with the wasm harvest is where a *regeneration* now reads from:
-// `recurrence.ts` calls the same engine under test, so `GEN_CORPUS=1` would
-// re-bless whatever the engine currently does. Regenerate only against a real
-// rrule.js install (see `scripts/gen-rrule-goldens.mjs`), and treat
-// `rrule_js_goldens.rs` as the external oracle.
-//
-// It runs as a golden-file guard: normally it regenerates in-memory and asserts
-// equality with the committed fixture, so any drift in rrule.js behavior (a
-// version bump, a change to the wrapper semantics) fails here and forces a
-// regenerate + Rust re-check. Regenerate with `GEN_CORPUS=1 pnpm --filter
-// @pikos/core test recurrence.corpus`.
+// Normally this regenerates in memory and asserts equality with the committed fixture, so drift
+// fails here. Regenerate with `GEN_CORPUS=1 pnpm --filter @pikos/core test recurrence.corpus`.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -77,8 +69,6 @@ function rule(
   };
 }
 
-// ─── Case inputs (divergence-prone RRULE features are the point) ──────────────
-
 interface ExpandCase {
   name: string;
   rrule: string;
@@ -89,7 +79,6 @@ interface ExpandCase {
   rangeEnd: string;
 }
 
-// Monday 2026-03-02 09:00 is the shared timed anchor; all-day cases use date-only.
 const EXPAND_CASES: ExpandCase[] = [
   {
     end: "2026-03-02T09:30:00",
@@ -108,8 +97,7 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-03-02T09:00:00",
   },
   {
-    // BYSETPOS beyond the period's candidate count selects nothing (no month has a
-    // 10th Monday) — the empty-period path, terminating rather than looping.
+    // No month has a 10th Monday: the empty-period path must terminate.
     end: "2026-03-02T10:00:00",
     name: "monthly BYSETPOS out of range yields nothing",
     rangeEnd: "2026-06-01T00:00:00",
@@ -141,7 +129,6 @@ const EXPAND_CASES: ExpandCase[] = [
     rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;WKST=SU",
     start: "2026-03-03T09:00:00",
   },
-  // Sun+Mon straddle the week boundary, so WKST genuinely changes the interval grouping.
   {
     end: "2026-03-01T10:00:00",
     name: "weekly interval=2 BYDAY=SU,MO WKST=MO",
@@ -207,8 +194,6 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-01-30T09:00:00",
   },
   {
-    // BYSETPOS over a BYMONTHDAY set — supported but never paired above; picks the
-    // first & last of {1st, 15th, last-day} each month.
     end: "2026-01-01T09:30:00",
     name: "monthly BYMONTHDAY + BYSETPOS",
     rangeEnd: "2026-04-01T00:00:00",
@@ -250,8 +235,7 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-03-02T09:00:00",
   },
   {
-    // A synced cancelled instance: the exdate is stored as full wall-clock, but
-    // occurrences match by day. Both engines must day-key it and drop Mar 16.
+    // A synced exdate is full wall clock but occurrences match by day: both engines must day-key it.
     end: "2026-03-02T10:00:00",
     exdates: ["2026-03-16T09:00:00"],
     name: "weekly timed exdate (full wall-clock)",
@@ -284,7 +268,6 @@ const EXPAND_CASES: ExpandCase[] = [
     rrule: "FREQ=DAILY",
     start: "2026-10-30T09:00:00",
   },
-  // Real provider RRULEs lifted from the CalDAV/ICS fixtures.
   {
     end: "2026-01-06T10:00:00",
     name: "provider weekly TU,TH count=12",
@@ -301,7 +284,6 @@ const EXPAND_CASES: ExpandCase[] = [
     rrule: "FREQ=WEEKLY;BYDAY=TU;INTERVAL=2;UNTIL=20260511T235959Z",
     start: "2026-03-03T09:00:00",
   },
-  // UNTIL forms providers emit beyond the T235959Z form the rest of the corpus uses.
   {
     end: "2026-03-02T10:00:00",
     name: "until date-only form",
@@ -318,7 +300,6 @@ const EXPAND_CASES: ExpandCase[] = [
     rrule: "FREQ=DAILY;UNTIL=20260315T100000",
     start: "2026-03-02T09:00:00",
   },
-  // Leap-day yearly anchor: only leap years have a Feb 29.
   {
     end: "2024-02-29T10:00:00",
     name: "leap-day yearly anchor",
@@ -329,9 +310,8 @@ const EXPAND_CASES: ExpandCase[] = [
   },
 ];
 
-// Seeded property cases: deterministic pseudo-random rules across the supported
-// envelope. Hand-picked cases above pin known divergences; these catch unknown
-// ones on each regeneration without introducing nondeterminism.
+// Seeded cases: deterministic pseudo-random rules. Hand-picked cases pin known divergences; these
+// catch unknown ones on each regeneration.
 function mulberry32(seed: number): () => number {
   let s = seed;
   return () => {
@@ -373,10 +353,7 @@ function propertyExpandCases(): PropertyCase[] {
         if (rand() < 0.5) parts.push(`BYSETPOS=${pick([1, 2, -1])}`);
       }
     }
-    // COUNT bounds each case to a handful of occurrences (keeps the fixture
-    // small) while still exercising the enumeration + COUNT interaction.
     parts.push(`COUNT=${int(3, 8)}`);
-    // Day 5 exists in every month, keeping the anchor rule-agnostic.
     const startMonth = String(int(1, 12)).padStart(2, "0");
     cases.push({
       rangeEnd: "2033-01-01T00:00:00",
@@ -428,8 +405,7 @@ const NEXT_CASES: NextCase[] = [
     rrule: "FREQ=DAILY",
     start: "2026-01-01T08:00:00",
   },
-  // Far-future seek for the non-daily frequencies — bases years before `after`,
-  // so seek_near's WEEKLY/MONTHLY/YEARLY period approximation is load-bearing.
+  // Bases years before `after` make seek_near's period approximation load-bearing.
   {
     after: "2027-06-01T00:00:00",
     name: "far-future seek WEEKLY;INTERVAL=2;WKST=SU",
@@ -557,7 +533,6 @@ const ROUNDTRIP_CASES = [
   "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU",
   "FREQ=MONTHLY;BYMONTHDAY=15",
   "FREQ=MONTHLY;BYMONTHDAY=-1",
-  // Provider terms the editor never authors, but must not drop on a save.
   "FREQ=MONTHLY;BYDAY=1MO",
   "FREQ=MONTHLY;BYDAY=-1FR",
   "FREQ=MONTHLY;BYDAY=MO,2WE",
@@ -607,8 +582,6 @@ function generateCorpus() {
       exdates: c.exdates ?? [],
       expected: nextOccurrenceAfter(c.rrule, c.start, parseLocalISO(c.after), c.exdates ?? []),
     })),
-    // Compact date-only parity for the seeded property rules — start/end
-    // formatting is already pinned by the hand-written expandRange cases.
     propertyExpand: propertyExpandCases().map((c) => ({
       ...c,
       dates: expandRecurrenceForRange(

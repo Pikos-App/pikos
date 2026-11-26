@@ -1,7 +1,5 @@
-// Quick Add folder resolution, run against the table `fuzzy_match_folder` also runs.
-// The parser hands both binaries the same `folderQuery` out of the same workspace,
-// so a tier that exists on one side only files the string differently depending on
-// which one the user typed it into.
+// The same table `fuzzy_match_folder` runs. A tier on one side only would file the same
+// `folderQuery` differently depending on whether it was typed into Quick Add or the CLI.
 
 import { describe, expect, it } from "vitest";
 

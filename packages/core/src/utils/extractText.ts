@@ -6,11 +6,8 @@ interface TiptapNode {
 }
 
 /**
- * Extracts plain text from a Tiptap JSON document.
- * Used to populate `content_text` for full-text search in SQLite FTS5.
- *
- * Accepts either a parsed Tiptap JSON object or a JSON string.
- * Returns empty string for empty/invalid input (never throws).
+ * Plain text of a Tiptap document (parsed or a JSON string) for `content_text`, which FTS5
+ * indexes. Empty or invalid input gives "" and never throws.
  */
 export function extractText(doc: unknown): string {
   if (typeof doc === "string") {
@@ -42,7 +39,6 @@ function walkNode(node: TiptapNode, parts: string[]): void {
 
   if (!node.content) return;
 
-  // Block-level nodes get their children joined, then a newline separates blocks
   const isBlock =
     node.type === "paragraph" ||
     node.type === "heading" ||
@@ -59,8 +55,6 @@ function walkNode(node: TiptapNode, parts: string[]): void {
   if (isBlock) {
     parts.push(childParts.join(""));
   } else {
-    // Container nodes (doc, bulletList, orderedList, taskList)
-    // just pass children through
     for (const part of childParts) {
       parts.push(part);
     }

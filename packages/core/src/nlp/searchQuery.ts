@@ -1,8 +1,6 @@
-// Search-palette operators: `tag:`, `folder:`, `is:`, `priority:`, `due:` lifted
-// out of a query, leaving the free text behind. Token-stripping in the same style
-// as the quick-add parser (nlp/parser.ts) — an operator the grammar doesn't know
-// is left in the text rather than swallowed, so typing "ratio:1" still searches
-// for "ratio:1".
+// Search-palette operators (`tag:`, `folder:`, `is:`, `priority:`, `due:`) lifted out of a query,
+// leaving the free text. Token-stripping as in the quick-add parser: an operator the grammar
+// doesn't know stays in the text, so "ratio:1" still searches for "ratio:1".
 
 import { addDays } from "date-fns";
 
@@ -13,21 +11,18 @@ import { fuzzyMatchFolder } from "../utils/fuzzyMatchFolder";
 export interface ParsedSearchQuery {
   /** Free text left after every recognised operator was lifted out. */
   text: string;
-  /** Every `tag:` value, in the order typed — matched conjunctively. */
+  /** In the order typed; matched conjunctively. */
   tags: string[];
-  /** Raw `folder:` value; the caller resolves it against real folders. */
+  /** Raw; the caller resolves it against real folders. */
   folder: string | null;
-  /** From `is:done` / `is:open`. */
   status: "done" | "not_started" | null;
-  /** From `is:scheduled`. */
   scheduled: boolean;
-  /** 0 (none) … 4 (low), from `priority:`. */
   priority: PagePriority | null;
-  /** Inclusive lower bound as "YYYY-MM-DD". */
+  /** Inclusive, "YYYY-MM-DD". */
   dueFrom: string | null;
-  /** Inclusive upper bound as "YYYY-MM-DDT23:59:59" — mirrors the CLI's `parse_due`. */
+  /** Inclusive, "YYYY-MM-DDT23:59:59", as the CLI's `parse_due`. */
   dueTo: string | null;
-  /** True when at least one operator was recognised and stripped. */
+  /** At least one operator was recognised and stripped. */
   hasOperators: boolean;
 }
 
@@ -37,7 +32,7 @@ export interface SearchFilterBuild {
   unresolvedFolder: string | null;
 }
 
-/** Priority words and digits share the quick-add parser's scale: 1 = urgent … 4 = low, 0 = none. */
+/** Priority words and digits use the quick-add parser's scale (1 urgent ... 4 low, 0 none). */
 const PRIORITY_VALUES: Record<string, PagePriority> = {
   "0": 0,
   "1": 1,
@@ -51,14 +46,13 @@ const PRIORITY_VALUES: Record<string, PagePriority> = {
   urgent: 1,
 };
 
-// `(^|\s)` anchors each operator to a word start so "path/to:file" and an
-// email-ish "is:x" inside a longer token stay text. A value is either a quoted
+// `(^|\s)` anchors an operator to a word start, so "path/to:file" stays text. A value is a quoted
 // string (spaces allowed) or a run of non-space characters.
 const OPERATOR_RE = /(^|\s)(tag|folder|is|priority|due):(?:"([^"]*)"|(\S+))/gi;
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** True only for a real calendar date — "2026-02-31" matches the shape but isn't one. */
+/** "2026-02-31" matches the shape but isn't a date. */
 function isRealDate(iso: string): boolean {
   if (!ISO_DATE_RE.test(iso)) return false;
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
@@ -66,7 +60,7 @@ function isRealDate(iso: string): boolean {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
-/** One `due:` endpoint → the day span it names, or null when it names nothing. */
+/** One `due:` endpoint as the day span it names, or null. */
 function resolveDueEndpoint(token: string, ref: Date): { from: string; to: string } | null {
   const t = token.toLowerCase();
   if (isRealDate(t)) return { from: t, to: t };
@@ -91,11 +85,8 @@ function resolveDueEndpoint(token: string, ref: Date): { from: string; to: strin
   }
 }
 
-/**
- * A `due:` value: one endpoint, or an `a..b` range where either side may be
- * omitted for an open-ended bound. Returns null when any named endpoint fails
- * to resolve, so the whole token falls back to free text.
- */
+/** One endpoint or an `a..b` range, either side omittable for an open bound. Null when any named
+ * endpoint fails to resolve, so the whole token falls back to free text. */
 function resolveDue(value: string, ref: Date): { from: string | null; to: string | null } | null {
   if (value.includes("..")) {
     const parts = value.split("..");
@@ -112,10 +103,7 @@ function resolveDue(value: string, ref: Date): { from: string | null; to: string
   return single ? { from: single.from, to: single.to } : null;
 }
 
-/**
- * Splits a palette query into operators plus the free text around them.
- * `now` is injectable so `due:today` is testable.
- */
+/** Splits a palette query into operators and free text. `now` is injectable for `due:today`. */
 export function parseSearchQuery(raw: string, now?: Date): ParsedSearchQuery {
   const ref = now ?? new Date();
 
@@ -193,12 +181,9 @@ export function parseSearchQuery(raw: string, now?: Date): ParsedSearchQuery {
 }
 
 /**
- * Turns parsed operators into the `PageFilter` the storage layer takes.
- *
- * `text` is deliberately NOT mapped onto `PageFilter.query`: that field is an
- * unindexed `title LIKE … OR content_text LIKE …` table scan that list_pages_impl
- * documents as test-only. Free text keeps going through FTS5 and the caller
- * intersects the two result sets.
+ * The `PageFilter` for parsed operators. `text` is not mapped onto `PageFilter.query`, an
+ * unindexed `title LIKE ... OR content_text LIKE ...` scan that `list_pages_impl` documents as
+ * test-only; free text goes through FTS5 and the caller intersects the results.
  */
 export function buildSearchFilter(parsed: ParsedSearchQuery, folders: Folder[]): SearchFilterBuild {
   const filter: PageFilter = {};
@@ -209,7 +194,6 @@ export function buildSearchFilter(parsed: ParsedSearchQuery, folders: Folder[]):
     if (match) {
       filter.folderId = match.id;
     } else if (parsed.folder.toLowerCase() === "inbox") {
-      // No folder row backs the inbox — it's the pages with no folder at all.
       filter.folderId = null;
     } else {
       unresolvedFolder = parsed.folder;
@@ -221,10 +205,9 @@ export function buildSearchFilter(parsed: ParsedSearchQuery, folders: Folder[]):
   if (parsed.tags.length > 0) filter.tags = [...parsed.tags];
   if (parsed.dueFrom !== null) filter.scheduledAfter = parsed.dueFrom;
   if (parsed.dueTo !== null) filter.scheduledBefore = parsed.dueTo;
-  // A date bound only means anything for a scheduled page, and the two storage
-  // backends disagree about unscheduled rows on their own (SQL drops them on the
-  // NULL compare, the mock adapter keeps them). Asking for a schedule outright
-  // makes both answer the same.
+  // A date bound only applies to a scheduled page, and the backends disagree on unscheduled rows
+  // (SQL drops them on the NULL compare, the mock keeps them); requiring a schedule makes both
+  // answer the same.
   if (parsed.scheduled || parsed.dueFrom !== null || parsed.dueTo !== null) {
     filter.hasSchedule = true;
   }

@@ -1,13 +1,10 @@
-// Ask the TypeScript quick-add parser directly.
-//
-// The corpus says what `parseInput` does for the 317 inputs it happens to
-// contain. When the Rust port needs to know what it does just outside that —
-// does a day list keep the order it was typed? what does an empty tag do? —
-// this asks, so the answer comes from the reference rather than from a guess:
+// Asks the TypeScript quick-add parser directly, for what it does just outside the corpus (does a
+// day list keep its order? what does an empty tag do?), so the Rust port answers from the
+// reference, not a guess:
 //
 //   pnpm --filter @pikos/core probe:parser -- "every friday and monday"
 //
-// Reference defaults to the corpus's sun_noon; override with PROBE_REF.
+// The reference defaults to the corpus's sun_noon; override with PROBE_REF.
 
 import { parseInput } from "../../src/nlp/parser";
 

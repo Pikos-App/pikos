@@ -1,13 +1,12 @@
 import type { AccountWithCalendars, CalendarSyncResult, SyncCalendar } from "../types";
 
-// Four-state calendar health, derived not persisted: the read model only has
-// `enabled` + `lastSyncedAt`, so a resync result (when in hand) sharpens the
-// verdict — offline/reconnect aren't otherwise visible.
+// Calendar health is derived, not persisted: the read model has only `enabled` and
+// `lastSyncedAt`, so a resync result, when in hand, sharpens the verdict (offline and reconnect
+// aren't otherwise visible).
 export type SyncDotState = "active" | "off" | "stale" | "error";
 
-// Enabled but no successful poll within this window → stale. Poll interval is
-// ~5 min, so this gives a few intervals' grace (e.g. after the app was asleep)
-// absent a fresher resync result.
+// Enabled with no successful poll in this window is stale. Polling is every ~5 min, so this
+// leaves a few intervals' grace (after the app slept) absent a fresher resync result.
 export const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export interface SyncDotMeta {
@@ -48,14 +47,11 @@ function calendarSyncState(
 
 export type AccountConnectionState = "connected" | "reconnectNeeded";
 
-// An account is "Reconnect needed" the moment any calendar's last resync surfaced
-// a credential failure — an account-wide auth problem, not per-calendar.
-//
-// `persisted` is the account's stored flag, and it carries the case a resync result
-// cannot: a background pass hit the rejection, so nothing in this session has a
-// result to report, and the scheduler has since dropped the account from the poll
-// loop. Without it a dead credential reads as "Connected" until someone resyncs by
-// hand.
+// An account needs reconnecting the moment any calendar's last resync surfaced a credential
+// failure, an account-wide problem. `persisted` is the stored flag, carrying the case a resync
+// result can't: a background pass hit the rejection and the scheduler dropped the account from
+// polling, so nothing this session has a result. Without it a dead credential reads "Connected"
+// until someone resyncs by hand.
 export function accountConnectionState(
   statuses: readonly (CalendarSyncResult["status"] | undefined)[],
   persisted = false
@@ -64,14 +60,13 @@ export function accountConnectionState(
   return rejected ? "reconnectNeeded" : "connected";
 }
 
-// A calendar that hasn't synced for this long may be showing events that have since
-// moved or gone, so the app says so where the calendar is, not only in Settings. The
-// scheduler's reminder note uses the same hour (`CALENDAR_OUT_OF_DATE_AFTER`).
+// A calendar unsynced this long may show events that have moved or gone, so the app says so where
+// the calendar is. The scheduler's reminder note uses the same hour (`CALENDAR_OUT_OF_DATE_AFTER`).
 export const NOT_SYNCING_AFTER_MS = 60 * 60 * 1000;
 
-// A pass this long after a calendar's last stamp has had its chance to update it. The
-// stamp lands during the pass and the pass event after every account, so a calendar
-// the pass did reach sits within a few seconds of it.
+// A pass this long after a calendar's last stamp has had its chance to update it: the stamp lands
+// during the pass and the pass event after every account, so a reached calendar sits within
+// seconds of it.
 const PASS_GRACE_MS = 60 * 1000;
 
 export interface AccountNotSyncing {
@@ -82,15 +77,12 @@ export interface AccountNotSyncing {
 }
 
 /**
- * Accounts whose events may be out of date: one that needs reconnecting, which the
- * background pass has stopped polling, or one with an enabled calendar a sync pass
- * failed to update for over an hour.
+ * Accounts whose events may be out of date: one needing reconnect, which the background pass
+ * stopped polling, or one with an enabled calendar a pass failed to update for over an hour.
  *
- * `lastPassAt` is when the latest sync pass ended, read together with `accounts`.
- * Only a pass can show a calendar is unreachable: after the Mac sleeps every
- * calendar's last sync is hours old until the first pass after waking, and that
- * pass usually succeeds. An account with no enabled calendar shows no events, so
- * it has nothing to warn about.
+ * `lastPassAt` is when the latest pass ended, read with `accounts`: only a pass shows a calendar
+ * is unreachable, since after the Mac sleeps every last sync is hours old until the first pass
+ * after waking. An account with no enabled calendar shows no events, so has nothing to warn about.
  */
 export function accountsNotSyncing(
   accounts: readonly AccountWithCalendars[],

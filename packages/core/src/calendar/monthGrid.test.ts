@@ -30,14 +30,12 @@ function page(over: Partial<PageSummary> & { id: string }): PageSummary {
   };
 }
 
-/** 'YYYY-MM-DD' keys of a grid, row by row — the readable shape for assertions. */
 function keys(weeks: ReturnType<typeof buildMonthGrid>): string[][] {
   return weeks.map((w) => w.map((c) => c.key));
 }
 
 describe("buildMonthGrid — padding and shape", () => {
   it("pads the visible month back to Monday and forward to Sunday", () => {
-    // March 2026 starts on a Sunday and ends on a Tuesday.
     const weeks = buildMonthGrid(new Date(2026, 2, 15), 1, new Date(2026, 2, 15));
     expect(keys(weeks)[0]?.[0]).toBe("2026-02-23");
     expect(weeks[weeks.length - 1]?.[6]?.key).toBe("2026-04-05");
@@ -52,7 +50,6 @@ describe("buildMonthGrid — padding and shape", () => {
   });
 
   it("emits whole weeks only — never a partial trailing row", () => {
-    // Sweep a year of months under both week-start conventions.
     for (const weekStartsOn of [0, 1] as const) {
       for (let month = 0; month < 12; month++) {
         const weeks = buildMonthGrid(new Date(2026, month, 1), weekStartsOn, new Date(2026, 0, 1));
@@ -81,8 +78,7 @@ describe("buildMonthGrid — padding and shape", () => {
   });
 
   it("does not treat the same day-of-month in another year as in-month", () => {
-    // December 2025's grid pads into January 2026 — same month index arithmetic
-    // would wrongly mark a January cell in-month without the year check.
+    // Without the year check, a January padding cell would match month index 0.
     const weeks = buildMonthGrid(new Date(2025, 11, 10), 1, new Date(2025, 11, 10));
     const january = weeks.flat().filter((c) => c.key.startsWith("2026-01"));
     expect(january.length).toBeGreaterThan(0);
@@ -99,8 +95,6 @@ describe("buildMonthGrid — today and calendar edge cases", () => {
   });
 
   it("marks a padding cell as today when today falls in the padding", () => {
-    // March 2026 starts on a Sunday, so its Monday-anchored grid opens on
-    // Feb 23 — a date in February still renders inside the March grid.
     const weeks = buildMonthGrid(new Date(2026, 2, 15), 1, new Date(2026, 1, 25, 9, 0));
     const todays = weeks.flat().filter((c) => c.isToday);
     expect(todays).toHaveLength(1);
@@ -126,8 +120,6 @@ describe("buildMonthGrid — today and calendar edge cases", () => {
   });
 
   it("renders 7 distinct cells across a DST-transition week", () => {
-    // US DST starts 2026-03-08 and ends 2026-11-01; EU shifts 2026-03-29 and
-    // 2026-10-25. Under any of those the row must still be 7 calendar days.
     for (const [year, month] of [
       [2026, 2],
       [2026, 9],
@@ -150,7 +142,6 @@ describe("buildMonthGrid — today and calendar edge cases", () => {
       const next = flat[i]!;
       expect(next.getTime()).toBeGreaterThan(prev.getTime());
       const days = Math.round((next.getTime() - prev.getTime()) / 86_400_000);
-      // A DST day is 23 or 25 hours, so the rounded delta is still 1.
       expect(days).toBe(1);
     }
   });
@@ -321,16 +312,13 @@ describe("placeMonthCellEvents — overflow capping", () => {
   });
 });
 
-// The week grid resolves a synced event's zone in `calendarLayout`; the month
-// grid is its parallel and did not, so a cross-zone event landed in the source
-// calendar's cell instead of the viewer's. Vitest pins TZ=UTC.
+// A cross-zone event belongs in the viewer's cell, not the source calendar's. Vitest pins TZ=UTC.
 describe("placeMonthCellEvents — a synced event lands in the viewer's cell", () => {
   function synced(id: string, start: string, timezone: string): PageSummary {
     return page({ id, scheduledStart: start, scheduleLocked: true, syncState: "active", timezone });
   }
 
   it("pulls a Tokyo morning back onto the previous day", () => {
-    // 06:00 on the 11th in Tokyo (UTC+9) is 21:00 on the 10th in UTC.
     const tokyo = synced("tokyo", "2026-03-11T06:00:00", "Asia/Tokyo");
 
     expect(placeMonthCellEvents([tokyo], new Date(2026, 2, 10)).visible).toHaveLength(1);
@@ -338,7 +326,6 @@ describe("placeMonthCellEvents — a synced event lands in the viewer's cell", (
   });
 
   it("pushes a Los Angeles evening onto the next day", () => {
-    // 20:00 on the 10th in Los Angeles (UTC-8 in March) is 04:00 on the 11th UTC.
     const la = synced("la", "2026-03-10T20:00:00", "America/Los_Angeles");
 
     expect(placeMonthCellEvents([la], new Date(2026, 2, 11)).visible).toHaveLength(1);
@@ -354,7 +341,6 @@ describe("placeMonthCellEvents — a synced event lands in the viewer's cell", (
 });
 
 describe("placeMonthWeek — one bar per event per week row", () => {
-  // Monday March 9 to Sunday March 15, 2026.
   const week = Array.from({ length: 7 }, (_, i) => new Date(2026, 2, 9 + i));
 
   it("draws a multi-day event once, in its first cell, spanning the days it covers", () => {

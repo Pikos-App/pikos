@@ -1,6 +1,5 @@
-// Core-lifecycle conformance — the mock half of the page/folder/reminder/search
-// table. Why the table exists, and why search dominates it:
-// `core_conformance_tests.rs`, beside the fixture.
+// The mock half of the page, folder, reminder and search table. Why the table exists, and why
+// search dominates it: `core_conformance_tests.rs`, beside the fixture.
 
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -39,7 +38,7 @@ interface Scenario {
       query: string;
       includeCompleted?: boolean;
       matches: string[];
-      /** Checked against every matched row — see the Rust runner's `SearchExpect`. */
+      /** Checked against every matched row (the Rust runner's `SearchExpect`). */
       matchSource?: SearchResult["matchSource"];
       excerpt?: string;
       completedCount?: number;
@@ -59,10 +58,6 @@ interface World {
   named: (real: string) => string;
 }
 
-/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
- *  added to `Expect` does not compile until it has a checker here, and
- *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
- *  of key names could drift from the assertions; these are the assertions. */
 const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>> = {
   listQuery: async (want, { adapter, named }) => {
     if (!want.listQuery) return;
@@ -110,9 +105,8 @@ async function apply(
   switch (step.op) {
     case "page": {
       const page = await adapter.createPage({
-        // Real editor markup, not an empty string: the words the user never typed
-        // ("paragraph", "doc", "type") only exist here, and a filter that reaches
-        // into this shape is what one of the rows below is looking for.
+        // Real editor markup: the words the user never typed ("paragraph", "doc") only exist here,
+        // and a filter reaching into this shape is what a row below looks for.
         content: JSON.stringify({
           content: [
             { content: [{ text: step.contentText ?? "", type: "text" }], type: "paragraph" },

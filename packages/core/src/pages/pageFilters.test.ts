@@ -13,8 +13,6 @@ import {
   sortPages,
 } from "./pageFilters";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
@@ -32,8 +30,6 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     ...overrides,
   };
 }
-
-// ─── sortPages ───────────────────────────────────────────────────────────────
 
 describe("sortPages", () => {
   it("manual mode — sorted by sortOrder ascending", () => {
@@ -58,7 +54,6 @@ describe("sortPages", () => {
   it("date mode — all-day today sorts at 'now'", () => {
     const today = "2026-03-27";
     vi.useFakeTimers();
-    // Set "now" to 2026-03-27T12:00:00 local
     vi.setSystemTime(new Date(2026, 2, 27, 12, 0, 0));
 
     const pages = [
@@ -67,7 +62,6 @@ describe("sortPages", () => {
       makePage({ scheduledStart: "2026-03-27T15:00:00", title: "Future timed" }),
     ];
     const sorted = sortPages(pages, "date");
-    // Overdue (8 AM) < all-day today (at "now" = noon) < future (3 PM)
     expect(sorted.map((p) => p.title)).toEqual(["Overdue timed", "All-day today", "Future timed"]);
 
     vi.useRealTimers();
@@ -110,8 +104,6 @@ describe("sortPages", () => {
     expect(sorted).not.toBe(pages);
   });
 });
-
-// ─── getVisiblePages ─────────────────────────────────────────────────────────
 
 describe("getVisiblePages", () => {
   it("today — scheduled <= today, excludes done", () => {
@@ -181,8 +173,6 @@ describe("getVisiblePages", () => {
   });
 });
 
-// ─── View identity helpers ───────────────────────────────────────────────────
-
 describe("smart view helpers", () => {
   it("isSmartViewId covers exactly the three computed views", () => {
     expect(isSmartViewId("today")).toBe(true);
@@ -201,13 +191,11 @@ describe("smart view helpers", () => {
   it("isDateGroupedView marks the views whose order is derived", () => {
     expect(isDateGroupedView("today")).toBe(true);
     expect(isDateGroupedView("upcoming")).toBe(true);
-    // Inbox is a plain list — the user's sort choice still means something there.
+    // Inbox is a plain list, so the user's sort still means something there.
     expect(isDateGroupedView("inbox")).toBe(false);
     expect(isDateGroupedView("f1")).toBe(false);
   });
 });
-
-// ─── groupTodayPages ─────────────────────────────────────────────────────────
 
 describe("groupTodayPages", () => {
   it("all-day item today — in 'today' group (not overdue)", () => {
@@ -286,8 +274,6 @@ describe("groupTodayPages", () => {
   });
 });
 
-// ─── getCompletedTodayPages ──────────────────────────────────────────────────
-
 describe("getCompletedTodayPages", () => {
   it("only status=done with completedAt today", () => {
     vi.useFakeTimers();
@@ -312,8 +298,6 @@ describe("getCompletedTodayPages", () => {
     vi.useRealTimers();
   });
 });
-
-// ─── getCompletedViewPages ───────────────────────────────────────────────────
 
 describe("getCompletedViewPages", () => {
   it("inbox — done + folderId null", () => {
@@ -356,8 +340,8 @@ describe("getCompletedViewPages", () => {
   });
 });
 
-// Today is origin-blind, agreeing with the daily summary's `overdue_count`: a
-// locked mirror can't be rescheduled, so ticking is the only resolution there is.
+// Today is origin-blind, agreeing with the daily summary's `overdue_count`: a locked mirror can't
+// be rescheduled, so ticking is the only resolution.
 describe("belongsToView — past synced events", () => {
   const TODAY = "2026-08-04";
   const synced = (o: Partial<PageSummary> = {}) =>
@@ -400,15 +384,10 @@ describe("belongsToView — past synced events", () => {
   });
 });
 
-// ─── synced events are read in the viewer's zone ──────────────────────────────
-
-// A synced event happens at one instant; which day and time that is depends on
-// who is looking. The stored wall-clock is the source calendar's, so reading it
-// directly files a Tokyo morning under tomorrow and leaves a London afternoon
-// looking like it has not happened yet. Vitest pins TZ=UTC, so these offsets are
-// relative to UTC rather than to whatever machine runs them.
+// Which day and time a synced event falls on depends on who is looking: reading the source
+// calendar's wall clock directly files a Tokyo morning under tomorrow. Vitest pins TZ=UTC, so the
+// offsets below are relative to UTC.
 describe("viewer-zone bucketing", () => {
-  // 06:00 in Tokyo (UTC+9) is 21:00 the previous day in UTC.
   const tokyoMorning = makePage({
     detachIsReversible: false,
     id: "tokyo",
@@ -418,7 +397,6 @@ describe("viewer-zone bucketing", () => {
     timezone: "Asia/Tokyo",
   });
 
-  // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC.
   const laEvening = makePage({
     detachIsReversible: false,
     id: "la",
@@ -458,11 +436,7 @@ describe("viewer-zone bucketing", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"));
 
-    // Both of these land on the opposite day if the stored wall-clock is taken as
-    // local. 08:00 on the 8th in Tokyo (UTC+9) is 23:00 UTC on the 7th, so it is
-    // yesterday for the viewer while the bare date reads as today. 18:00 on the
-    // 7th in Los Angeles (UTC-7) is 01:00 UTC on the 8th, so it is today while
-    // the bare date reads as yesterday.
+    // Taking the stored wall clock as local puts both on the opposite day.
     const tokyoEarly = makePage({
       detachIsReversible: false,
       id: "tokyo-early",

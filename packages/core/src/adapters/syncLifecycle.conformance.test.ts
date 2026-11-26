@@ -1,10 +1,6 @@
-// Sync-lifecycle conformance — the mock half of a table the Rust writers also run.
-// Why the table exists, and what a step means: `sync_conformance_tests.rs`, beside
-// the fixture.
-//
-// Realizing a step here is constrained by the mock having no reconciler, so there
-// is no "sync resumes" call to make: everything a backfill would converge to has to
-// fall out of the adapter methods the app actually calls.
+// The mock half of a table the Rust writers also run. Why the table exists, and what a step
+// means: `sync_conformance_tests.rs`, beside the fixture. The mock has no reconciler, so what a
+// backfill would converge to has to fall out of the adapter methods the app calls.
 
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -71,10 +67,6 @@ interface Scenario {
 
 type Expect = Scenario["expect"];
 
-/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
- *  added to `Expect` does not compile until it has a checker here, and
- *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
- *  of key names could drift from the assertions; these are the assertions. */
 const CHECKS: Record<
   keyof Expect,
   (want: Expect, adapter: MockStorageAdapter, world: World) => Promise<void>
@@ -153,9 +145,8 @@ const CHECKS: Record<
 
 const table = readConformanceTable<Scenario>("sync", Object.keys(CHECKS));
 
-/** Ids the steps produce and the expectations refer to by name. `folders` outlives
- *  the calendar's own link on purpose — teardown clears it, and a scenario still
- *  needs to ask whether that folder survived and how it is flagged. */
+/** Ids the steps produce and the expectations name. `folders` outlives the calendar's own link:
+ *  teardown clears that, and a scenario still asks whether the folder survived. */
 interface World {
   accountId: string;
   calendars: Map<string, string>;
@@ -194,9 +185,8 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
 
     case "syncEvent": {
       const folderId = world.folders.get(step.calendar!)!;
-      // Re-delivering an event the store already holds is an unchanged-etag no-op.
-      // Reactivating here instead would hand the mock a re-link the adapter itself
-      // never performs, and the table would pass against a mock that cannot.
+      // Re-delivering a held event is an unchanged-etag no-op; reactivating would hand the mock a
+      // re-link the adapter never performs.
       if (world.pages.has(step.uid!)) return;
       const page = await adapter.seedMirrorPage({
         content: "",
@@ -297,8 +287,7 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
   }
 }
 
-/** `rejectedWith` present means the mock must refuse with that exact message,
- *  absent means it must allow the write and hand back its result. */
+/** `rejectedWith` present: refuse with that exact message; absent: allow the write and return it. */
 async function verdict<T>(work: Promise<T>, step: Step): Promise<T | undefined> {
   if (step.rejectedWith) {
     await expect(work).rejects.toThrow(step.rejectedWith);

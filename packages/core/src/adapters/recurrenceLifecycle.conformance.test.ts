@@ -1,14 +1,13 @@
-// Recurrence-lifecycle conformance — the mock half of the occurrence-set table.
-// Why the table exists, and what an origin means: `recurrence_conformance_tests.rs`,
-// beside the fixture.
+// The mock half of the occurrence-set table. Why the table exists, and what an origin means:
+// `recurrence_conformance_tests.rs`, beside the fixture.
 
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { readConformanceTable, unhandledStep } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
-// Matches the Rust runner's `TEST_CONNECTED_LONG_AGO`: old enough that the synced
-// head floor never binds, so these scenarios test the occurrence sets and nothing else.
+// As the Rust runner's `TEST_CONNECTED_LONG_AGO`: old enough that the synced head floor never
+// binds.
 const CONNECTED_LONG_AGO = "2000-01-01";
 
 interface Step {
@@ -41,7 +40,7 @@ interface Series {
 interface Scenario {
   name: string;
   origin: "native" | "active" | "detached";
-  /** Replaces the table-level series for this row — see the Rust runner's `Scenario`. */
+  /** Replaces the table-level series for this row. */
   series?: Series;
   steps: Step[];
   expect: {
@@ -62,18 +61,14 @@ interface World {
   headId: string;
 }
 
-/** The clones a scenario left behind, oldest first. Shared by the two checkers that
- *  read them, so the ordering they both assume has one definition. */
+/** Clones a scenario left behind, oldest first, so the two checkers that read them share one
+ *  ordering. */
 async function clonesOf(adapter: MockStorageAdapter, headId: string) {
   return (await adapter.listPages())
     .filter((p) => p.id !== headId)
     .sort((a, b) => (a.scheduledStart ?? "").localeCompare(b.scheduledStart ?? ""));
 }
 
-/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
- *  added to `Expect` does not compile until it has a checker here, and
- *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
- *  of key names could drift from the assertions; these are the assertions. */
 const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>> = {
   cloneCount: async (want, { adapter, headId }) => {
     if (want.cloneCount === undefined) return;

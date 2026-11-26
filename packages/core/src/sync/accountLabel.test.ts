@@ -18,7 +18,7 @@ describe("accountAddress", () => {
   });
 
   it("keeps an address containing the separator intact up to the server", () => {
-    // The separator is only meaningful once; a stored value is never re-split.
+    // A stored value is never re-split.
     expect(accountAddress({ displayName: "a · b · c" })).toBe("a");
   });
 });

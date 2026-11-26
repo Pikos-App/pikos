@@ -24,7 +24,6 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   };
 }
 
-/** A synced series head, lapsed since the day the calendar was connected. */
 function lapsedSyncedHead(overrides: Partial<PageSummary> = {}): PageSummary {
   return makePage({
     id: "standup",
@@ -103,9 +102,8 @@ describe("withTodayOccurrences", () => {
   });
 });
 
-// C111: the head can be on the far side of today as well as behind it. Moving an
-// occurrence onto today excludes its original date, so the head derives past today
-// and the one day the series is due is the one day it would go unlisted.
+// The head can be past today as well as behind it: moving an occurrence onto today excludes its
+// original date, so the one day the series is due would go unlisted.
 describe("withTodayOccurrences — a head ahead of today", () => {
   function headAhead(overrides: Partial<PageSummary> = {}): PageSummary {
     return makePage({

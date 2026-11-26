@@ -54,7 +54,6 @@ describe("cleanTitle", () => {
   });
 
   it("strips nested markdown in link display text", () => {
-    // Link is stripped first → "**Bold link**", then bold is stripped → "Bold link"
     expect(cleanTitle("[**Bold link**](http://example.com)")).toBe("Bold link");
   });
 });
@@ -64,14 +63,14 @@ describe("formatSchedule", () => {
     const result = formatSchedule("2025-06-15");
     expect(result).toMatch(/Jun/);
     expect(result).toMatch(/15/);
-    expect(result).not.toContain(","); // no time component
+    expect(result).not.toContain(",");
   });
 
   it("formats datetime with time component", () => {
     const result = formatSchedule("2025-06-15T14:30:00");
     expect(result).toMatch(/Jun/);
     expect(result).toMatch(/15/);
-    expect(result).toContain(","); // has time separator
+    expect(result).toContain(",");
   });
 
   it("returns raw string for unparseable date", () => {
@@ -82,7 +81,7 @@ describe("formatSchedule", () => {
     const result = formatSchedule("2025-12-25T00:00:00");
     expect(result).toMatch(/Dec/);
     expect(result).toMatch(/25/);
-    expect(result).toContain(","); // datetime includes time
+    expect(result).toContain(",");
   });
 });
 
@@ -114,7 +113,6 @@ describe("formatTimeAgo", () => {
   it("returns formatted date for timestamps >= 24 hours ago", () => {
     const twoDaysAgo = new Date("2025-06-13T12:00:00Z").toISOString();
     const result = formatTimeAgo(twoDaysAgo);
-    // Should be a date like "Jun 13" — locale-dependent but contains the day number
     expect(result).toMatch(/13/);
   });
 

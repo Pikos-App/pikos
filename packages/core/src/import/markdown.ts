@@ -11,14 +11,12 @@ import type {
   ImportWarning,
 } from "./types";
 
-// ─── Date parsing ────────────────────────────────────────────────────────────
-
 /** Known date formats from Obsidian Linter and common frontmatter conventions. */
 const DATE_FORMATS = [
   "yyyy-MM-dd'T'HH:mm:ss",
   "yyyy-MM-dd'T'HH:mm",
   "yyyy-MM-dd",
-  "EEEE, MMMM do yyyy, h:mm:ss a", // Obsidian Linter: "Monday, March 17th 2025, 11:03:04 am"
+  "EEEE, MMMM do yyyy, h:mm:ss a",
   "EEEE, MMMM do yyyy, h:mm a",
   "MMMM do yyyy, h:mm:ss a",
   "MMMM do yyyy",
@@ -30,15 +28,12 @@ const DATE_FORMATS = [
 
 const REF = new Date(2000, 0, 1);
 
-/**
- * Parse a date string into ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).
- * Returns null if unparseable.
- */
+/** A date string as YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS; null if unparseable. */
 function parseDate(raw: string): string | null {
   const s = raw.replace(/^["']|["']$/g, "").trim();
   if (!s) return null;
 
-  // ISO format — pass through directly (avoids timezone shifting)
+  // ISO passes through, avoiding timezone shifting.
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
 
   for (const fmt of DATE_FORMATS) {
@@ -55,8 +50,6 @@ function parseDate(raw: string): string | null {
   return null;
 }
 
-// ─── Frontmatter parsing ──────────────────────────────────────────────────────
-
 interface Frontmatter {
   tags: string[];
   status: PageStatus;
@@ -68,7 +61,7 @@ interface Frontmatter {
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
-/** Minimal YAML frontmatter parser — handles the subset Obsidian/Pikos export uses. */
+/** The YAML subset Obsidian and Pikos exports use. */
 export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body: string } {
   const match = FRONTMATTER_RE.exec(raw);
   const fm: Frontmatter = {
@@ -89,7 +82,6 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
 
-    // List items (e.g. "  - tag")
     if (trimmed.startsWith("- ")) continue;
 
     const colonIdx = trimmed.indexOf(":");
@@ -103,7 +95,6 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
 
     switch (key) {
       case "tags": {
-        // Inline array: tags: [a, b] or tags: a, b
         if (value.startsWith("[")) {
           fm.tags = value
             .slice(1, -1)
@@ -116,7 +107,6 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
             .map((t) => t.trim())
             .filter(Boolean);
         } else {
-          // Multi-line YAML list — collect subsequent "  - item" lines
           const lines = yaml.split("\n");
           const tagLineIdx = lines.findIndex((l) => l.trim().toLowerCase().startsWith("tags:"));
           if (tagLineIdx !== -1) {
@@ -146,9 +136,8 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
       }
       case "priority": {
         const num = Number(value);
-        // Must be a whole number 1–4; a fractional or out-of-range value
-        // (e.g. `2.5`) is not a valid PagePriority and would otherwise be
-        // force-cast through, breaking create_page's i64 priority arg.
+        // A fractional or out-of-range value (`2.5`) isn't a PagePriority, and force-casting it
+        // would break create_page's i64 priority arg.
         if (Number.isInteger(num) && num >= 1 && num <= 4) {
           fm.priority = num as PagePriority;
         } else {
@@ -161,7 +150,7 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
       case "scheduled":
       case "scheduled_start": {
         const parsed = parseDate(value);
-        if (parsed) fm.scheduled = parsed.slice(0, 10); // date-only for all-day
+        if (parsed) fm.scheduled = parsed.slice(0, 10);
         break;
       }
       case "created":
@@ -185,8 +174,6 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
   return { body, frontmatter: fm };
 }
 
-// ─── Wikilink extraction ──────────────────────────────────────────────────────
-
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
 
 export function extractWikilinks(body: string): string[] {
@@ -198,22 +185,18 @@ export function extractWikilinks(body: string): string[] {
   return [...new Set(links)];
 }
 
-// ─── Image reference extraction ──────────────────────────────────────────────
-
 const IMAGE_EXT_PATTERN = "png|jpg|jpeg|gif|webp|svg|bmp|avif";
 
-/** Obsidian wiki-embed with known image extension: ![[photo.png]] */
 const WIKI_IMAGE_EXT_RE = new RegExp(
   `!\\[\\[([^\\]|]+\\.(?:${IMAGE_EXT_PATTERN}))(?:\\|[^\\]]*)?\\]\\]`,
   "gi"
 );
 
-/** Obsidian wiki-embed WITHOUT a known image extension.
- *  These are speculative — could be images or note transclusions.
- *  Tried during resolution; left as-is if they don't resolve to an image file. */
+/** Wiki-embed with no known image extension: speculative (an image or a note transclusion),
+ *  tried during resolution and left as-is if it isn't an image. */
 const WIKI_EMBED_ANY_RE = /!\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/gi;
 
-/** Standard markdown image: ![alt](path/to/image.png) — excludes http(s) URLs */
+/** Excludes http(s) URLs. */
 const STANDARD_IMAGE_RE = new RegExp(
   `!\\[([^\\]]*)\\]\\((?!https?:\\/\\/)([^)]+\\.(?:${IMAGE_EXT_PATTERN}))\\)`,
   "gi"
@@ -243,7 +226,6 @@ export function extractImageRefs(body: string, fromDir = ""): ImageRef[] {
     });
   }
 
-  // Skip ranges already matched by the extension regex (index overlap)
   const matchedRanges = refs.map((r) => ({
     end: r.index + r.ref.fullMatch.length,
     start: r.index,
@@ -288,7 +270,7 @@ export function extractImageRefs(body: string, fromDir = ""): ImageRef[] {
   return refs.sort((a, b) => a.index - b.index).map((r) => r.ref);
 }
 
-/** `rel` read from `dir`, both inside the vault; null when it climbs out of the vault. */
+/** `rel` read from `dir`, both inside the vault; null when it climbs out. */
 function joinVaultPath(dir: string, rel: string): string | null {
   const out: string[] = [];
   for (const segment of [...dir.split("/"), ...rel.split("/")]) {
@@ -304,12 +286,10 @@ function joinVaultPath(dir: string, rel: string): string | null {
 }
 
 /**
- * Where a reference's image may be, as paths from the vault root, most likely first.
- *
- * A standard link is relative to the file it is written in, which is how CommonMark reads
- * it and how a Pikos Markdown export writes one from a page in a folder (`../assets/…`).
- * Obsidian can also write links, and writes embeds, from the vault root, so each kind tries
- * the other reading second. A path that climbs out of the vault is not a candidate.
+ * Where a reference's image may be, as vault-root paths, most likely first. A standard link is
+ * relative to its file (CommonMark, and how a Pikos export writes one from a folder); Obsidian
+ * can also write links, and writes embeds, from the vault root, so each kind tries the other
+ * reading second. A path that climbs out of the vault is not a candidate.
  */
 export function imageRefCandidates(ref: ImageRef): string[] {
   const fromFile = joinVaultPath(ref.fromDir, ref.sourcePath);
@@ -318,14 +298,8 @@ export function imageRefCandidates(ref: ImageRef): string[] {
   return [...new Set(ordered.filter((p): p is string => p !== null))];
 }
 
-// ─── Callout transformation ──────────────────────────────────────────────────
-
-/**
- * Transform Obsidian callouts into standard blockquotes with a bold type label.
- * `> [!note] Title` → `> **Note:** Title`
- * `> [!warning]` → `> **Warning:**`
- * Multi-line callout bodies are preserved as blockquote continuation lines.
- */
+/** Obsidian callouts as blockquotes with a bold type label (`> [!note] Title` becomes
+ * `> **Note:** Title`); multi-line bodies stay continuation lines. */
 const CALLOUT_RE = /^(>\s*)\[!(\w+)\]\s*(.*)/gm;
 
 export function transformCallouts(body: string): string {
@@ -337,8 +311,6 @@ export function transformCallouts(body: string): string {
     return `${prefix}**${label}:**`;
   });
 }
-
-// ─── Unsupported content detection ────────────────────────────────────────────
 
 const UNSUPPORTED_PATTERNS = [
   { label: "mermaid diagram", pattern: /```mermaid[\s\S]*?```/g },
@@ -354,15 +326,11 @@ function detectUnsupportedContent(body: string): string[] {
   return found;
 }
 
-// ─── File representation (for testability) ─────────────────────────────────────
-
 export interface VaultFile {
-  /** Relative path from vault root, e.g. "Projects/Work/note.md" */
+  /** Relative to the vault root. */
   path: string;
   content: string;
 }
-
-// ─── Main parser ──────────────────────────────────────────────────────────────
 
 export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
   const pages: ImportPage[] = [];
@@ -375,7 +343,6 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
     const { body, frontmatter } = parseFrontmatter(file.content);
 
     const parts = file.path.split("/");
-    // split("/") always returns at least one element
     const filename = parts[parts.length - 1]!;
     const title = filename.replace(/\.md$/i, "");
 
@@ -397,7 +364,6 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
       });
     }
 
-    // Extract wikilinks before any content transformation
     const wikilinks = extractWikilinks(body);
 
     const imageRefs = extractImageRefs(body, parts.slice(0, -1).join("/"));
@@ -426,7 +392,7 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
   }
 
   const meta: ImportMeta = {
-    skipped: [], // Walker-level skips are merged in useImport
+    skipped: [],
     transformations: [],
   };
 

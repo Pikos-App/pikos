@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { formatMultiDayTimeRange, formatTimeRange } from "./calendarTimeFormat";
 
-// ─── formatTimeRange ─────────────────────────────────────────────────────────
-
 describe("formatTimeRange", () => {
   it("same period → shares AM/PM, unspaced dash", () => {
     const start = new Date(2026, 2, 15, 9, 0);
@@ -23,11 +21,8 @@ describe("formatTimeRange", () => {
   });
 });
 
-// ─── formatMultiDayTimeRange ────────────────────────────────────────────────
-
 describe("formatMultiDayTimeRange", () => {
   it("includes day-of-week on each side", () => {
-    // 2026-03-17 is a Tuesday, 2026-03-19 is a Thursday.
     const start = new Date(2026, 2, 17, 10);
     const end = new Date(2026, 2, 19, 17);
     expect(formatMultiDayTimeRange(start, end)).toBe("10 AM Tue – 5 PM Thu");

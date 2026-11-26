@@ -1,19 +1,16 @@
 import { defineConfig } from "vitest/config";
 
-// Pin a deterministic timezone so wall-clock-sensitive logic expands identically
-// across machines and CI.
+// Pinned so wall-clock logic expands identically across machines and CI.
 process.env["TZ"] = "UTC";
 
 export default defineConfig({
   test: {
     ...(process.env["CI"] ? {} : { maxWorkers: "50%" }),
     environment: "jsdom",
-    // The conformance tables are read off disk with `node:fs`, so they are not in
-    // vitest's module graph and `--changed` selects nothing when one is edited. The
-    // Rust runners catch a break because `cargo test` runs everything; this side
-    // would stay quiet until CI, which is the half of a two-sided table that matters.
-    // Vitest replaces the default list rather than extending it, so the defaults are
-    // repeated here.
+    // The conformance tables are read off disk, outside vitest's module graph, so `--changed`
+    // selects nothing when one is edited. `cargo test` runs everything, so the Rust runners catch a
+    // break, while this half would stay quiet until CI. Vitest replaces the default list rather
+    // than extending it, so the defaults are repeated.
     forceRerunTriggers: [
       "**/package.json/**",
       "**/{vitest,vite}.config.*/**",
@@ -26,18 +23,14 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: [
         "src/**/*.test.ts",
-        // Pure type/interface modules — no executable lines to cover.
+        // Pure type modules: no executable lines.
         "src/types.ts",
         "src/storage.ts",
         "src/index.ts",
         "src/import/types.ts",
       ],
-      // Per-directory thresholds set just under current baselines. Bump as
-      // coverage grows so regressions trip CI without normal churn doing so.
-      //
-      // The calendar/constants/format/import/layout/pages/sync entries carry
-      // over the bars these modules met while they lived in apps/desktop, so
-      // moving them into core did not quietly relax anything.
+      // Per-directory thresholds, just under current baselines. Bump as coverage grows so a
+      // regression trips CI without normal churn doing so.
       thresholds: {
         "src/nlp/**": { lines: 95, branches: 88, functions: 95, statements: 95 },
         "src/utils/**": { lines: 85, branches: 80, functions: 90, statements: 85 },

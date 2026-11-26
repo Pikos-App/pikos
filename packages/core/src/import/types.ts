@@ -1,100 +1,81 @@
-// Parsers produce an ImportPlan which the UI previews before committing to the DB.
+// Parsers produce an ImportPlan, which the UI previews before committing.
 
 import type { PagePriority, PageStatus } from "../types";
 
-/** An image reference found in a markdown body. */
 export interface ImageRef {
-  /** The full regex match (e.g. "![[photo.png]]" or "![alt](path/to/img.png)"). */
   fullMatch: string;
   /** Path as written in the source file. Where it points is {@link imageRefCandidates}'s call. */
   sourcePath: string;
-  /** The folder of the file the reference is written in, from the vault root; "" at the top. */
+  /** The folder of the referencing file, from the vault root; "" at the top. */
   fromDir: string;
-  /** "wiki" for ![[...]] or "standard" for ![alt](...). */
   syntax: "wiki" | "standard";
-  /** Alt text (filename for wiki, explicit alt for standard). */
+  /** Filename for wiki embeds, explicit alt for standard. */
   altText: string;
-  /**
-   * Whether this is definitely an image (has image extension) or a speculative
-   * match (extensionless wiki-embed that might be an image or a note transclusion).
-   * Speculative refs are tried during resolution but left as-is if they fail.
-   */
+  /** False for an extensionless wiki-embed, tried during resolution and left as-is if it fails. */
   speculative?: boolean;
 }
 
-/** A single page to be imported. */
 export interface ImportPage {
-  /** Original filename or CSV title — used as page title. */
   title: string;
-  /** Markdown body (pre-Tiptap conversion) or plain text content. */
+  /** Markdown or plain text, before Tiptap conversion. */
   body: string;
-  /** Folder key — matches an ImportFolder.key in the same plan. Null = inbox. */
+  /** An ImportFolder.key in the same plan; null is the inbox. */
   folderKey: string | null;
   status: PageStatus;
   priority: PagePriority;
   tags: string[];
-  /** 'YYYY-MM-DD' for all-day or 'YYYY-MM-DDTHH:MM:SS' for timed events. */
+  /** 'YYYY-MM-DD' all-day, or 'YYYY-MM-DDTHH:MM:SS' timed. */
   scheduledStart: string | null;
-  /** 'YYYY-MM-DDTHH:MM:SS' end time for timed events. Null for all-day. */
+  /** Null for all-day. */
   scheduledEnd: string | null;
-  /** ISO datetime string for createdAt override, if any. */
+  /** Overrides createdAt. */
   createdAt: string | null;
-  /** ISO datetime string for completedAt, if status is done. */
+  /** Set when status is done. */
   completedAt: string | null;
-  /** ISO datetime string for updatedAt override. */
+  /** Overrides updatedAt. */
   updatedAt: string | null;
-  /** Raw wikilink targets (e.g. "My Page") — resolved to IDs post-import. */
+  /** Raw targets ("My Page"), resolved to IDs after import. */
   wikilinks: string[];
-  /** Per-page reminder lead times in minutes (from TickTick Reminder column). */
+  /** Lead times in minutes (TickTick's Reminder column). */
   reminderMinutes: number[];
-  /** iCal RRULE string (no "RRULE:" prefix). Set only when the source row has a parseable rule and an anchor date. */
+  /** No "RRULE:" prefix. Set only for a parseable rule with an anchor date. */
   rrule: string | null;
-  /** Original ID from the source system (e.g. TickTick taskId). Used for parent resolution. */
+  /** The source system's ID (TickTick taskId), for parent resolution. */
   sourceId: string | null;
-  /** Original parent ID from the source system. Resolved to Pikos parent_id post-import. */
+  /** The source system's parent ID, resolved to a Pikos parent_id after import. */
   sourceParentId: string | null;
-  /** Image references found in the body (markdown imports only). */
+  /** Markdown imports only. */
   imageRefs: ImageRef[];
 }
 
-/** A folder to be created (or matched to an existing one). */
 export interface ImportFolder {
-  /** Stable key for linking pages → folders within a plan. */
+  /** Links pages to folders within a plan. */
   key: string;
-  /** Display name (may be a flattened path like "Projects / Work"). */
+  /** May be a flattened path ("Projects / Work"). */
   name: string;
 }
 
-/** Warning surfaced in the preview UI. */
 export interface ImportWarning {
   type: "flattened_folder" | "unsupported_content" | "duplicate_folder" | "parse_error";
   message: string;
-  /** Source file path or CSV row number for context. */
   source?: string;
 }
 
-/** Summary of what was skipped or transformed during parsing. */
 export interface ImportMeta {
-  /** Files/rows skipped entirely (not imported). */
   skipped: { count: number; reason: string }[];
-  /** Transformations applied to imported data. */
   transformations: string[];
 }
 
-/** Complete import plan produced by a parser. */
 export interface ImportPlan {
   source: string;
   pages: ImportPage[];
   folders: ImportFolder[];
   warnings: ImportWarning[];
   meta: ImportMeta;
-  /** Vault root directory path (markdown imports only). Used to resolve image paths. */
+  /** Markdown imports only; resolves image paths. */
   vaultRoot?: string;
 }
 
-// ─── CSV Column Mapping ──────────────────────────────────────────────────────
-
-/** Which Pikos field a CSV column maps to. */
 export type PikosFieldKey =
   | "title"
   | "body"
@@ -113,24 +94,23 @@ export type PikosFieldKey =
   | "repeat"
   | "skip";
 
-/** A single column mapping: CSV header → Pikos field with sample data. */
+/** A CSV header mapped to a Pikos field. */
 export interface ColumnMapping {
   csvHeader: string;
   pikosField: PikosFieldKey;
-  /** First few non-empty values from this column, for context in the UI. */
+  /** A few non-empty values, for context in the UI. */
   sampleValues: string[];
 }
 
-/** Maps unique source values → Pikos values for enum fields (status, priority). */
+/** Source values to Pikos values for enum fields (status, priority). */
 export interface ValueMapping {
   field: "status" | "priority";
   entries: { sourceValue: string; targetValue: string }[];
 }
 
-/** Complete mapping configuration produced by the column mapping UI. */
 export interface CSVMappingConfig {
   columnMappings: ColumnMapping[];
   valueMappings: ValueMapping[];
-  /** Auto-detected source label, or null for unknown CSV. */
+  /** Null for an unknown CSV. */
   detectedSource: string | null;
 }

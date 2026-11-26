@@ -1,6 +1,5 @@
-// The mock half of the views differential suite: the workspace and writes the database side
-// generated (`views_differential_tests.rs`), replayed into the mock, which must answer every list
-// read exactly as the database did after every write.
+// The workspace and writes the database side generated (`views_differential_tests.rs`), replayed
+// into the mock, which must answer every list read as the database did after every write.
 
 import { describe, expect, it } from "vitest";
 
@@ -105,7 +104,6 @@ function load(): MockStorageAdapter {
   return adapter;
 }
 
-/** The view keys the database side named, rebuilt from their names. */
 function keyOf(name: string): ViewKey {
   const [scopeName, mode, ...zoneParts] = name.split("/");
   const zone = zoneParts.join("/");

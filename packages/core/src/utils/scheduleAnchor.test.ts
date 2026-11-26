@@ -27,10 +27,8 @@ describe("resolveAnchorMove", () => {
   });
 
   it("realigns a single-BYDAY weekly rule to the moved weekday", () => {
-    // 2026-01-05 is a Monday, 2026-01-07 a Wednesday.
     const move = resolveAnchorMove(makeRule(), "2026-01-07T09:00:00");
     expect(move.rrule).toBe("FREQ=WEEKLY;INTERVAL=1;BYDAY=WE");
-    // Realigned, so the snap has nothing left to correct.
     expect(move.start).toBe("2026-01-07T09:00:00");
   });
 
@@ -41,7 +39,6 @@ describe("resolveAnchorMove", () => {
   });
 
   it("snaps an off-pattern drop onto a day a multi-day weekly rule yields", () => {
-    // M/W/F dropped on a Tuesday (2026-01-06) snaps to the nearest rule day.
     const move = resolveAnchorMove(
       makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR" }),
       "2026-01-06T09:00:00"
@@ -61,8 +58,7 @@ describe("resolveAnchorMove", () => {
   });
 
   it("does not realign a rule the editor is locked out of", () => {
-    // A term the round-trip cannot rebuild makes the whole edit degrading, so
-    // the realign is skipped rather than silently dropping it.
+    // A term the round-trip can't rebuild makes the edit degrading, so the realign is skipped.
     const rule = makeRule({ rrule: "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO" });
     const move = resolveAnchorMove(rule, "2026-01-07T09:00:00");
     expect(move.rrule).toBeUndefined();

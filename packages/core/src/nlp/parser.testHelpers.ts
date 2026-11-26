@@ -1,14 +1,6 @@
-// Test helpers for the NL parser suite.
-//
-// Two pieces:
-//   1. `runCases` — table-driven assertion runner. Each row is `{ input,
-//      expected }`; the runner picks the right shape-specific matcher based
-//      on `expected.type`. Replaces ~12 lines of `parseInput → expect.type
-//      → narrow → expect.input` boilerplate per case with a one-line entry.
-//   2. `forAll` — minimal property-based runner. Generates N random inputs
-//      from a seed-table of fragments and asserts an invariant holds. Used
-//      to catch compositional bugs no enumerable test will surface (random
-//      orderings, overlong inputs, weird whitespace).
+// `runCases` is a table-driven assertion runner, picking the matcher from `expected.type`.
+// `forAll` is a minimal property-based runner over random compositions of fragments, to catch
+// compositional bugs no enumerable test will (random orderings, overlong inputs, odd whitespace).
 
 import { expect } from "vitest";
 
@@ -16,13 +8,9 @@ import { listOccurrences } from "../utils/recurrence";
 import type { ParsedInput, ParseResult } from "./parser";
 import { parseInput } from "./parser";
 
-// ─── runCases — table-driven ─────────────────────────────────────────────────
-
-/** Keys that must be undefined or absent on the parsed input. */
 type InputAbsent = readonly (keyof ParsedInput)[];
 
-/** Regex patterns each field must match — used when the value floats (date or
- * time depends on chrono's reference handling, so exact-equality isn't safe). */
+/** For values that float with chrono's reference handling, where exact equality isn't safe. */
 type InputMatches = Partial<Record<keyof ParsedInput, RegExp>>;
 
 type Expectation =
@@ -31,46 +19,33 @@ type Expectation =
       input?: Partial<ParsedInput>;
       inputAbsent?: InputAbsent;
       inputMatches?: InputMatches;
-      /** Escape hatch: arbitrary assertion run after the type check. */
       custom?: (r: Extract<ParseResult, { type: "single" }>) => void;
     }
   | {
       type: "recurring";
-      /** Substrings the rrule must contain (e.g. ["BYDAY=MO", "INTERVAL=2"]). */
       rrule: string[];
-      /** Substrings the rrule must NOT contain. Useful for "no UNTIL" checks. */
       rruleAbsent?: string[];
-      /** Optional partial assertion on baseInput (title, scheduledStart, etc.). */
       input?: Partial<ParsedInput>;
       inputAbsent?: InputAbsent;
       inputMatches?: InputMatches;
-      /** RRULE expansion check: count occurrences from a synthetic DTSTART. */
       expansion?: { dtstart: string; count: number };
       custom?: (r: Extract<ParseResult, { type: "recurring" }>) => void;
     }
   | {
       type: "finite";
       count: number;
-      /** Asserts every page in `inputs` matches this shape (title, time, etc.). */
       eachInput?: Partial<ParsedInput>;
-      /** Per-index assertions; sparse — element at index N is matched against inputs[N]. */
       inputs?: (Partial<ParsedInput> | undefined)[];
       custom?: (r: Extract<ParseResult, { type: "finite" }>) => void;
     };
 
 export interface ParserCase {
-  /** Input string passed to parseInput. */
   input: string;
-  /** Reference date (defaults to the suite NOW). */
   now?: Date;
-  /** Expected ParseResult shape + relevant fields. */
   expected: Expectation;
 }
 
-/**
- * Asserts a single case. Fails with the input string in the failure message.
- * Use directly or via `describe.each` / `it.each` for grouped tables.
- */
+/** Fails with the input string in the message. */
 export function assertCase(c: ParserCase, defaultNow: Date): void {
   const r = parseInput(c.input, c.now ?? defaultNow);
   expect(r.type, `parsing "${c.input}"`).toBe(c.expected.type);
@@ -95,8 +70,7 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
     assertInputMatches(r.input, c.expected.inputMatches, c.input);
     if (c.expected.expansion) {
       const { count, dtstart } = c.expected.expansion;
-      // dtstart is compact RFC 5545 ("20260316T150000Z"); the engine speaks
-      // naive local ISO.
+      // dtstart is compact RFC 5545; the engine speaks naive local ISO.
       const iso = dtstart.replace(
         /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
         "$1-$2-$3T$4:$5:$6"
@@ -148,20 +122,15 @@ function assertInputMatches(
   }
 }
 
-// ─── forAll — minimal property-based runner ─────────────────────────────────
-//
-// Not as nice as fast-check (no shrinking, no replay), but adequate for
-// invariant checks on a parser. The seed argument is logged on failure so
-// failures are reproducible in a follow-up imperative test.
+// No shrinking or replay, but adequate for parser invariants. The seed is logged on failure so it
+// can be reproduced in an imperative test.
 
 export interface FuzzOptions {
   runs?: number;
   seed?: number;
 }
 
-/**
- * Tiny LCG so we don't pull in a PRNG dep. Deterministic given the seed.
- */
+/** A tiny LCG, deterministic for a seed, to avoid a PRNG dependency. */
 function makeRng(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -195,10 +164,7 @@ const RECURRENCE = [
 ];
 const TITLES = ["call mom", "review pr", "write notes", "buy groceries", "team sync", ""];
 
-/**
- * Picks 0-2 fragments from each pool, shuffles, joins with a random
- * separator (space, double-space, tab). Used to stress-test composition.
- */
+/** 0-2 fragments from each pool, shuffled and joined by a random separator. */
 function genInput(rng: () => number): string {
   const pick = <T>(arr: readonly T[], maxN: number): T[] => {
     const n = Math.floor(rng() * (maxN + 1));
@@ -218,7 +184,6 @@ function genInput(rng: () => number): string {
     ...pick(RECURRENCE, 1),
   ];
 
-  // Shuffle (Fisher-Yates).
   for (let i = fragments.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [fragments[i], fragments[j]] = [fragments[j]!, fragments[i]!];
@@ -231,12 +196,8 @@ function genInput(rng: () => number): string {
     .join("");
 }
 
-/**
- * Runs `predicate` against `runs` randomly generated parser inputs. The
- * predicate is given the input string AND the parsed result. Throw or
- * return false to fail. The seed (used by the harness) is logged on
- * failure so the input can be reproduced.
- */
+/** Runs `predicate(input, parsed)` on `runs` random inputs; throw or return false to fail. The
+ * seed is logged on failure. */
 export function forAll(
   predicate: (input: string, r: ReturnType<typeof parseInput>) => boolean | void,
   opts: FuzzOptions = {}

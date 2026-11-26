@@ -1,10 +1,3 @@
-// Timed-block positioning + nested-cascade collision logic. Produces the
-// CalendarBlock[] consumed by DayColumn / PageBlock.
-//
-// The overflow ("+N more" pill) collapse and the collapsed-band remap also
-// live here — they're tightly coupled to CalendarBlock and would not gain
-// readability by sitting in their own file.
-
 import { addDays, parseISO, startOfDay } from "date-fns";
 
 import type { PageSummary } from "../types";
@@ -31,87 +24,67 @@ import {
   timeToY,
 } from "./calendarGeometry";
 
-// ─── CalendarBlock ──────────────────────────────────────────────────────────
-
 export interface CalendarBlock {
   page: PageSummary;
   startDate: Date;
   endDate: Date;
-  /** Pixel distance from grid top */
+  /** Pixels from the grid top. */
   top: number;
-  /** Pixel height */
   height: number;
   /** True when duration < MIN_TIMED_MINUTES or there is no scheduledEnd. */
   isCompact: boolean;
-  /** Horizontal position as percent of the day column's width (0..100). */
+  /** Percent of the day column's width (0..100). */
   leftPct: number;
-  /** Horizontal extent as percent of the day column's width (0..100). */
   widthPct: number;
-  /**
-   * Cascade column index (0 = host, 1 = first cascade, …). Drives depth-based
-   * collapse in `collapseUnderWidth` — beyond `MAX_VISIBLE_CASCADE_DEPTH` a
-   * block folds into the "+N more" pill regardless of its rendered width.
-   */
+  /** Cascade column index (0 = host, 1 = first cascade, ...). Beyond `MAX_VISIBLE_CASCADE_DEPTH`
+   * a block folds into the "+N more" pill whatever its width. */
   cascadeDepth: number;
-  /** True when this block is a continuation from the previous day (event started before this day). */
+  /** The event started before this day. */
   isContinuationBefore?: boolean;
-  /** True when this event extends past the end of this day's grid. */
+  /** The event extends past the end of this day's grid. */
   isContinuationAfter?: boolean;
-  /** True when the block straddles the top collapsed band (some of its time
-   * falls inside the compressed band). Drives a square top-edge cue. */
+  /** Some of the block's time falls inside the compressed top band; drives a square top edge. */
   straddlesTopBand?: boolean;
-  /** True when the block straddles the bottom collapsed band. Drives a square
-   * bottom-edge cue. */
+  /** Same for the bottom band. */
   straddlesBottomBand?: boolean;
 }
 
 /**
- * Data an overflow pill needs — separate from CalendarBlock so the pill
- * isn't a synthetic page. A pill replaces the slot of its cluster's rightmost
- * cascaded under-width event, with a min-width floor so "+N more" stays
- * legible on narrow columns. Renders as a single chip at the slot's top.
+ * What an overflow pill needs, kept apart from CalendarBlock so the pill isn't a synthetic
+ * page. It takes the slot of its cluster's rightmost collapsed event, widened to a floor so
+ * "+N more" stays legible on narrow columns, and renders as one chip at the slot's top.
  */
 export interface OverflowPill {
-  /** y-position (px from grid top) — top of the topmost collapsed event. */
+  /** Top of the topmost collapsed event, in pixels from the grid top. */
   top: number;
-  /** Pixel height (matches a compact chip). */
   height: number;
-  /** Horizontal position as percent of the day column's width. */
   leftPct: number;
-  /** Horizontal extent as percent of the day column's width. */
   widthPct: number;
-  /** Page ids that were collapsed into this pill. */
   pageIds: string[];
   /** Too narrow for "+N more", so the pill reads "+N". */
   countOnly: boolean;
 }
 
-// ─── Overflow pill ──────────────────────────────────────────────────────────
-
-/** Floor on the pill's chip height — below this, "+N more" wraps or clips. */
+/** Below this, "+N more" wraps or clips. */
 const MIN_PILL_HEIGHT_PX = 14;
 
-/** Minimum pixel width for the pill at the default zoom — ensures "+N more"
- * stays legible even when the rightmost-cascaded slot is very narrow. */
+/** Pill width floor at the default zoom, so "+N more" stays legible in a very narrow slot. */
 const PILL_MIN_WIDTH_PX = 64;
 
-/** Share of the column the pill may take, so it doesn't cover the event that
- * stays visible beside it. Where that leaves less than the label needs, the pill
- * drops the "more" rather than growing or clipping to "+3 mor". */
+/** Share of the column the pill may take, so it doesn't cover the event beside it. Where that
+ * is less than the label needs, the pill drops the "more" rather than clipping to "+3 mor". */
 const PILL_MAX_WIDTH_PCT = 50;
 
 /**
- * Collapses blocks that would render narrower than OVERFLOW_MIN_WIDTH_PX into a
- * "+N more" pill per overlap cluster. Returns the surviving blocks plus the
- * pills. When `columnWidth <= 0` (no measurement yet) returns the input
- * unchanged so first paint isn't lossy.
+ * Collapses blocks that would render narrower than OVERFLOW_MIN_WIDTH_PX, or deeper than
+ * MAX_VISIBLE_CASCADE_DEPTH, into one "+N more" pill per overlap cluster. Returns the surviving
+ * blocks and the pills; with `columnWidth <= 0` (not measured yet) the input comes back
+ * unchanged.
  *
- * A cluster's first event never collapses, and each cluster gets its own pill at
- * its own rightmost collapsed slot. With one pill per day and no survivor, a
- * 50/50 split whose halves both fell under the width floor vanished entirely,
- * and its count joined a pill beside some other cluster hours away — a column
- * narrowing by a pixel or two, as it does when the calendar text grows and
- * widens the gutter, emptied whole mornings.
+ * A cluster's first event never collapses, and each cluster gets its own pill. One pill per day
+ * with no survivor let a 50/50 split whose halves both fell under the width floor vanish into a
+ * pill beside some other cluster hours away, so a column narrowing by a pixel emptied whole
+ * mornings.
  *
  * The pill's width floor scales with the text, because its label does.
  */
@@ -142,8 +115,8 @@ export function collapseUnderWidth(
   return { pills, visible: blocks.filter((b) => !collapsedIds.has(b.page.id)) };
 }
 
-/** Blocks whose pixel spans connect, the same relation the layout cascades by.
- *  Each cluster keeps the input order, which is the order a pill lists them in. */
+/** Blocks whose pixel spans connect, the relation the layout cascades by. Each cluster keeps the
+ *  input order, which is the order a pill lists them in. */
 function groupByPixelOverlap(blocks: CalendarBlock[]): CalendarBlock[][] {
   const clusterOf = new Map<CalendarBlock, number>();
   let cluster = -1;
@@ -164,9 +137,6 @@ function pillFor(
   chipHeight: number,
   zoom: number
 ): OverflowPill {
-  // Horizontal position: take the slot of the rightmost-cascaded collapsed
-  // event. If that slot is too narrow to render "+N more" legibly, expand
-  // the pill leftward to a minimum readable width.
   const slotHost = collapsed.reduce(
     (best, b) => (b.leftPct > best.leftPct ? b : best),
     collapsed[0]!
@@ -176,10 +146,6 @@ function pillFor(
   const widthPct = Math.max(slotHost.widthPct, minPillPct);
   const leftPct = Math.min(slotHost.leftPct, 100 - widthPct);
 
-  // Pill is chip-shaped (a "+N more" indicator, not a full block replacement).
-  // Height tracks the current density's quarter-hour slot so it scales with
-  // hourHeight — a hair smaller in compact, a hair taller in spacious — but
-  // never falls below the legible-text floor.
   const height = Math.max(chipHeight, MIN_PILL_HEIGHT_PX);
 
   return {
@@ -192,15 +158,10 @@ function pillFor(
   };
 }
 
-// ─── Collapsed-band remap ──────────────────────────────────────────────────
-
 /**
- * Result of remapping a day's CalendarBlocks against a collapse geometry.
- * Blocks fully inside a collapsed band drop out of `visible` and their page
- * ids accumulate into one of the *Pill arrays — the renderer emits a single
- * `+N more` chip in that band's pixel range. Blocks straddling a boundary
- * stay in `visible` with their `top` and `height` rewritten through the
- * geometry; visually they grow out of the compressed band into the middle.
+ * A day's blocks remapped against a collapse geometry. Blocks fully inside a collapsed band
+ * leave `visible` and their ids go to that band's list, for one `+N more` chip. Blocks
+ * straddling a boundary stay, with `top` and `height` rewritten through the geometry.
  */
 export interface RemappedBlocks {
   visible: CalendarBlock[];
@@ -231,13 +192,10 @@ export function remapBlocksForCollapse(
       continue;
     }
 
-    // Blocks straddling a collapsed boundary slip just past the band's `+N
-    // more` pill — same vertical padding the pill uses inside the band — so
-    // they all emerge from the same y regardless of start-time-within-band,
-    // while still rendering slightly into the collapsed space to signal that
-    // they're partially in the compressed range. Without this, blocks would
-    // either cascade by start-minute (meaningless on a compressed band) or
-    // sit flush at the boundary (no visual cue that they extend into it).
+    // A straddling block starts just past the band's pill, so all of them emerge at the same y
+    // whatever their start within the band, yet still reach into the collapsed space. Otherwise
+    // they would cascade by start minute (meaningless on a compressed band) or sit flush at the
+    // boundary with no cue that they extend into it.
     const rawTop = mapHourToY(startHour, geometry);
     const rawBottom = mapHourToY(endHour, geometry);
     const straddlesTopBand = config.topCollapsed && fallsShortOf(startHour, config.topHour);
@@ -265,65 +223,30 @@ export function remapBlocksForCollapse(
   return { bottomCollapsedPageIds, topCollapsedPageIds, visible };
 }
 
-// ─── Cascade tuning constants (file-local) ──────────────────────────────────
-
-/**
- * Maximum leftPct a cascading event can reach. Once cascaded past this, deeper
- * events all land at the same indent — they keep stacking in DOM order so each
- * still gets a visible left edge from the host underneath.
- */
+/** Deeper events all land at this indent and keep stacking in DOM order, so each still shows a
+ * left edge from the host underneath. */
 const CASCADE_MAX_LEFT_PCT = 60;
 
-/**
- * Minimum vertical separation (px) between two overlapping events' tops for
- * cascade to remain readable. Pairs with tops closer than this are split into
- * equal sub-columns instead — cascading them would put both titles in the
- * same horizontal band. Roughly the height of a 2-line title + time row.
- */
+/** Overlapping events with tops closer than this (px, about a two-line title and time row) are
+ * split into equal sub-columns, because cascading them would put both titles in the same band. */
 const CASCADE_MIN_TOP_GAP_PX = 40;
 
-/**
- * Tighter threshold used for chip-vs-chip pairs. Chips are short (~19px) and
- * their single-line text doesn't reach into a host's title/time row, so 30
- * min apart already separates them visually — no need to split them into
- * sub-columns when they're not actually stacking on top of each other.
- */
+/** Tighter threshold for chip pairs: a chip's single line doesn't reach into a host's title and
+ * time row, so 30 minutes apart already separates them. */
 const CHIP_COLLISION_GAP_PX = 20;
 
-// ─── buildDayBlocks ────────────────────────────────────────────────────────
-
-/**
- * Given all pages, returns positioned CalendarBlock[] for `day`.
- * All-day events are excluded (use buildAllDayItems instead).
- *
- * Overlap handling: a **nested cascade** matching Google Calendar's "Russian-
- * doll" look. Each subsequent overlap depth indents right by CASCADE_OFFSET_PCT
- * and renders on top of its host, so the host's title stays visible at the
- * top-left while the guest peeks out on the right.
- *
- * Events whose tops are within CASCADE_MIN_TOP_GAP_PX (e.g. same start time, or
- * very close starts) cannot cascade legibly — both titles would land in the
- * same band — so they're collected into a "text-collision component" and split
- * into equal sub-columns side-by-side instead.
- *
- * Events that span across midnight are shown on each day they touch:
- * - On the start day: renders from event start to bottom of grid (isContinuationAfter)
- * - On middle days: renders full grid height (isContinuationBefore + isContinuationAfter)
- * - On the end day: renders from top of grid to event end (isContinuationBefore)
- */
-/**
- * Pages with a timed schedule that overlaps `[rangeStart, rangeEnd)`. Multi-day timed events are
- * NOT promoted to the all-day row: they render as one segment per day they touch (continuation
- * flags on each segment drive the radius and label rules in PageBlock). A week view filters with
- * this once and hands each day the result, rather than every day walking the whole workspace.
- */
 /** Whether a block from `start` to `end` falls in `[from, to)`. A page with no end has no length
- *  and belongs where its start falls: as an overlap test it would land on no day at exactly
- *  midnight, starting no earlier than the day before ends and ending no later than its day starts. */
+ *  and belongs where its start falls; as an overlap test it would land on no day at exactly
+ *  midnight. */
 function inSpan(start: Date, end: Date, from: Date, to: Date): boolean {
   return end > start ? start < to && end > from : start >= from && start < to;
 }
 
+/**
+ * Pages with a timed schedule overlapping `[rangeStart, rangeEnd)`. Multi-day timed events stay
+ * out of the all-day row and render as one segment per day they touch. A week view filters once
+ * and hands each day the result, rather than every day walking the whole workspace.
+ */
 export function timedPagesInRange(
   pages: PageSummary[],
   rangeStart: Date,
@@ -334,8 +257,8 @@ export function timedPagesInRange(
     if (!page.scheduledStart) return false;
     if (isAllDayPage(page.scheduledStart)) return false;
     try {
-      // Use the same instant resolution as positioning so a synced event shifted
-      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
+      // Same instant resolution as positioning, so a synced event shifted across midnight
+      // (11pm PT to 2am ET) is filtered onto the day it renders.
       const start = resolveBlockInstant(page, page.scheduledStart);
       const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
       return inSpan(start, end, rangeStart, rangeEnd);
@@ -345,8 +268,7 @@ export function timedPagesInRange(
   });
 }
 
-/** `timedPagesInRange` for each of `days` in one pass: each page's instants resolve once, not
- *  once per day. */
+/** `timedPagesInRange` for each of `days` in one pass, resolving each page's instants once. */
 export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary[][] {
   checkZone();
   const bounds = days.map((day) => {
@@ -380,8 +302,8 @@ export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary
   return byDay;
 }
 
-/** Resolve the instants of `pages` ahead of a layout that will need them, as idle work before a
- *  step to a neighbouring week. */
+/** Resolves the instants of `pages` ahead of a layout that will need them, such as idle work
+ *  before a step to a neighbouring week. */
 export function warmBlockInstants(pages: PageSummary[]): void {
   checkZone();
   for (const page of pages) {
@@ -395,6 +317,16 @@ export function warmBlockInstants(pages: PageSummary[]): void {
   }
 }
 
+/**
+ * Positioned blocks for `day`; all-day events are excluded (see `buildAllDayItems`).
+ *
+ * Overlaps nest as a cascade: each deeper overlap indents right by CASCADE_OFFSET_PCT and paints
+ * over its host, so the host's title stays visible. Events whose tops are within
+ * CASCADE_MIN_TOP_GAP_PX can't cascade legibly, so they split into equal side-by-side columns.
+ *
+ * An event spanning midnight appears on each day it touches, with `isContinuationBefore` and
+ * `isContinuationAfter` marking the cut edges.
+ */
 export function buildDayBlocks(
   pages: PageSummary[],
   day: Date,
@@ -426,20 +358,13 @@ export function buildDayBlocks(
       let leftPct: number;
       let widthPct: number;
 
-      // Cascade depth is always the cluster's sweep-line column. Close-top
-      // membership only changes LAYOUT (50/50 split instead of cascade) — it
-      // does NOT promote a close-top sub-component to lower depth. Without
-      // this, a close-top pair sitting at cluster columns 2+3 would render
-      // as host-50%/guest-50% with depth 0/1 and stay visible past the
-      // MAX_VISIBLE_CASCADE_DEPTH cap that fires for the surrounding cluster.
+      // Depth is always the cluster's sweep-line column: a close-top pair only changes the layout
+      // (50/50 split), not the depth. Promoting it would keep a pair at cluster columns 2 and 3
+      // visible past the MAX_VISIBLE_CASCADE_DEPTH cap that applies to the rest of the cluster.
       const cascadeDepth = assignments[i]!;
 
-      // Close-top split only applies when the sub-component owns the cluster
-      // host (depth 0). A mid-cluster close-top pair (e.g. Peer/Stakeholder
-      // sitting at cluster cols 1–2 alongside a separate Workshop host at
-      // col 0) would otherwise paint at leftPct=0/widthPct=50 and visually
-      // collide with the actual cluster host. Mid-cluster close-top falls
-      // back to normal cascade — the cluster host already takes leftPct=0.
+      // The 50/50 split applies only when the pair owns the cluster host (depth 0). A mid-cluster
+      // pair would paint at leftPct 0 and collide with the real host, so it cascades normally.
       const splitsClusterHost =
         component.length > 1 && component.some((idx) => assignments[idx]! === 0);
 
@@ -453,16 +378,11 @@ export function buildDayBlocks(
           widthPct = 50;
         }
       } else {
-        // Cascade at the event's sweep-line column. leftPct grows with depth;
-        // widthPct fills the remaining column width so the deepest guest still
-        // stretches to the right edge.
         leftPct = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
         widthPct = 100 - leftPct;
       }
 
-      // Clipping invariant: no block may render past the right edge of its
-      // day column. The cluster math should already respect this, but cap
-      // defensively so any future edit can't bleed across the column line.
+      // Defensive: no block may render past its day column's edge.
       if (leftPct < 0) leftPct = 0;
       if (leftPct > 100) leftPct = 100;
       if (widthPct < 0) widthPct = 0;
@@ -484,27 +404,20 @@ export function buildDayBlocks(
     }
   }
 
-  // Emit in leftPct order so deeper-cascade events appear later in the DOM and
-  // paint on top of their hosts.
+  // Deeper cascades come later in the DOM so they paint over their hosts.
   blocks.sort((a, b) => a.leftPct - b.leftPct || a.top - b.top);
 
   return blocks;
 }
 
-// ─── Text-collision / cluster / column helpers (file-local) ────────────────
-
 /**
- * Connected components of "events whose tops are within CASCADE_MIN_TOP_GAP_PX
- * of each other AND both render with stacked title+time layout." Each event
- * maps to the cluster-indices of its component (including itself), sorted by
- * visual position. Components of size 1 mean "cascade is safe"; size >= 2
- * means "split into host 50% + right-half cascade."
+ * Connected components of events whose tops are close enough for their headers to collide. Each
+ * event maps to its component's cluster indices (itself included), sorted by visual position. A
+ * component of one cascades; two or more split into a 50% host and a right-half cascade.
  *
- * Compact (chip) events are excluded from collision detection: their single
- * line of text doesn't clash with a host's title/time row, so they should
- * just cascade like any other nested event. This keeps a 2h block with three
- * point reminders inside it from collapsing every chip into a tiny sub-column
- * — the chips render almost-full-width within their host instead.
+ * A chip clashes with another event only when it lands in that event's header area, and two
+ * chips only at near-identical times. This keeps a 2h block with three point reminders inside
+ * it from squeezing every chip into a tiny sub-column.
  */
 function findTextCollisionComponents(cluster: RawBlock[], zoom: number): number[][] {
   const adj: number[][] = cluster.map(() => []);
@@ -513,11 +426,6 @@ function findTextCollisionComponents(cluster: RawBlock[], zoom: number): number[
       const a = cluster[i]!;
       const b = cluster[j]!;
       const gap = Math.abs(a.top - b.top);
-      // Two non-compact events conflict if either's header would land in the
-      // other's title/time row. A chip vs anything else conflicts only when
-      // the chip lands in the other's header area. Two chips conflict only at
-      // near-identical times — they're short enough that 30 min apart already
-      // gives them their own visual row.
       const threshold = a.isCompact && b.isCompact ? CHIP_COLLISION_GAP_PX : CASCADE_MIN_TOP_GAP_PX;
       if (fallsShortOf(gap, threshold * zoom)) {
         adj[i]!.push(j);
@@ -552,11 +460,8 @@ function findTextCollisionComponents(cluster: RawBlock[], zoom: number): number[
 }
 
 /**
- * Group raws into transitively-connected overlap clusters. Requires the input
- * to be sorted by `top`. Two raws belong to the same cluster iff their visual
- * time ranges form a connected component under the overlap relation (so
- * A-overlaps-B and B-overlaps-C puts A, B, C in one cluster even if A and C
- * don't overlap each other).
+ * Groups raws into transitively connected overlap clusters, so A overlapping B and B overlapping
+ * C puts all three together even if A and C don't overlap. The input must be sorted by `top`.
  */
 function groupIntoClusters(raws: RawBlock[]): RawBlock[][] {
   const clusters: RawBlock[][] = [];
@@ -579,15 +484,11 @@ function groupIntoClusters(raws: RawBlock[]): RawBlock[][] {
 }
 
 /**
- * Greedy sweep-line column assignment within a single cluster. Returns an
- * array parallel to `cluster` holding the column index assigned to each raw.
+ * Greedy sweep-line column assignment within one cluster; the result is parallel to `cluster`.
  *
- * Cascade-aware fallback: when col N is freed but col N+1 is still alive,
- * we DON'T fall back to col N. Cascade renders col 0 at full width
- * (`widthPct = 100 - leftPct`), so reusing a low column under an alive
- * higher one would paint the new event behind the higher cascade and
- * render it as a thin sliver on the left. Always allocate a new column to
- * the right of every still-alive column so the new event paints on top.
+ * A freed column N is not reused while column N+1 is alive. Cascade draws col 0 at full width,
+ * so the new event would paint behind the higher cascade as a thin sliver on the left. It takes
+ * a column right of every live one so it paints on top.
  */
 function assignColumns(cluster: RawBlock[]): number[] {
   const columnOverlapEnds: number[] = [];
@@ -596,9 +497,6 @@ function assignColumns(cluster: RawBlock[]): number[] {
   for (let i = 0; i < cluster.length; i++) {
     const raw = cluster[i]!;
     const startMs = raw.visualStart.getTime();
-    // Walk from highest column down. Reuse a free col only if every column
-    // above it is also free for this event — otherwise the new event would
-    // be hidden by an alive cascade above.
     let assigned = -1;
     for (let col = columnOverlapEnds.length - 1; col >= 0; col--) {
       if (columnOverlapEnds[col]! > startMs) break; // alive — block fallback
@@ -615,18 +513,15 @@ function assignColumns(cluster: RawBlock[]): number[] {
   return assignments;
 }
 
-// ─── Raw block construction (file-local) ────────────────────────────────────
-
-/** Intermediate representation used by the layout pass — not exported. */
 interface RawBlock {
   endDate: Date;
   height: number;
   isContinuationAfter: boolean;
   isContinuationBefore: boolean;
   isCompact: boolean;
-  /** Visual end (may differ from endDate for compact blocks) — used for overlap math. */
+  /** Visual end, which can differ from endDate for compact blocks; overlap is decided on it. */
   overlapEnd: Date;
-  /** Visual start clamped to the day's grid boundary. */
+  /** Clamped to the day's grid boundary. */
   visualStart: Date;
   page: PageSummary;
   startDate: Date;
@@ -634,14 +529,12 @@ interface RawBlock {
 }
 
 /**
- * The one visual order for blocks sharing a slot: top, then start, then title,
- * then id. Every layout decision that a tie can flip — cascade depth and the
- * close-top 50/50 split — reads it, so the two can't disagree.
+ * The one visual order for blocks sharing a slot: top, start, title, then id. Cascade depth and
+ * the close-top split both read it, so they can't disagree on a tie.
  *
- * Title outranks id because completing an occurrence swaps the page for a done
- * clone carrying a fresh uuid. Under an id-first tiebreak that re-decides which
- * of two same-start events hosts the slot, so the pair visibly swaps sides on a
- * tick. Id stays as the last resort: same time, same title, still deterministic.
+ * Title outranks id because completing an occurrence swaps the page for a done clone with a
+ * fresh uuid, and an id-first tiebreak would re-decide which of two same-start events hosts the
+ * slot, visibly swapping the pair.
  */
 function compareRawOrder(a: RawBlock, b: RawBlock): number {
   return (
@@ -652,13 +545,6 @@ function compareRawOrder(a: RawBlock, b: RawBlock): number {
   );
 }
 
-/**
- * Parse a timed block's wall-clock string to its grid Date. Native pages float
- * (parsed as-is). A synced (locked) event is absolute: resolve its source-zone
- * wall-clock to the instant, which `timeToY` then reads in the viewer's zone — so
- * a 3pm PT event positions at 6pm for an ET viewer. Detached pages unlock and
- * float again, so the gate is `scheduleLocked`, not mere sync provenance.
- */
 /**
  * Instants by page object. A page's row is replaced when it changes, never edited, so what it
  * parses to holds for the object's life and a week step parses only pages it hasn't drawn. The
@@ -675,6 +561,12 @@ function checkZone(): void {
   instantsZone = zone;
 }
 
+/**
+ * A timed block's wall-clock string as its grid Date. Native pages float and parse as-is. A
+ * synced (locked) event is absolute: its source-zone wall clock resolves to an instant that
+ * `timeToY` reads in the viewer's zone, so a 3pm PT event sits at 6pm for an ET viewer. Detached
+ * pages float again, so the gate is `scheduleLocked`, not sync provenance.
+ */
 function resolveBlockInstant(page: PageSummary, iso: string): Date {
   let held = instants.get(page);
   const hit = held?.get(iso);
@@ -713,11 +605,9 @@ function buildRawBlock(
     Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
   );
   const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
-  // Raw 24h pixel height — `startY` is computed in this same coord system via
-  // `timeToY`. `metrics.gridHeight` is the collapse-remapped total (smaller
-  // than raw 24h when bands are collapsed); using it here would clamp end-of-
-  // day events to a y above their start and squash them to the height floor.
-  // `remapBlocksForCollapse` projects raw → remapped coords downstream.
+  // Not `metrics.gridHeight`: that is the collapse-remapped total, which is smaller when bands
+  // are collapsed and would clamp end-of-day events above their start, squashing them to the
+  // height floor. `startY` is in these raw coordinates; `remapBlocksForCollapse` projects later.
   const rawGridHeight = metrics.hourHeight * VISIBLE_HOURS;
   let endY: number;
   if (isContinuationAfter) {
@@ -731,8 +621,8 @@ function buildRawBlock(
   // A floored block starting in the day's last minutes rises to stay on the grid.
   const top = Math.min(startY, rawGridHeight - height);
   const isCompact = !isContinuationAfter && fallsShortOf(height, metrics.stackedBlockMinHeight);
-  // Overlap is decided in time, so a floored block claims the minutes its height
-  // covers — or a 9:00 reminder drawn 24 minutes tall would sit on a 9:15 event.
+  // Overlap is decided in time, so a floored block claims the minutes its height covers, or a
+  // 9:00 reminder drawn 24 minutes tall would sit on a 9:15 event.
   const overlapMin = Math.max(visualDurationMin, (height / metrics.hourHeight) * 60);
   const overlapEnd = isContinuationAfter ? visualEnd : addClockMinutes(visualStart, overlapMin);
 

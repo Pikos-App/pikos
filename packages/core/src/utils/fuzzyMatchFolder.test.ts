@@ -31,11 +31,7 @@ describe("fuzzyMatchFolder — empty / null inputs", () => {
 
 describe("fuzzyMatchFolder — exact match (highest precedence)", () => {
   it("exact match wins over prefix and substring", () => {
-    const folders = [
-      makeFolder("Work-Stuff"), // would match "work" as prefix
-      makeFolder("Work"), // exact match — should win
-      makeFolder("Networking"), // would match "work" as substring
-    ];
+    const folders = [makeFolder("Work-Stuff"), makeFolder("Work"), makeFolder("Networking")];
     expect(fuzzyMatchFolder("work", folders)?.name).toBe("Work");
   });
 
@@ -48,10 +44,7 @@ describe("fuzzyMatchFolder — exact match (highest precedence)", () => {
 
 describe("fuzzyMatchFolder — prefix match (second precedence)", () => {
   it("prefix wins over substring", () => {
-    const folders = [
-      makeFolder("Networking"), // substring match for "work"
-      makeFolder("Workshop"), // prefix match for "work"
-    ];
+    const folders = [makeFolder("Networking"), makeFolder("Workshop")];
     expect(fuzzyMatchFolder("work", folders)?.name).toBe("Workshop");
   });
 
@@ -95,10 +88,7 @@ describe("fuzzyMatchFolder — typical NL → schema flows", () => {
   });
 
   it("a folder named 'inbox' is matched if it exists (caller often special-cases inbox before calling)", () => {
-    // Behavior contract: fuzzyMatchFolder doesn't treat "inbox" specially.
-    // QuickAddDialog handles the inbox shortcut by checking the query string
-    // before falling back to the match result. Verify that if a real folder
-    // is named "Inbox", it matches normally.
+    // QuickAddDialog handles the inbox shortcut itself, so a real folder named "Inbox" matches normally.
     const folders = [makeFolder("Inbox", "inbox-folder-id")];
     expect(fuzzyMatchFolder("inbox", folders)?.id).toBe("inbox-folder-id");
   });

@@ -1,17 +1,16 @@
 import { isTimedIso } from "../utils/dates";
 
-/** Strip markdown formatting from titles before storing in DB or displaying in preview. */
+/** Strips markdown formatting from titles before storing or previewing. */
 export function cleanTitle(title: string): string {
   return title
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [text](url) → text
-    .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** → bold
-    .replace(/\*(.+?)\*/g, "$1") // *italic* → italic
-    .replace(/__(.+?)__/g, "$1") // __bold__ → bold
-    .replace(/_(.+?)_/g, "$1") // _italic_ → italic
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
     .trim();
 }
 
-/** Format a scheduled date for compact display: "Apr 8" or "Apr 8, 2pm" */
 export function formatSchedule(scheduledStart: string): string {
   const hasTime = isTimedIso(scheduledStart);
   const d = new Date(hasTime ? scheduledStart : `${scheduledStart}T00:00:00`);
@@ -28,7 +27,6 @@ export function formatSchedule(scheduledStart: string): string {
   return `${month} ${day}, ${time}`;
 }
 
-/** Format an ISO timestamp as a relative time string (e.g. "just now", "5m ago", "2h ago"). */
 export function formatTimeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);

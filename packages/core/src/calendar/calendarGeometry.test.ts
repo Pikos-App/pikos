@@ -27,37 +27,35 @@ import {
   toCalendarDensity,
 } from "./dayCount";
 
-// ─── weekStart / weekDays / weekEnd ──────────────────────────────────────────
-
 describe("weekStart", () => {
   it("returns Monday for a Wednesday (default)", () => {
-    const wed = new Date(2026, 2, 18); // Wednesday March 18
+    const wed = new Date(2026, 2, 18);
     const monday = weekStart(wed);
-    expect(monday.getDay()).toBe(1); // Monday
+    expect(monday.getDay()).toBe(1);
     expect(monday.getDate()).toBe(16);
   });
 
   it("returns same day when given a Monday", () => {
-    const mon = new Date(2026, 2, 16); // Monday March 16
+    const mon = new Date(2026, 2, 16);
     expect(weekStart(mon).getDate()).toBe(16);
   });
 
   it("returns previous Monday for a Sunday", () => {
-    const sun = new Date(2026, 2, 22); // Sunday March 22
+    const sun = new Date(2026, 2, 22);
     const monday = weekStart(sun);
     expect(monday.getDay()).toBe(1);
     expect(monday.getDate()).toBe(16);
   });
 
   it("returns Sunday when weekStartsOn=0", () => {
-    const wed = new Date(2026, 2, 18); // Wednesday March 18
+    const wed = new Date(2026, 2, 18);
     const sunday = weekStart(wed, 0);
-    expect(sunday.getDay()).toBe(0); // Sunday
+    expect(sunday.getDay()).toBe(0);
     expect(sunday.getDate()).toBe(15);
   });
 
   it("returns same day when given a Sunday with weekStartsOn=0", () => {
-    const sun = new Date(2026, 2, 15); // Sunday March 15
+    const sun = new Date(2026, 2, 15);
     expect(weekStart(sun, 0).getDate()).toBe(15);
   });
 });
@@ -67,8 +65,8 @@ describe("weekDays", () => {
     const wed = new Date(2026, 2, 18);
     const days = weekDays(wed);
     expect(days).toHaveLength(7);
-    expect(days[0]!.getDay()).toBe(1); // Monday
-    expect(days[6]!.getDay()).toBe(0); // Sunday
+    expect(days[0]!.getDay()).toBe(1);
+    expect(days[6]!.getDay()).toBe(0);
   });
 
   it("all days are consecutive", () => {
@@ -83,24 +81,24 @@ describe("weekDays", () => {
     const wed = new Date(2026, 2, 18);
     const days = weekDays(wed, 0);
     expect(days).toHaveLength(7);
-    expect(days[0]!.getDay()).toBe(0); // Sunday
-    expect(days[6]!.getDay()).toBe(6); // Saturday
+    expect(days[0]!.getDay()).toBe(0);
+    expect(days[6]!.getDay()).toBe(6);
   });
 });
 
 describe("buildCalendarDays", () => {
   it("returns 7 days anchored at the week start when dayCount=7", () => {
-    const wed = new Date(2026, 2, 18); // Wednesday
+    const wed = new Date(2026, 2, 18);
     const days = buildCalendarDays(wed, 7);
     expect(days).toHaveLength(7);
-    expect(days[0]!.getDay()).toBe(1); // Monday
+    expect(days[0]!.getDay()).toBe(1);
   });
 
   it("returns dayCount days anchored at refDate when dayCount<7", () => {
     const wed = new Date(2026, 2, 18);
     const days = buildCalendarDays(wed, 3);
     expect(days).toHaveLength(3);
-    expect(days[0]!.getDate()).toBe(18); // starts on ref date itself
+    expect(days[0]!.getDate()).toBe(18);
     expect(days[1]!.getDate()).toBe(19);
     expect(days[2]!.getDate()).toBe(20);
   });
@@ -116,7 +114,7 @@ describe("buildCalendarDays", () => {
   it("respects weekStartsOn=0 for dayCount=7", () => {
     const wed = new Date(2026, 2, 18);
     const days = buildCalendarDays(wed, 7, 0);
-    expect(days[0]!.getDay()).toBe(0); // Sunday
+    expect(days[0]!.getDay()).toBe(0);
   });
 
   it("days are always consecutive", () => {
@@ -128,30 +126,26 @@ describe("buildCalendarDays", () => {
   });
 
   it("returns Mon-Fri anchored to Monday when dayCount='mf'", () => {
-    const wed = new Date(2026, 2, 18); // Wednesday March 18
+    const wed = new Date(2026, 2, 18);
     const days = buildCalendarDays(wed, "mf");
     expect(days).toHaveLength(5);
-    expect(days[0]!.getDay()).toBe(1); // Monday
+    expect(days[0]!.getDay()).toBe(1);
     expect(days[0]!.getDate()).toBe(16);
-    expect(days[4]!.getDay()).toBe(5); // Friday
+    expect(days[4]!.getDay()).toBe(5);
     expect(days[4]!.getDate()).toBe(20);
   });
 
   it("'mf' anchors to Monday even when weekStartsOn=0 (Sunday)", () => {
-    // M-F means Mon-Fri by name — the Sunday-start preference shouldn't push it
-    // to Sun-Thu, otherwise the label becomes a lie.
     const wed = new Date(2026, 2, 18);
     const days = buildCalendarDays(wed, "mf", 0);
-    expect(days[0]!.getDay()).toBe(1); // still Monday
+    expect(days[0]!.getDay()).toBe(1);
   });
 
   it("'mf' on a Sunday returns the upcoming Mon-Fri", () => {
-    // startOfWeek with weekStartsOn=1 on Sun returns the previous Monday — a
-    // Sunday refDate should land in the *previous* week's Mon-Fri block.
-    const sun = new Date(2026, 2, 22); // Sunday March 22
+    const sun = new Date(2026, 2, 22);
     const days = buildCalendarDays(sun, "mf");
-    expect(days[0]!.getDate()).toBe(16); // previous Monday
-    expect(days[4]!.getDate()).toBe(20); // previous Friday
+    expect(days[0]!.getDate()).toBe(16);
+    expect(days[4]!.getDate()).toBe(20);
   });
 });
 
@@ -159,19 +153,17 @@ describe("weekEnd", () => {
   it("returns Sunday for a Wednesday (default)", () => {
     const wed = new Date(2026, 2, 18);
     const sunday = weekEnd(wed);
-    expect(sunday.getDay()).toBe(0); // Sunday
+    expect(sunday.getDay()).toBe(0);
     expect(sunday.getDate()).toBe(22);
   });
 
   it("returns Saturday for a Wednesday with weekStartsOn=0", () => {
     const wed = new Date(2026, 2, 18);
     const saturday = weekEnd(wed, 0);
-    expect(saturday.getDay()).toBe(6); // Saturday
+    expect(saturday.getDay()).toBe(6);
     expect(saturday.getDate()).toBe(21);
   });
 });
-
-// ─── timeToY ─────────────────────────────────────────────────────────────────
 
 describe("timeToY", () => {
   it("midnight → 0 (grid start)", () => {
@@ -192,8 +184,6 @@ describe("timeToY", () => {
   });
 });
 
-// ─── yToDate ─────────────────────────────────────────────────────────────────
-
 describe("yToDate", () => {
   const day = new Date(2026, 2, 15);
 
@@ -204,21 +194,16 @@ describe("yToDate", () => {
   });
 
   it("snaps to 15-min boundaries", () => {
-    // A y-value that corresponds to ~0:07 should snap to 0:00
     const sevenMinY = (7 / 60) * HOUR_HEIGHT;
     const result = yToDate(sevenMinY, day);
     expect(result.getMinutes() % 15).toBe(0);
   });
 });
 
-// ─── snapY ───────────────────────────────────────────────────────────────────
-
 describe("snapY", () => {
   it("rounds to nearest 15-min grid line", () => {
-    // 15 min = HOUR_HEIGHT / 4
     const fifteenMinY = HOUR_HEIGHT / 4;
     expect(snapY(fifteenMinY)).toBe(fifteenMinY);
-    // Halfway between 0 and 15 min → snaps to 15 min
     expect(snapY(fifteenMinY / 2 + 1)).toBe(fifteenMinY);
   });
 
@@ -226,8 +211,6 @@ describe("snapY", () => {
     expect(snapY(0)).toBe(0);
   });
 });
-
-// ─── Collapse geometry ───────────────────────────────────────────────────────
 
 describe("buildCollapseGeometry", () => {
   it("both bands collapsed → 40 + middle + 40", () => {
@@ -329,8 +312,6 @@ describe("clampTopHour / clampBottomHour", () => {
   });
 });
 
-// ─── collapsedBandPillHeight / collapsedBandInnerOffset ──────────────────────
-
 describe("collapsedBandPillHeight", () => {
   it("returns the default band's pill height inside the [14, 20] envelope", () => {
     const h = collapsedBandPillHeight(COLLAPSED_BAND_HEIGHT);
@@ -391,10 +372,8 @@ describe("zoom", () => {
     }
   });
 
-  // The whole point: the hour grows by the factor the text grows by, so a block's
-  // room for its contents is the same at every zoom. Text used to scale while the
-  // block holding it did not, which is how a short block came to clip its own
-  // checkbox down to two slivers.
+  // The hour grows by the factor the text grows by, so a block's room for its contents is the
+  // same at every zoom.
   it("scales the hour by the same factor as the text", () => {
     for (const density of CALENDAR_DENSITY_STEPS) {
       const base = computeCalendarMetrics(density).hourHeight;
