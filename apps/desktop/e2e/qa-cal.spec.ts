@@ -1073,7 +1073,10 @@ appTest(
       await expect(calendarOf(app)).toHaveAttribute("aria-busy", "false");
     }
     await app.mouse.move(0, 0);
-    await gutterLabel(app, 20).scrollIntoViewIfNeeded();
+    // The blocks run 8 to 9 PM and the checks read their bottom edge, so 9 PM has to be in
+    // view. Scrolling 8 PM in left it on the window's edge whenever the grid opened earlier
+    // in the day, as it does at the current time, and the edge fell off screen.
+    await gutterLabel(app, 21).scrollIntoViewIfNeeded();
 
     await appTest.step("CAL-26 on the week grid and as an all-day bar it's at full strength", async () => {
       await expect(block).toBeVisible();
