@@ -739,6 +739,36 @@ pub async fn overdue_count(
     Ok(pages.len() as i64)
 }
 
+/// How long a calendar can go without syncing before its events may have moved or
+/// gone. The desktop banner uses the same hour (`NOT_SYNCING_AFTER_MS`).
+pub const CALENDAR_OUT_OF_DATE_AFTER: chrono::Duration = chrono::Duration::hours(1);
+
+/// Whether `page_id` mirrors a calendar Pikos may be out of date on: its account
+/// needs signing in again, or the calendar last synced over
+/// [`CALENDAR_OUT_OF_DATE_AFTER`] before `now`. A native or detached page is the
+/// user's own, so it never is, and nor is a calendar that has yet to sync.
+pub async fn page_calendar_out_of_date(
+    pool: &SqlitePool,
+    page_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<bool, sqlx::Error> {
+    let cutoff =
+        (now - CALENDAR_OUT_OF_DATE_AFTER).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    sqlx::query_scalar(
+        "SELECT EXISTS (
+           SELECT 1 FROM page_sync sy
+           JOIN sync_account a ON a.id = sy.account_id
+           JOIN sync_calendar c ON c.account_id = sy.account_id AND c.calendar_id = sy.calendar_id
+           WHERE sy.page_id = ? AND sy.sync_state = 'active'
+             AND (a.reconnect_needed = 1 OR julianday(c.last_synced_at) < julianday(?))
+         )",
+    )
+    .bind(page_id)
+    .bind(cutoff)
+    .fetch_one(pool)
+    .await
+}
+
 /// Record that a per-reminder notification fired (dedup anchor for future ticks).
 ///
 /// Returns the row id. The scheduler hands it to the OS as the notification's
