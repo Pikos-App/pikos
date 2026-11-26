@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseWorktrees, plan } from "./clean-merged-work.mjs";
+import { mergedBranches, parseWorktrees, plan } from "./clean-merged-work.mjs";
 
 const PORCELAIN = `worktree /code/pkos
 HEAD aaa
@@ -61,12 +61,28 @@ test("keeps a worktree with uncommitted changes, and the worktree it runs in", (
   assert.deepEqual(plan({ ...base, here: "/code/pkos-051" }).removeWorktrees, []);
 });
 
-test("keeps a worktree whose branch isn't merged", () => {
+test("keeps a worktree whose branch has no merged pull request", () => {
   const { deleteBranches, kept, removeWorktrees } = plan({
     ...base,
     merged: new Set(["ci/old"]),
   });
   assert.deepEqual(removeWorktrees, []);
   assert.deepEqual(deleteBranches, ["ci/old"]);
-  assert.match(kept[0].why, /feat\/0\.5\.1 isn't merged/);
+  assert.match(kept[0].why, /feat\/0\.5\.1 has no merged pull request/);
+});
+
+test("counts a branch merged only when its pull request merged and its base holds it", () => {
+  const prs = [
+    { baseRefName: "main", headRefName: "feat/0.5.1" },
+    { baseRefName: "feat/1.0.0-beta.1", headRefName: "fix/beta-only" },
+    { baseRefName: "main", headRefName: "fix/more-after-merge" },
+  ];
+  const holds = new Set(["feat/0.5.1@main", "fix/beta-only@feat/1.0.0-beta.1", "chore/fresh@main"]);
+  const merged = mergedBranches(
+    ["feat/0.5.1", "fix/beta-only", "fix/more-after-merge", "chore/fresh"],
+    prs,
+    (branch, base) => holds.has(`${branch}@${base}`)
+  );
+  // chore/fresh was just made from main, so main holds it, but nothing merged from it yet.
+  assert.deepEqual([...merged], ["feat/0.5.1", "fix/beta-only"]);
 });
