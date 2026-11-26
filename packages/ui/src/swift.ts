@@ -1,7 +1,5 @@
-// The native renderer for the design tokens: the Swift palette the iOS app and its
-// widgets draw with, the asset-catalog colours UIKit reads before any Swift runs,
-// and the colour block of the phone editor's stylesheet. All three are committed
-// artifacts of `tokens.ts`, regenerated and drift-checked by scripts/gen-ui-tokens.mjs.
+// The native renderer for the design tokens: the Swift palette, the asset-catalog colours
+// UIKit reads before any Swift runs, and the phone editor's colour block.
 
 import type {
   ColorScheme,
@@ -13,7 +11,7 @@ import type {
 import { isColorValue } from "./token-types.ts";
 import { PRIMITIVE_GROUPS, SEMANTIC_GROUPS, tokenValue } from "./tokens.ts";
 
-/** Straight (not premultiplied) sRGB, each channel 0–1. */
+/** Straight (not premultiplied) sRGB, each channel 0-1. */
 export interface Rgba {
   readonly r: number;
   readonly g: number;
@@ -193,7 +191,7 @@ function colorSetJson(light: Rgba, dark: Rgba): string {
   ).replace(/": /g, '" : ')}\n`;
 }
 
-/** `AccentColor` tints every system control, whose labels are text; `LaunchBackground` paints the launch screen. */
+/** `AccentColor` tints every system control, whose labels are text, so it takes a text token. */
 export function renderAssetColors(): AssetColor[] {
   const sets = [
     { name: "AccentColor", token: "text-action" },
@@ -227,7 +225,6 @@ const EDITOR_VARIABLES = [
   ["--pikos-selection", "surface-selected"],
 ] as const;
 
-/** Editor colours as custom properties, both schemes; alpha tokens render as rgba(). */
 export function renderEditorCssBlock(): string {
   const value = (token: string, scheme: ColorScheme) => {
     const definition = nativeSemanticTokens().find((t) => t.name === token);
@@ -243,8 +240,8 @@ export function renderEditorCssBlock(): string {
     ...EDITOR_VARIABLES.map(([name, token]) => `  ${name}: ${value(token, scheme)};`),
     "}",
   ];
-  // The system's scheme until the host sends its own: the page draws before the host can, and a
-  // light background there flashed white as a dark-mode page opened.
+  // The page draws before the host sends its scheme, so it follows the system's until then;
+  // a fixed light background flashes white in dark mode.
   const followingSystem = [
     "@media (prefers-color-scheme: dark) {",
     ...block(':root:not([data-scheme="light"])', "dark").map((line) => `  ${line}`),

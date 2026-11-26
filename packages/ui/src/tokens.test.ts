@@ -12,7 +12,6 @@ import {
   tokenValue,
 } from "./tokens.ts";
 
-/** Every value node reachable from a token, including mix operands and shadow layers. */
 function walk(value: TokenValue): TokenValue[] {
   if (value.kind === "mix") return [value, ...walk(value.from), ...walk(value.to)];
   if (value.kind === "shadow") return [value, ...value.layers.flatMap((l) => walk(l.color))];
@@ -61,8 +60,7 @@ describe("light / dark completeness", () => {
       .filter((t) => t.dark === undefined)
       .filter((t) => t.value.kind === "shadow" || (isColorValue(t.value) && t.value.kind !== "ref"))
       .map((t) => t.name);
-    // A semantic token holding a literal is scheme-specific by definition; only
-    // aliases (refs) and the unthemed metrics may inherit :root in dark mode.
+    // Only aliases and unthemed metrics may inherit :root in dark mode.
     expect(missing).toEqual([]);
   });
 

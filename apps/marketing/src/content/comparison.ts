@@ -1,11 +1,10 @@
 /**
- * The competitor comparison, stated once. The compare page and `llms.txt` both render this
- * table, so a fact changed here changes on both, and the two can't drift apart the way two
- * hand-kept copies did. Prose elsewhere on the site restates some of these facts in sentences
- * and is checked against this file at release, not generated from it.
+ * The competitor comparison, stated once: the compare page and `llms.txt` both render this
+ * table. Prose elsewhere restates some of these facts and is checked against this file at
+ * release, not generated from it.
  *
- * `COMPARISON_CHECKED` is read by `scripts/release.sh`, which refuses to tag once it is more
- * than three months old. Keep it on one line as an ISO date.
+ * `scripts/release.sh` reads `COMPARISON_CHECKED` and refuses to tag once it is over three
+ * months old, so keep it on one line as an ISO date.
  */
 
 export type Cell = boolean | "Paid" | "Plugin";
@@ -111,9 +110,7 @@ type FeatureKey = Exclude<keyof ComparedApp, "name" | "sources">;
 
 interface Feature {
   key: FeatureKey;
-  /** The site's short column head. */
   label: string;
-  /** The `llms.txt` row name. */
   longLabel: string;
   /** Off where the page is too narrow for it; `llms.txt` shows every feature. */
   onSite: boolean;

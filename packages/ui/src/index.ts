@@ -1,8 +1,3 @@
-// @pikos/ui — shadcn React wrappers and design tokens.
-//
-// The tokens are plain typed data with no React in sight, so a native mobile
-// renderer can depend on this package without pulling a web runtime in.
-
 export {
   renderTokenCss,
   renderTokenCssBlock,

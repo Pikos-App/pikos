@@ -1,32 +1,20 @@
-// The editor bridge protocol — one declaration, both sides.
-//
-// The webview and the host app exchange JSON messages, and the two ends are
-// written in different languages by different toolchains. Left to hand-written
-// definitions on each side they drift, and the failure mode is bad: a renamed
-// field does not fail to compile, it silently arrives as undefined and the
-// editor quietly stops saving.
-//
-// So the protocol is declared once, here, as plain data. The TypeScript types
-// and runtime validators are derived from it, and `scripts/gen-swift-protocol.ts`
-// emits matching Swift `Codable` types from the same declaration. Neither side
-// is authored by hand, so neither can drift from the other.
+// The editor bridge protocol, declared once as plain data. The TypeScript types and
+// validators derive from it, and `scripts/gen-swift-protocol.ts` emits the Swift types, so
+// the two ends cannot drift: a hand-renamed field would not fail to compile, it would
+// arrive as undefined and the editor would quietly stop saving.
 //
 // Wire format for every message:
 //
 //   { "v": 1, "type": "docChanged", "payload": { ... } }
 //
-// The version is on every message rather than negotiated once at startup. An
-// app update can replace the native shell while a webview is still live, and a
-// version on the envelope means the receiver can reject a message it does not
-// understand instead of misreading it.
+// The version rides every message because an app update can replace the native shell while
+// a webview is still live, so the receiver can reject what it does not understand.
 
 export const PROTOCOL_VERSION = 1;
 
-/** Field types the bridge can carry. Deliberately small. */
 export type FieldType =
   | "string"
-  /** A whole number. Distinct from `number` so Swift gets an `Int`, and a
-   *  version or a count is compared exactly rather than as a Double. */
+  /** Distinct from `number` so Swift gets an `Int`. */
   | "integer"
   | "number"
   | "boolean"
@@ -38,12 +26,7 @@ export interface MessageSpec {
   readonly fields: Readonly<Record<string, FieldType>>;
 }
 
-/**
- * Host → webview.
- *
- * Swift owns persistence, so nothing here writes to a database; these are
- * instructions to the editor about what to show and where focus should be.
- */
+/** Host to webview. Swift owns persistence, so these only say what to show and where focus goes. */
 export const HOST_TO_WEBVIEW = {
   blur: {
     doc: "Release focus and dismiss the keyboard.",
@@ -83,12 +66,7 @@ export const HOST_TO_WEBVIEW = {
   },
 } as const satisfies Record<string, MessageSpec>;
 
-/**
- * Webview → host.
- *
- * The rule from the plan, and the one that matters most: the webview never
- * talks to the database. It reports what happened; Swift decides what to store.
- */
+/** Webview to host. */
 export const WEBVIEW_TO_HOST = {
   docChanged: {
     doc: "The document changed. Debounced in the webview. `plainText` is the extracted text for the search index, sent alongside so the host does not have to re-derive it.",
@@ -127,7 +105,6 @@ export const WEBVIEW_TO_HOST = {
 export type HostToWebviewType = keyof typeof HOST_TO_WEBVIEW;
 export type WebviewToHostType = keyof typeof WEBVIEW_TO_HOST;
 
-/** Maps a declared field type onto its TypeScript counterpart. */
 type FieldValue<T extends FieldType> = T extends "string"
   ? string
   : T extends "integer" | "number"
@@ -155,7 +132,6 @@ export interface Envelope<T extends string, P> {
   payload: P;
 }
 
-/** Runtime shape check for one field. */
 function isValid(value: unknown, type: FieldType): boolean {
   switch (type) {
     case "string":
@@ -163,26 +139,21 @@ function isValid(value: unknown, type: FieldType): boolean {
     case "integer":
       return typeof value === "number" && Number.isInteger(value);
     case "number":
-      // NaN and Infinity serialise as null through JSON and would arrive as a
-      // number-typed hole, so they are rejected here rather than downstream.
+      // NaN and Infinity serialise as null through JSON.
       return typeof value === "number" && Number.isFinite(value);
     case "boolean":
       return typeof value === "boolean";
     case "stringArray":
       return Array.isArray(value) && value.every((v) => typeof v === "string");
     case "json":
-      // Any JSON value is acceptable; the editor validates the document itself.
+      // The editor validates the document itself.
       return value !== undefined;
   }
 }
 
 /**
- * Validate an incoming host → webview message.
- *
- * Returns the parsed envelope, or an error string explaining the rejection.
- * Errors are returned rather than thrown because the caller is a message
- * handler at the platform boundary: throwing there loses the context needed to
- * report the problem back across the bridge.
+ * Returns the parsed envelope, or an error string explaining the rejection. It never throws:
+ * the caller is a message handler at the platform boundary, where a throw loses the context.
  */
 export function parseHostMessage(
   raw: unknown
@@ -218,7 +189,6 @@ export function parseHostMessage(
   return { ok: true, payload, type: type as HostToWebviewType };
 }
 
-/** Build a webview → host envelope. */
 export function envelope<T extends WebviewToHostType>(
   type: T,
   payload: WebviewToHostPayload<T>

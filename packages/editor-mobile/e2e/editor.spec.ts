@@ -15,8 +15,7 @@ const DEBOUNCE_SETTLE_MS = 600;
 test.beforeEach(async ({ page }) => {
   await installFakeHost(page);
   await page.goto("/");
-  // `ready` is the editor's own signal that it can accept messages; waiting on
-  // it rather than on a selector means the tests never race startup.
+  // Wait on `ready`, not a selector, so tests never race startup.
   await expect
     .poll(async () => (await messagesOfType(page, "ready")).length)
     .toBeGreaterThan(0);
@@ -51,8 +50,7 @@ test.describe("loading a document", () => {
   });
 
   test("does not report the host's own load back as a change", async ({ page }) => {
-    // Otherwise every page open looks like an edit, and with sync that is a
-    // write per open rather than per edit.
+    // Otherwise every page open looks like an edit, and with sync a write.
     await clearMessages(page);
     await sendToEditor(page, "load", { doc: docWithText("Untouched"), pageId: "p1" });
     await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
@@ -63,8 +61,7 @@ test.describe("loading a document", () => {
     await sendToEditor(page, "load", { doc: docWithText("Previous page"), pageId: "p1" });
     await expect(page.locator(".ProseMirror")).toContainText("Previous page");
 
-    // A corrupt document must not leave the previous page's content on screen —
-    // the user would be editing one page believing it is another.
+    // Stale content would leave the user editing one page believing it is another.
     await sendToEditor(page, "load", { doc: "{ not json", pageId: "p2" });
     await expect(page.locator(".ProseMirror")).not.toContainText("Previous page");
   });
@@ -187,15 +184,11 @@ test.describe("reporting changes", () => {
     await expect.poll(async () => (await messagesOfType(page, "docChanged")).length).toBeGreaterThan(0);
     const [change] = await messagesOfType(page, "docChanged");
     expect(change?.payload["pageId"]).toBe("page-42");
-    // Extracted in the webview with the same function the desktop app uses for
-    // its search index, so search behaves the same for a page typed on a phone.
     expect(change?.payload["plainText"]).toContain("Buy milk");
     expect(JSON.parse(change?.payload["doc"] as string)).toMatchObject({ type: "doc" });
   });
 
   test("coalesces a burst of typing into one message", async ({ page }) => {
-    // Each message carries the whole document plus its extracted text. At
-    // typing speed, sending per keystroke is enough serialisation to feel.
     await sendToEditor(page, "load", { doc: docWithText(""), pageId: "p1" });
     await clearMessages(page);
 
@@ -210,14 +203,12 @@ test.describe("reporting changes", () => {
   });
 
   test("flushes pending changes when the page is hidden", async ({ page }) => {
-    // iOS can suspend the process shortly after backgrounding, and a pending
-    // debounce would take the user's last keystrokes with it.
+    // iOS can suspend the process after backgrounding, losing a pending debounce.
     await sendToEditor(page, "load", { doc: docWithText(""), pageId: "p1" });
     await clearMessages(page);
 
     await page.locator(".ProseMirror").click();
     await page.keyboard.type("unsaved");
-    // Hide immediately, well inside the debounce window.
     await page.evaluate(() => {
       Object.defineProperty(document, "visibilityState", {
         configurable: true,
@@ -239,9 +230,8 @@ test.describe("reporting changes", () => {
     await page.locator(".ProseMirror").click();
     await clearMessages(page);
 
-    // Moving the caret, not merely clicking where it already is: ProseMirror
-    // fires a selection update only on an actual change, and after a load the
-    // caret already sits at the end of the document.
+    // Move the caret: ProseMirror fires a selection update only on a change, and after a load
+    // the caret already sits at the end.
     await page.keyboard.press("Home");
 
     await expect
@@ -254,9 +244,8 @@ test.describe("reporting changes", () => {
   });
 
   test("reports the selection on focus, even when the caret has not moved", async ({ page }) => {
-    // A native toolbar needs the caret's context the moment the user taps in.
-    // Without this the toolbar shows whatever the previous page left behind,
-    // because tapping where the caret already sits moves nothing.
+    // Tapping where the caret already sits moves nothing, so the toolbar would keep the
+    // previous page's state.
     await sendToEditor(page, "load", { doc: docWithText("Some text"), pageId: "p1" });
     await sendToEditor(page, "blur", {});
     await clearMessages(page);
@@ -296,9 +285,7 @@ test.describe("reporting changes", () => {
 });
 
 test.describe("links", () => {
-  // The schema sets `openOnClick: false`, which is right for an editor — a tap
-  // should place the caret, not navigate. The consequence is that a link does
-  // nothing at all unless the editor reports it, and the host acts on it: a
+  // The schema sets `openOnClick: false`, so the editor reports the tap and the host acts: a
   // webview that followed the href would replace the editor with a web page.
   test("reports a tapped link to the host", async ({ page }) => {
     await sendToEditor(page, "load", {
@@ -311,8 +298,7 @@ test.describe("links", () => {
 
     await expect.poll(async () => (await messagesOfType(page, "linkTapped")).length).toBe(1);
     const [tapped] = await messagesOfType(page, "linkTapped");
-    // Verbatim, including the space. Escaping is the host's to do, and doing it
-    // twice is how a URL with a space in it stops resolving.
+    // Verbatim: the host escapes, and escaping twice breaks a URL with a space.
     expect(tapped?.payload["url"]).toBe("https://example.com/a b");
   });
 
@@ -329,8 +315,7 @@ test.describe("links", () => {
   });
 
   test("tapping a link still moves the caret into it", async ({ page }) => {
-    // Refusing the navigation must not cost the user the ability to edit the
-    // link text, which on a phone is the only way to correct one.
+    // Refusing the navigation must not stop the user editing the link text.
     await sendToEditor(page, "load", {
       doc: docWithLink("the docs", "https://example.com"),
       pageId: "p1",
@@ -349,9 +334,7 @@ test.describe("links", () => {
 });
 
 test.describe("document fidelity", () => {
-  // The M0 pass bar asks that a document round-trips desktop ↔ iOS with zero
-  // diff. The device half needs a device; the editor half is testable here, and
-  // it is the half most likely to be wrong.
+  // A document must round-trip desktop and iOS with zero diff; the editor half is testable here.
   const documents: [name: string, doc: unknown][] = [
     [
       "headings and paragraphs",
@@ -379,10 +362,8 @@ test.describe("document fidelity", () => {
             ],
             type: "taskList",
           },
-          // A document cannot end on a task list in an editable doc, so Tiptap
-          // appends a trailing paragraph. Both platforms share the schema, so
-          // both do it — which is exactly why it belongs in a fidelity fixture
-          // rather than being trimmed to make the test pass.
+          // Tiptap appends a trailing paragraph after a final task list; both platforms do, so
+          // the fixture keeps it.
           { attrs: { indent: 0 }, type: "paragraph" },
         ],
         type: "doc",
@@ -425,7 +406,6 @@ test.describe("document fidelity", () => {
       await sendToEditor(page, "load", { doc: JSON.stringify(doc), pageId: "p1" });
       await clearMessages(page);
 
-      // Type and undo, so a save is triggered without the document changing.
       await page.locator(".ProseMirror").click();
       await page.keyboard.type("x");
       await page.keyboard.press("ControlOrMeta+z");
@@ -438,16 +418,12 @@ test.describe("document fidelity", () => {
   }
 
   test("never writes a platform-specific URL into the document", async ({ page }) => {
-    // `src` is derived from `data-asset-path` at render time. If a resolved
-    // pikos-asset:// URL ever reached the stored document, that document would
-    // only resolve on the device that wrote it.
+    // A resolved pikos-asset:// URL in the stored document would only resolve on the device that wrote it.
     await sendToEditor(page, "load", {
       doc: JSON.stringify({
         content: [
           { attrs: { "data-asset-path": "assets/photo.png" }, type: "image" },
-          // A paragraph to type into. Loading a document whose only node is an
-          // image leaves that image selected, and typing then replaces it —
-          // correct editor behaviour, and not what this test is about.
+          // A paragraph to type into: with an image as the only node it is selected, and typing replaces it.
           { attrs: { indent: 0 }, type: "paragraph" },
         ],
         type: "doc",
@@ -483,8 +459,6 @@ test.describe("host commands", () => {
     await sendToEditor(page, "insertImage", { assetPath: "assets/inserted.png" });
 
     await expect(page.locator(".ProseMirror img")).toHaveCount(1);
-    // Resolved for display through the custom scheme the host serves, which is rooted at the
-    // assets folder.
     await expect(page.locator(".ProseMirror img")).toHaveAttribute(
       "src",
       /pikos-asset:\/\/asset\/inserted\.png/
@@ -493,8 +467,7 @@ test.describe("host commands", () => {
 
   test("toggles a mark over a selected range", async ({ page }) => {
     await sendToEditor(page, "load", { doc: docWithText("make me bold"), pageId: "p1" });
-    // Triple-click selects the paragraph — a real gesture, and one that does not
-    // depend on a select-all shortcut reaching the webview.
+    // Triple-click rather than a select-all shortcut, which may not reach the webview.
     await page.locator(".ProseMirror p").first().click({ clickCount: 3 });
     await clearMessages(page);
 
@@ -506,9 +479,8 @@ test.describe("host commands", () => {
   });
 
   test("a mark toggled with no selection applies to what is typed next", async ({ page }) => {
-    // How the toolbar is actually used on a phone: tap bold, then type. With a
-    // collapsed caret the mark is pending rather than applied, so nothing
-    // changes until a character arrives.
+    // Tap bold, then type, as the toolbar is used: with a collapsed caret the mark stays
+    // pending until a character arrives.
     await sendToEditor(page, "load", { doc: docWithText(""), pageId: "p1" });
     await page.locator(".ProseMirror").click();
     await clearMessages(page);
@@ -568,8 +540,7 @@ test.describe("host commands", () => {
   });
 
   test("clamps a heading level the schema does not declare", async ({ page }) => {
-    // The schema declares levels 1-3. A level outside that would be dropped on
-    // the next parse, which reads to the user as the heading not sticking.
+    // The schema declares levels 1-3; others are dropped on the next parse.
     await sendToEditor(page, "load", { doc: docWithText("heading"), pageId: "p1" });
     await page.locator(".ProseMirror").click();
     await clearMessages(page);
@@ -582,9 +553,7 @@ test.describe("host commands", () => {
   });
 
   test("ignores a mark it does not know", async ({ page }) => {
-    // The name arrives from outside the webview. Passing it through to
-    // `chain()[name]()` would be a call into whatever the editor happens to
-    // expose, so unknown names are refused rather than forwarded.
+    // Unknown names are refused rather than forwarded to the editor's chain.
     await sendToEditor(page, "load", { doc: docWithText("unchanged"), pageId: "p1" });
     await page.locator(".ProseMirror").click();
     await clearMessages(page);

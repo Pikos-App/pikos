@@ -7,7 +7,6 @@ import { isOut, publishedVersion } from "../content/published";
 interface Props {
   /** Looked up in src/content/posts.ts, which owns every post's title, description and date. */
   slug: string;
-  /** Optional OG image override (defaults to site-wide og.png) */
   ogImage?: string;
 }
 
@@ -41,7 +40,6 @@ const jsonLd = {
 
   <main class="mx-auto max-w-2xl px-8 py-20">
 
-    <!-- Back to blog -->
     <a href="/blog" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
       Blog
@@ -63,7 +61,6 @@ const jsonLd = {
 
 <style>
 
-  /* Prose styles for blog content */
   .prose :global(h2) {
     padding-top: 1rem;
     font-size: 1.5rem;

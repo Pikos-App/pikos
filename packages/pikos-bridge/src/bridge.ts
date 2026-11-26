@@ -1,10 +1,5 @@
-// Pure-logic bridge: exposes the TS core's NL parser to the Rust CLI as a
-// one-shot subprocess. The CLI shells `node bridge.mjs parse '<text>'` and
-// reads one JSON object back. No DB, no side effects — only the one pure
-// function the Rust side can't (and shouldn't) reimplement, so NLP stays
-// single-sourced in TS while the writer stays single-sourced in pikos-db.
-// (Recurrence math used to be bridged too; it now lives in the shared Rust
-// engine — crates/pikos-recurrence — which the CLI links natively.)
+// Exposes the TS core's NL parser to the Rust CLI as a one-shot subprocess, so NLP stays
+// single-sourced in TS. No DB, no side effects.
 //
 // Protocol (argv):
 //   parse '<text>'

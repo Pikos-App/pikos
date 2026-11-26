@@ -1,15 +1,9 @@
 import { isOut } from "./published";
 
 /**
- * Every blog post's metadata, written once.
- *
- * The title, description and date used to be repeated in three places: this list's ancestor in
- * `blog/index.astro`, a second copy in `rss.xml.ts`, and the post file's own `<BlogPost>` props.
- * Nothing failed when one was missed, so a post could be filed under one date in the feed and
- * another on the site, and RSS readers sort by the feed. `BlogPost.astro` now takes a slug and
- * reads the rest from here, so a post file carries no metadata at all.
- *
- * Newest first. The order is the order the listing renders in.
+ * Every blog post's metadata, written once. The listing, the RSS feed and `BlogPost.astro`
+ * all read it, so a post can't carry one date in the feed and another on the site. Newest
+ * first, which is the listing's order.
  */
 export interface Post {
   slug: string;
@@ -91,10 +85,9 @@ export const posts: Post[] = [
 ];
 
 /**
- * A date ahead of the build is a scheduled post, not a published one, so it stays out of the
- * listing and the feed until a build runs on or after that day. Nothing reads the clock at request
- * time: this is a static site, so shipping a post on its date needs a build on its date. A post
- * announcing a release newer than `releasedVersion` waits for it the same way (`published.ts`).
+ * A date ahead of the build is a scheduled post and stays out of the listing and feed until a
+ * build runs on or after that day, since a static site never reads the clock at request time. A
+ * post announcing a release newer than `releasedVersion` waits the same way.
  */
 export function published(releasedVersion: string, all: Post[] = posts): Post[] {
   const today = new Date().toISOString().slice(0, 10);
@@ -102,12 +95,9 @@ export function published(releasedVersion: string, all: Post[] = posts): Post[] 
 }
 
 /**
- * Renders an ISO date for display, in the date's own terms rather than the builder's timezone.
- *
- * `new Date("2026-06-10")` is parsed as UTC midnight, and `toLocaleDateString` then prints it in
- * local time, so every post built anywhere west of UTC showed the day before its own date. The
- * page said June 9 while its `datetime` attribute and JSON-LD both said the 10th. Splitting the
- * string and using the local-time constructor keeps the date the one that was written down.
+ * Renders an ISO date in its own terms, not the builder's timezone: `new Date("2026-06-10")`
+ * is UTC midnight, which prints as the day before anywhere west of UTC. Splitting the string
+ * and using the local-time constructor keeps the written date.
  */
 export function formatDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
@@ -118,10 +108,7 @@ export function formatDate(date: string): string {
   });
 }
 
-/**
- * Throws rather than rendering a post with a blank title, because a silently empty `<h1>` is the
- * failure this file exists to prevent. A slug typo fails the build instead of shipping.
- */
+/** Throws on an unknown slug, so a typo fails the build instead of shipping an empty `<h1>`. */
 export function postBySlug(slug: string): Post {
   const post = posts.find((p) => p.slug === slug);
   if (!post) {
