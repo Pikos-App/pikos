@@ -66,16 +66,38 @@ pub async fn sync_calendar<P: CalendarProvider>(
 ) -> AppResult<SyncOutcome> {
     match run(pool, provider, account, calendar, folder_id).await {
         Ok(outcome) => {
-            note_reachable(&calendar.id, true);
+            note_reachable(&calendar.id, true, None);
             Ok(outcome)
         }
         // CalDAV flattens keychain-miss and 401/403 alike to `Invalid`.
-        Err(AppError::Network(_)) => {
-            note_reachable(&calendar.id, false);
+        Err(e @ AppError::Network(_)) => {
+            note_reachable(&calendar.id, false, Some(&e));
             Ok(SyncOutcome::Offline)
         }
-        Err(AppError::Invalid(_)) => Ok(SyncOutcome::ReconnectNeeded),
+        Err(e @ AppError::Invalid(_)) => {
+            log::info!(
+                "calendar_sync_credential_refused calendar={} cause={}",
+                calendar.id,
+                log_cause(&e)
+            );
+            Ok(SyncOutcome::ReconnectNeeded)
+        }
         Err(e) => Err(e),
+    }
+}
+
+/// What failed, for a log line. The variants that wrap foreign text (sqlx, serde, io) go through
+/// `log_summary`. The rest carry text this crate and `pikos-db`'s sync writers build from fixed
+/// words, ids, operation names, HTTP statuses and reqwest's failure chain with the URL stripped,
+/// so the message itself is the cause.
+pub(crate) fn log_cause(e: &AppError) -> String {
+    match e {
+        AppError::Network(m)
+        | AppError::Invalid(m)
+        | AppError::NotFound(m)
+        | AppError::Conflict(m)
+        | AppError::Internal(m) => format!("{}: {m}", e.kind()),
+        other => other.log_summary(),
     }
 }
 
@@ -85,16 +107,15 @@ pub async fn sync_calendar<P: CalendarProvider>(
 static UNREACHABLE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::LazyLock::new(Default::default);
 
-fn note_reachable(calendar_id: &str, reachable: bool) {
+fn note_reachable(calendar_id: &str, reachable: bool, cause: Option<&AppError>) {
     let mut unreachable = UNREACHABLE.lock().unwrap_or_else(|e| e.into_inner());
     if reachable {
         if unreachable.remove(calendar_id) {
             log::info!("calendar_sync_reachable_again calendar={calendar_id}");
         }
     } else if unreachable.insert(calendar_id.to_string()) {
-        // The error's text can carry the request URL, and a Google calendar's id in it is
-        // an email address, so only the fact is logged.
-        log::info!("calendar_sync_unreachable calendar={calendar_id}");
+        let cause = cause.map(log_cause).unwrap_or_default();
+        log::info!("calendar_sync_unreachable calendar={calendar_id} cause={cause}");
     }
 }
 
@@ -123,7 +144,10 @@ async fn run<P: CalendarProvider>(
     let ctag = if had_cursor {
         None
     } else {
-        provider.current_ctag(calendar).await.unwrap_or(None)
+        provider
+            .current_ctag(calendar)
+            .await
+            .unwrap_or_else(|e| best_effort_miss("ctag", calendar, &e))
     };
     if !had_cursor && can_skip_enumerate(calendar, ctag.as_deref()) {
         mark_calendar_polled_impl(pool, &calendar.id).await?;
@@ -175,7 +199,10 @@ async fn run<P: CalendarProvider>(
         Some(token) => Some(token),
         // Best-effort bootstrap: a failure here just leaves the cursor null, so the
         // next poll re-enumerates and retries — wasteful but convergent, never wrong.
-        None => provider.current_sync_token(calendar).await.unwrap_or(None),
+        None => provider
+            .current_sync_token(calendar)
+            .await
+            .unwrap_or_else(|e| best_effort_miss("sync_token", calendar, &e)),
     };
     advance_calendar_cursor_impl(pool, &calendar.id, next.as_ref(), was_full, ctag.as_deref())
         .await?;
@@ -184,6 +211,21 @@ async fn run<P: CalendarProvider>(
         full_resync: was_full && had_cursor,
         changed,
     })
+}
+
+/// A best-effort read that failed: the poll carries on as if the server had none, which costs a
+/// re-enumerate, never a change. Logged so a server that always fails it can be seen, except when
+/// offline: the poll's own request fails the same way and is logged once, where this would repeat
+/// every poll.
+fn best_effort_miss<T>(read: &str, calendar: &SyncCalendarRow, e: &AppError) -> Option<T> {
+    if !matches!(e, AppError::Network(_)) {
+        log::info!(
+            "calendar_sync_{read}_unread calendar={} cause={}",
+            calendar.id,
+            log_cause(e)
+        );
+    }
+    None
 }
 
 /// Runs `reconciler::sweep_absent` on a full authoritative enumerate; no-op otherwise.
