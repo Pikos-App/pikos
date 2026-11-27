@@ -190,6 +190,31 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
     assert!(s.has_focus_sessions);
 }
 
+/// A status that won't read fails the panel rather than showing as a nameless bar.
+#[tokio::test]
+async fn usage_stats_fail_on_a_status_that_will_not_read() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    // As a file written past the status guard would hold it.
+    sqlx::query("DROP TRIGGER page_status_known_on_update")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET status = X'00FF' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .err()
+        .expect("the stats read a status that doesn't decode");
+
+    assert_eq!(err.kind(), "Db", "{err}");
+}
+
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
     let pool = test_pool().await;
@@ -1124,6 +1149,83 @@ async fn wipe_drops_pool_so_handles_release_before_file_removal() {
     taken.unwrap().close().await;
     std::fs::remove_file(&src).unwrap();
     assert!(!src.exists());
+}
+
+/// A connected workspace in a folder of its own, holding one folder row and one backup of itself.
+async fn connected_with_a_backup() -> (std::path::PathBuf, DbState, &'static str) {
+    let dir = std::env::temp_dir().join(format!("pikos-restore-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("backups")).unwrap();
+    let path = dir.join("workspace.sqlite");
+    let pool = file_pool(&path.to_string_lossy()).await;
+    insert_test_folder(&pool, "f1", "Work").await.unwrap();
+    let backup = "pre-import-2026-01-02T00-00-00.sqlite";
+    vacuum_into(&pool, &dir.join("backups").join(backup).to_string_lossy())
+        .await
+        .unwrap();
+    let state = DbState {
+        inner: tokio::sync::Mutex::new(crate::db::DbStateInner {
+            pool: Some(pool),
+            path: Some(path),
+        }),
+    };
+    (dir, state, backup)
+}
+
+/// A restore that stops before writing the workspace leaves it open, so the app carries on
+/// rather than failing every command until a relaunch.
+#[tokio::test]
+async fn a_restore_that_stops_before_the_workspace_is_written_reopens_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, state, backup) = connected_with_a_backup().await;
+    let backups = dir.join("backups");
+    // The copy of what the restore displaces can't be written, which stops it before the swap.
+    std::fs::set_permissions(&backups, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    let result = restore_backup_impl(&state, backup).await;
+    std::fs::set_permissions(&backups, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("keeping a copy of the current workspace"),
+        "{err}"
+    );
+    let pool = state
+        .get_pool()
+        .await
+        .expect("the workspace the restore left alone is open again");
+    assert_eq!(count(&pool, "folders").await, 1);
+    assert_eq!(
+        state.current_path().await.as_deref(),
+        Some(dir.join("workspace.sqlite").as_path())
+    );
+    pikos_db::close_pool(&pool).await;
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Past the swap the file may be half written, so nothing is opened and the error says to
+/// relaunch.
+#[tokio::test]
+async fn a_restore_that_stops_after_the_workspace_is_written_asks_for_a_relaunch() {
+    let (dir, state, backup) = connected_with_a_backup().await;
+    // The backup copies over and opens, then refuses the new epoch the restore gives it.
+    let copy = open_existing(&dir.join("backups").join(backup).to_string_lossy()).await;
+    sqlx::query(
+        "CREATE TRIGGER held BEFORE UPDATE ON change_counter BEGIN SELECT RAISE(ABORT, 'held'); END",
+    )
+    .execute(&copy)
+    .await
+    .unwrap();
+    copy.close().await;
+
+    let err = restore_backup_impl(&state, backup).await.unwrap_err();
+
+    assert!(err.to_string().contains("relaunch Pikos"), "{err}");
+    assert!(
+        state.get_pool().await.is_err(),
+        "a half-restored file was opened"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 async fn timestamps(pool: &SqlitePool, id: &str) -> (String, String, Option<String>) {

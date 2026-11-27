@@ -143,8 +143,11 @@ pub async fn connect_db(
     {
         let data_dir = tauri::Manager::path(&app)
             .app_data_dir()
-            .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?;
-        ensure_inside_data_dir(&canonical, &data_dir)?;
+            .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))
+            .inspect_err(|_| log::error!("connect_db: finding the app's data folder failed"))?;
+        ensure_inside_data_dir(&canonical, &data_dir).inspect_err(|_| {
+            log::error!("connect_db: refused a workspace outside the app's data folder")
+        })?;
     }
 
     let mut guard = state.inner.lock().await;
@@ -158,7 +161,12 @@ pub async fn connect_db(
         ));
     }
 
-    let pool = open_pool(&path).await?;
+    let pool = open_pool(&path).await.inspect_err(|e| {
+        log::error!(
+            "connect_db: opening the workspace failed: {}",
+            e.log_summary()
+        )
+    })?;
     assets::collect_after_launch(&app, pool.clone(), path.clone());
     *guard = DbStateInner {
         pool: Some(pool),
@@ -188,18 +196,45 @@ pub(crate) const APP_CHECKPOINTS: Checkpoints = Checkpoints::Background(watch::O
 /// app-only housekeeping.
 pub(crate) async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool_checkpointing(path, APP_CHECKPOINTS).await?;
-    crate::notifications::scheduler::prune_notification_log(&pool).await?;
-    // Soft-delete keeps a page forever on its own, and the trash promises "kept for 30 days",
-    // so retention is swept once per launch, when nothing else is writing.
-    let purged =
-        pikos_db::purge_trashed_pages_older_than(&pool, pikos_db::TRASH_RETENTION_DAYS).await?;
-    if purged > 0 {
-        log::info!(
-            "trash swept: {purged} page(s) past {TRASH_RETENTION_DAYS}-day retention destroyed",
-            TRASH_RETENTION_DAYS = pikos_db::TRASH_RETENTION_DAYS
-        );
+    if let Err(e) = housekeeping(&pool).await {
+        pikos_db::close_pool(&pool).await;
+        return Err(e);
     }
     Ok(pool)
+}
+
+async fn housekeeping(pool: &SqlitePool) -> AppResult<()> {
+    if let Err(e) = crate::notifications::scheduler::prune_notification_log(pool).await {
+        carry_on_after("pruning the notification log", e.into())?;
+    }
+    // Soft-delete keeps a page forever on its own, and the trash promises "kept for 30 days",
+    // so retention is swept once per launch, when nothing else is writing.
+    match pikos_db::purge_trashed_pages_older_than(pool, pikos_db::TRASH_RETENTION_DAYS).await {
+        Ok(0) => {}
+        Ok(purged) => log::info!(
+            "trash swept: {purged} page(s) past {TRASH_RETENTION_DAYS}-day retention destroyed",
+            TRASH_RETENTION_DAYS = pikos_db::TRASH_RETENTION_DAYS
+        ),
+        Err(e) => carry_on_after("sweeping the trash", e)?,
+    }
+    Ok(())
+}
+
+/// Whether a launch sweep that failed may let the workspace open anyway. Each sweep deletes rows
+/// nothing else needs, one atomic statement or transaction per row, so a failure leaves the rows
+/// for the next launch and the workspace whole. A damaged file is the exception, as the app's
+/// recovery starts from the open reporting it.
+fn carry_on_after(step: &str, err: AppError) -> AppResult<()> {
+    if let AppError::Corrupt(detail) = err {
+        log::error!("connect_db: {step} found the workspace damaged");
+        return Err(AppError::Corrupt(format!("{step}: {detail}")));
+    }
+
+    log::warn!(
+        "connect_db: {step} failed, opening the workspace anyway: {}",
+        err.log_summary()
+    );
+    Ok(())
 }
 
 // Tests take their fixtures (`test_pool`, `insert_test_*`, `TestPage`) from `pikos_db`'s

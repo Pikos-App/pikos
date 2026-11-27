@@ -1136,3 +1136,30 @@ async fn calcard_reads_the_export_back() {
         Some(NY)
     );
 }
+
+/// Read as no start, the page would be left out of the calendar without a word.
+#[tokio::test]
+async fn an_unreadable_start_fails_the_export_naming_the_page() {
+    let pool = test_pool().await;
+    add_page(
+        &pool,
+        "unreadable",
+        "Dentist",
+        Some("2026-03-10T09:00:00"),
+        None,
+    )
+    .await;
+    sqlx::query("UPDATE pages SET scheduled_start = X'00FF' WHERE id = 'unreadable'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = build_export_ics(&pool, false).await.unwrap_err();
+
+    assert_eq!(err.kind(), "Db", "{err}");
+    assert!(
+        err.to_string()
+            .contains("scheduled_start of page unreadable"),
+        "{err}"
+    );
+}

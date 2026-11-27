@@ -96,6 +96,23 @@ async fn a_pasted_image_is_stored_without_the_machines_path() {
 }
 
 #[tokio::test]
+async fn an_images_folder_that_cannot_be_made_names_the_step_and_the_folder() {
+    let dir = unique_tmp_dir();
+    let blocker = dir.join("not-a-folder");
+    std::fs::write(&blocker, b"a file where the folder should be").unwrap();
+
+    let err = save_bytes_into_dir(&blocker.join("assets"), b"GIF89a".to_vec(), "gif")
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.kind(), "Io", "{err}");
+    let message = err.to_string();
+    assert!(message.contains("creating the images folder"), "{message}");
+    assert!(message.contains("not-a-folder"), "{message}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
 async fn save_asset_rejects_missing_source() {
     let dir = unique_tmp_dir();
     let missing = dir.join("nope.png");

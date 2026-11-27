@@ -200,13 +200,21 @@ pub(crate) async fn write_page_markdown(
         (dir.to_path_buf(), unused_path(dir, stem, ".md"))
     };
 
-    std::fs::create_dir_all(&base_dir)?;
+    // Both paths carry the page's title, so the errors name the folder they sit in and the id.
+    std::fs::create_dir_all(&base_dir).map_err(|e| {
+        AppError::io_at(
+            &format!("creating the folder for page {page_id} in"),
+            dir,
+            e,
+        )
+    })?;
     let mut copied = HashMap::new();
     pikos_db::export::copy_page_assets(&page, assets_dir, &base_dir, &mut copied)?;
     std::fs::write(
         &file,
         pikos_db::export::render_markdown_page(&page, &copied),
-    )?;
+    )
+    .map_err(|e| AppError::io_at(&format!("writing page {page_id} into"), dir, e))?;
 
     Ok(file)
 }
@@ -255,7 +263,7 @@ pub(crate) async fn write_csv_export(
     let out = pikos_db::export::build_export_csv(pool, include_synced).await?;
     let dest = dir.join(stamped_file_name("pikos-export", "csv"));
     let row_count = out.lines().count().saturating_sub(1);
-    std::fs::write(&dest, out)?;
+    std::fs::write(&dest, out).map_err(|e| AppError::io_at("writing the CSV export", &dest, e))?;
     Ok((dest, row_count))
 }
 
@@ -273,7 +281,8 @@ pub async fn export_ics(
         .join("Downloads")
         .join(stamped_file_name("pikos-export", "ics"));
     let event_count = out.matches("BEGIN:VEVENT").count();
-    std::fs::write(&dest, out)?;
+    std::fs::write(&dest, out)
+        .map_err(|e| AppError::io_at("writing the calendar export", &dest, e))?;
 
     let dest = dest.to_string_lossy().to_string();
     log::info!(

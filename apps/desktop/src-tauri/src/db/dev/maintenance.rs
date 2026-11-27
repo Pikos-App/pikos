@@ -82,7 +82,16 @@ pub async fn wipe_app_data(
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("app_data_dir: {e}")))?;
     if app_data.exists() {
-        std::fs::remove_dir_all(&app_data)?;
+        // A removal that stops part way can't be undone, and the pool is already gone, so the
+        // log is the only record of how far it got.
+        std::fs::remove_dir_all(&app_data).map_err(|e| {
+            let err = AppError::io_at("deleting the app's data folder", &app_data, e);
+            log::error!(
+                "wipe_app_data: deleting the data folder failed: {}",
+                err.log_summary()
+            );
+            err
+        })?;
     }
 
     // Best-effort: tauri-plugin-log may still hold the log file open, which fails the
@@ -136,7 +145,8 @@ pub async fn backup_db_before_import(
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?;
     let backup_dir = app_data.join("backups");
-    std::fs::create_dir_all(&backup_dir)?;
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| AppError::io_at("creating the backups folder", &backup_dir, e))?;
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
     let dest = backup_dir
@@ -233,22 +243,77 @@ pub async fn restore_backup(
     state: tauri::State<'_, DbState>,
     file_name: String,
 ) -> AppResult<()> {
-    let path = state
+    restore_backup_impl(&state, &file_name).await?;
+    app.restart();
+}
+
+/// [`restore_backup`] up to the restart.
+pub(crate) async fn restore_backup_impl(state: &DbState, file_name: &str) -> AppResult<()> {
+    let canonical = state
         .current_path()
         .await
         .ok_or_else(|| AppError::Internal("No database connected.".into()))?;
-    let path = path.to_string_lossy().to_string();
+    let path = canonical.to_string_lossy().to_string();
 
     // Validate before taking the pool: a rejected restore has to leave a working
     // app behind, and every command fails once the pool is gone.
-    pikos_db::backups::verify_restorable(&path, &file_name).await?;
+    pikos_db::backups::verify_restorable(&path, file_name).await?;
 
     if let Some(pool) = state.take_pool().await {
         pikos_db::close_pool(&pool).await;
     }
 
-    let displaced = pikos_db::restore_backup(&path, &file_name).await?;
-    log::info!("restored {file_name}; previous workspace kept at {displaced}");
+    let displaced = match pikos_db::backups::restore_backup_reporting(&path, file_name).await {
+        Ok(displaced) => displaced,
+        Err(failed) => return Err(after_failed_restore(state, canonical, failed).await),
+    };
+    let kept = std::path::Path::new(&displaced)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    log::info!("restored {file_name}; previous workspace kept as {kept}");
+    Ok(())
+}
 
-    app.restart();
+/// A restore that stopped after the pool closed. If it never wrote to the workspace, the workspace
+/// opens again and the app carries on; otherwise the file may be half written, nothing is
+/// opened, and the error asks for a relaunch, which opens whatever the file now holds.
+///
+/// The reopened pool goes back into the state, which is where every command and the sync loop
+/// get theirs. iCloud sync and the outside-change watcher were handed the closed pool at launch
+/// and keep it until the next relaunch.
+async fn after_failed_restore(
+    state: &DbState,
+    canonical: std::path::PathBuf,
+    failed: pikos_db::backups::RestoreFailed,
+) -> AppError {
+    log::error!(
+        "restore_backup stopped while {}: {} workspace_replaced={}",
+        failed.step,
+        failed.error.log_summary(),
+        failed.workspace_replaced
+    );
+    if failed.workspace_replaced {
+        return failed.needing_relaunch();
+    }
+
+    match crate::db::open_pool(&canonical.to_string_lossy()).await {
+        Ok(pool) => {
+            *state.inner.lock().await = crate::db::DbStateInner {
+                pool: Some(pool),
+                path: Some(canonical),
+            };
+            log::warn!(
+                "restore_backup: reopened the workspace it left untouched; iCloud sync and the outside-change watcher resume at the next launch"
+            );
+            failed.error
+        }
+        Err(e) => {
+            log::error!(
+                "restore_backup: reopening the untouched workspace failed: {}",
+                e.log_summary()
+            );
+            failed.needing_relaunch()
+        }
+    }
 }

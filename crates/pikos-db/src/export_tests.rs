@@ -632,3 +632,77 @@ async fn the_schema_is_what_makes_a_missing_folder_impossible() {
         "deleting the folder nulls the column, so the page becomes unfiled"
     );
 }
+
+// A value that won't decode stops the export naming the page and the column, rather than going
+// into the person's file as a blank.
+
+async fn page_with_an_unreadable_title(pool: &SqlitePool) {
+    insert_test_page(pool, TestPage::new("readable", "Readable"))
+        .await
+        .unwrap();
+    insert_test_page(pool, TestPage::new("unreadable", "Unreadable"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET title = X'00FF' WHERE id = 'unreadable'")
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn assert_names_page_and_column(err: crate::AppError, column: &str) {
+    assert_eq!(err.kind(), "Db", "{err}");
+    assert!(
+        err.to_string()
+            .contains(&format!("{column} of page unreadable")),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn a_csv_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = build_export_csv(&pool, false).await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}
+
+#[tokio::test]
+async fn a_markdown_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = plan_markdown_export(&pool, false).await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}
+
+#[tokio::test]
+async fn a_one_page_markdown_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = plan_markdown_page(&pool, "unreadable").await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}
+
+#[tokio::test]
+async fn an_export_folder_that_cannot_be_made_names_the_step_and_the_folder() {
+    let pool = test_pool().await;
+    let dir = std::env::temp_dir().join(format!("pkos_export_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let blocker = dir.join("not-a-folder");
+    std::fs::write(&blocker, b"a file where the folder should be").unwrap();
+
+    let err = write_markdown_export(&pool, &blocker.join("out"), &dir, false)
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.kind(), "Io", "{err}");
+    let message = err.to_string();
+    assert!(message.contains("creating the export folder"), "{message}");
+    assert!(message.contains("not-a-folder"), "{message}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

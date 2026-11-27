@@ -22,10 +22,10 @@ use std::collections::{BTreeSet, HashMap};
 
 use chrono::{Datelike, Days, Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
-use sqlx::Row;
 
 use crate::error::AppResult;
-use crate::export::fetch_export_pages;
+use crate::export::{column, fetch_export_pages, page_id};
+use crate::pool::AtStep;
 
 /// How far past the last exported occurrence the generated `VTIMEZONE` spells
 /// its transitions out. An unbounded `RRULE` outruns any window; 30 years puts
@@ -442,7 +442,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         "id, title, content_text, scheduled_start, scheduled_end",
         include_synced,
     )
-    .await?;
+    .await
+    .at_step("reading the pages")?;
 
     // Read once and keyed by page rather than joined, as the CSV export does.
     let rules: HashMap<String, RuleRow> =
@@ -451,7 +452,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
              FROM page_recurrence_rules",
         )
         .fetch_all(pool)
-        .await?
+        .await
+        .at_step("reading the repeat rules")?
         .into_iter()
         .map(|(page_id, rrule, exdates_json, start, end, timezone)| {
             (
@@ -475,7 +477,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          UNION SELECT page_id, occurrence_date FROM skip_set",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the skipped and completed occurrences")?
     {
         exclusions.entry(page_id).or_default().push(occurrence_date);
     }
@@ -497,7 +500,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          ORDER BY original_date",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the changed occurrences")?
     {
         overrides.entry(page_id).or_default().push(OverrideRow {
             original_date,
@@ -515,7 +519,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          WHERE timezone IS NOT NULL",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the time zones of one-off events")?
     {
         schedule_zones.insert((page_id, start), timezone);
     }
@@ -530,10 +535,12 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         });
     };
 
-    for row in &pages {
-        let id: String = row.try_get("id").unwrap_or_default();
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content_text: String = row.try_get("content_text").unwrap_or_default();
+    for (position, row) in pages.iter().enumerate() {
+        let id = page_id(row, position)?;
+        let title: String = column(row, &id, "title")?;
+        let content_text: String = column(row, &id, "content_text")?;
+        let start: Option<String> = column(row, &id, "scheduled_start")?;
+        let end: Option<String> = column(row, &id, "scheduled_end")?;
         let rule = rules.get(&id);
 
         // Anchors on the rule's base occurrence: `scheduled_start` holds the next occurrence, and
@@ -546,8 +553,6 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
                 &device,
             ),
             None => {
-                let start: Option<String> = row.try_get("scheduled_start").ok();
-                let end: Option<String> = row.try_get("scheduled_end").ok();
                 let start = start.filter(|s| !s.is_empty());
                 start.as_deref().and_then(|start| {
                     Placement::build(
