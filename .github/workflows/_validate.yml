@@ -469,9 +469,14 @@ jobs:
           apt-get update
           apt-get install -y curl build-essential pkg-config tzdata libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
 
+      # The Playwright image ships no Rust, unlike the hosted runner, so rustup comes first. It
+      # installs no toolchain of its own: `rustup toolchain install` reads rust-toolchain.toml.
       - name: Install the pinned Rust toolchain
         if: steps.cached.outputs.cache-hit != 'true'
-        run: rustup toolchain install
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
 
       # Saved from main only: the shards wait for this job to finish, saving included, and that
       # took about three minutes. A pull request restores main's.
