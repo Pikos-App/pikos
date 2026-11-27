@@ -13,8 +13,6 @@ import {
   sortPages,
 } from "./pageFilters";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     createdAt: "2026-01-01T00:00:00",
@@ -32,8 +30,6 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     ...overrides,
   };
 }
-
-// ─── sortPages ───────────────────────────────────────────────────────────────
 
 describe("sortPages", () => {
   it("manual mode — sorted by sortOrder ascending", () => {
@@ -124,8 +120,6 @@ describe("sortPages", () => {
   });
 });
 
-// ─── getVisiblePages ─────────────────────────────────────────────────────────
-
 describe("getVisiblePages", () => {
   it("today — scheduled <= today, excludes done", () => {
     vi.useFakeTimers();
@@ -194,8 +188,6 @@ describe("getVisiblePages", () => {
   });
 });
 
-// ─── View identity helpers ───────────────────────────────────────────────────
-
 describe("smart view helpers", () => {
   it("isSmartViewId covers exactly the three computed views", () => {
     expect(isSmartViewId("today")).toBe(true);
@@ -214,13 +206,10 @@ describe("smart view helpers", () => {
   it("isDateGroupedView marks the views whose order is derived", () => {
     expect(isDateGroupedView("today")).toBe(true);
     expect(isDateGroupedView("upcoming")).toBe(true);
-    // Inbox is a plain list — the user's sort choice still means something there.
     expect(isDateGroupedView("inbox")).toBe(false);
     expect(isDateGroupedView("f1")).toBe(false);
   });
 });
-
-// ─── groupTodayPages ─────────────────────────────────────────────────────────
 
 describe("groupTodayPages", () => {
   it("all-day item today — in 'today' group (not overdue)", () => {
@@ -299,8 +288,6 @@ describe("groupTodayPages", () => {
   });
 });
 
-// ─── getCompletedTodayPages ──────────────────────────────────────────────────
-
 describe("getCompletedTodayPages", () => {
   it("only status=done with completedAt today", () => {
     vi.useFakeTimers();
@@ -325,8 +312,6 @@ describe("getCompletedTodayPages", () => {
     vi.useRealTimers();
   });
 });
-
-// ─── getCompletedViewPages ───────────────────────────────────────────────────
 
 describe("getCompletedViewPages", () => {
   it("inbox — done + folderId null", () => {
@@ -413,15 +398,10 @@ describe("belongsToView — past synced events", () => {
   });
 });
 
-// ─── synced events are read in the viewer's zone ──────────────────────────────
-
-// A synced event happens at one instant; which day and time that is depends on
-// who is looking. The stored wall-clock is the source calendar's, so reading it
-// directly files a Tokyo morning under tomorrow and leaves a London afternoon
-// looking like it has not happened yet. Vitest pins TZ=UTC, so these offsets are
-// relative to UTC rather than to whatever machine runs them.
+// A synced event's stored wall-clock is the source calendar's, so reading it directly files a
+// Tokyo morning under tomorrow. Vitest pins TZ=UTC, so offsets are relative to UTC.
 describe("viewer-zone bucketing", () => {
-  // 06:00 in Tokyo (UTC+9) is 21:00 the previous day in UTC.
+  // 21:00 the previous day in UTC.
   const tokyoMorning = makePage({
     detachIsReversible: false,
     id: "tokyo",
@@ -431,7 +411,7 @@ describe("viewer-zone bucketing", () => {
     timezone: "Asia/Tokyo",
   });
 
-  // 20:00 in Los Angeles (UTC-7) is 03:00 the next day in UTC.
+  // 03:00 the next day in UTC.
   const laEvening = makePage({
     detachIsReversible: false,
     id: "la",
@@ -471,11 +451,8 @@ describe("viewer-zone bucketing", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"));
 
-    // Both of these land on the opposite day if the stored wall-clock is taken as
-    // local. 08:00 on the 8th in Tokyo (UTC+9) is 23:00 UTC on the 7th, so it is
-    // yesterday for the viewer while the bare date reads as today. 18:00 on the
-    // 7th in Los Angeles (UTC-7) is 01:00 UTC on the 8th, so it is today while
-    // the bare date reads as yesterday.
+    // Each lands on the opposite day if the stored wall-clock is taken as local: Tokyo's 08:00
+    // on the 8th is 23:00 UTC on the 7th, and Los Angeles's 18:00 on the 7th is 01:00 UTC on the 8th.
     const tokyoEarly = makePage({
       detachIsReversible: false,
       id: "tokyo-early",

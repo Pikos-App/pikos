@@ -7,48 +7,35 @@ export const CLICK_DELAY = 150;
 /** Pixel movement threshold before a mousedown is treated as a drag gesture. */
 export const DRAG_THRESHOLD = 4;
 
-/**
- * The calendar grid renders the full 24-hour day. GRID_START_HOUR / GRID_END_HOUR
- * used to clip to "working hours" but are now fixed — scrolling reveals the rest.
- */
 export const GRID_START_HOUR = 0;
 export const GRID_END_HOUR = 24;
 export const VISIBLE_HOURS = 24;
 
-/** Default "normal" density metrics. Tests and legacy callers read these directly. */
 export const HOUR_HEIGHT = 64;
 export const GRID_HEIGHT = VISIBLE_HOURS * HOUR_HEIGHT;
 
-/**
- * Visual height for a 15-minute ("quarter hour") block. Every timed event renders
- * at a multiple of this — durations are rounded up to the next 15-minute slot so
- * short events remain readable.
- */
+/** Height of a 15-minute block. Every timed event renders at a multiple of it. */
 export const COMPACT_BLOCK_HEIGHT = HOUR_HEIGHT / 4;
 
 /**
- * Layout threshold (px): below this a block renders as a single-line chip, above
- * this as a stacked title+time block. Density-independent; measured at the
- * default zoom, and read through `CalendarMetrics.stackedBlockMinHeight`.
+ * Below this height (px, at default zoom) a block is a single-line chip; above, a stacked
+ * title+time block. Read through `CalendarMetrics.stackedBlockMinHeight`.
  */
 export const CHIP_STACKED_THRESHOLD = 28;
 
-/** Slot size (minutes) used to round up short event durations for visual height. */
+/** Short event durations round up to this many minutes for visual height. */
 export const MIN_TIMED_MINUTES = 15;
 
-/** Pixel height of each collapsed band. Matches the screenshot: ~40px so two
- * stacked labels (e.g. "12 AM"/"6 AM") plus a chevron remain comfortably legible. */
+/** Tall enough for two stacked hour labels plus a chevron. */
 export const COLLAPSED_BAND_HEIGHT = 40;
 
-/** Hard limits the user can drag the bounds to. Top must stay below bottom by
- * at least 1 hour so the middle "waking hours" region never disappears. */
+/** Drag limits for the collapse bounds. The middle region must keep at least one hour. */
 export const MIN_TOP_HOUR = 0;
 export const MAX_TOP_HOUR = 12;
 export const MIN_BOTTOM_HOUR = 12;
 export const MAX_BOTTOM_HOUR = 24;
 export const MIN_VISIBLE_HOURS = 1;
 
-/** Configurable collapse settings (persisted in CalendarSettingsContext). */
 export interface CalendarCollapseConfig {
   /** Upper bound of the top collapsible band (exclusive). 0..23. */
   topHour: number;
@@ -67,34 +54,21 @@ export const DEFAULT_COLLAPSE_CONFIG: CalendarCollapseConfig = {
   topHour: 6,
 };
 
-/** Default folder accent (Tailwind blue-500) used when a page has no folder
- * colour. Routed through the same `--event-color` CSS rule as folder colours
- * so every block fill is an opaque `color-mix` with the background — no
- * alpha-blending muddiness when blocks stack. */
+/**
+ * Accent (Tailwind blue-500) for a page with no folder colour. It goes through the same
+ * `--event-color` rule as folder colours, so block fills stay opaque when blocks stack.
+ */
 export const DEFAULT_EVENT_COLOR = "rgb(59 130 246)" as const;
-
-// All-day layout: bars in the all-day section are absolutely positioned. Row N
-// sits at `ALL_DAY_TOP_PADDING + N * ALL_DAY_ROW_HEIGHT`; the container reserves
-// `2 * ALL_DAY_TOP_PADDING + rowCount * ALL_DAY_ROW_HEIGHT` so the bottom edge
-// gets matching breathing room.
 
 /** Height of a single all-day bar. The chip's own `h-[19px]` class must agree;
  * it lives in the desktop app (see `calendarColors.ts`) because Tailwind only
  * generates utilities it finds while scanning, and it does not scan this package. */
 export const ALL_DAY_BAR_HEIGHT = 19;
-/** Vertical gap between bars on consecutive rows. */
 const ALL_DAY_ROW_GAP = 2;
-/** Row pitch — how much `top` advances for each row index. */
 export const ALL_DAY_ROW_HEIGHT = ALL_DAY_BAR_HEIGHT + ALL_DAY_ROW_GAP;
-/** Top/bottom padding on the bar container. */
 export const ALL_DAY_TOP_PADDING = 4;
 
-/**
- * Below this rendered width (px) a block switches to single-line "ultra
- * compact" rendering: title only, time hidden, checkbox hidden until hover.
- * Tuned for 7-day-week columns where standard cascade depth-2 events land
- * around 100–120 px and start losing their time row.
- */
+/** Below this rendered width (px) a block shows its title only: no time, checkbox on hover. */
 export const COMPACT_MODE_WIDTH_PX = 100;
 
 /**
@@ -108,28 +82,22 @@ export const TITLE_MIN_WIDTH_PX = 54;
 /**
  * If any block would render below this rendered width (px at calendar zoom 1, scaled by the
  * zoom), the layout collapses the smallest blocks into a `+N more` pill at the cluster's
- * right edge instead of letting their titles truncate to a single letter. Unscaled, it fell
- * under `TITLE_MIN_WIDTH_PX` once the text grew, and a block between the two showed its
- * checkbox alone.
+ * right edge instead of letting their titles truncate to a single letter. It must scale with
+ * the zoom: unscaled, it fell under `TITLE_MIN_WIDTH_PX` once the text grew, and a block
+ * between the two showed its checkbox alone.
  */
 export const OVERFLOW_MIN_WIDTH_PX = 60;
 
 /**
- * Maximum cascade depth that stays visible. The host (depth 0) plus this many
- * cascaded guests render normally; anything deeper folds into the "+N more"
- * pill regardless of column width. Depth-based collapse fires before the
- * width rule so dense days look the same in narrow (7-day-with-sidebar) and
- * wide (1-day or sidebar-hidden) layouts — the user always sees host + 1
- * cascade and a pill, never a thicket of 3+-deep cascading slivers where
- * each cascading title bleeds into the next.
+ * Cascade depth that stays visible: the host (depth 0) plus this many guests. Deeper blocks
+ * fold into the "+N more" pill regardless of column width, so narrow and wide layouts show
+ * the same thing.
  */
 export const MAX_VISIBLE_CASCADE_DEPTH = 1;
 
 /**
- * Horizontal indent (% of day-column width) per cascade depth step. Each
- * time-overlapping event gets pushed right by this amount so its host's
- * title/time row stays visible at the top-left. Tuned for 7-day-week columns
- * (~150–180 px wide): smaller and depth-3 events lose readability; larger and
- * the host's title gets squeezed at depth 1.
+ * Horizontal indent (% of day-column width) per cascade depth step, so the host's title
+ * stays visible. Tuned for 7-day columns: smaller and depth-3 events become unreadable,
+ * larger and the host's title is squeezed at depth 1.
  */
 export const CASCADE_OFFSET_PCT = 12;

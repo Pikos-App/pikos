@@ -2,7 +2,7 @@
 
 import type { PagePriority, PageStatus } from "../types";
 
-/** An image reference found in a markdown body. */
+/** An image reference in a markdown body. */
 export interface ImageRef {
   /** The full regex match (e.g. "![[photo.png]]" or "![alt](path/to/img.png)"). */
   fullMatch: string;
@@ -15,16 +15,14 @@ export interface ImageRef {
   /** Alt text (filename for wiki, explicit alt for standard). */
   altText: string;
   /**
-   * Whether this is definitely an image (has image extension) or a speculative
-   * match (extensionless wiki-embed that might be an image or a note transclusion).
-   * Speculative refs are tried during resolution but left as-is if they fail.
+   * True for an extensionless wiki-embed, which may be an image or a note transclusion.
+   * It is tried during resolution and left as-is if that fails.
    */
   speculative?: boolean;
 }
 
-/** A single page to be imported. */
 export interface ImportPage {
-  /** Original filename or CSV title — used as page title. */
+  /** Original filename or CSV title. */
   title: string;
   /** Markdown body (pre-Tiptap conversion) or plain text content. */
   body: string;
@@ -41,7 +39,6 @@ export interface ImportPage {
   createdAt: string | null;
   /** ISO datetime string for completedAt, if status is done. */
   completedAt: string | null;
-  /** ISO datetime string for updatedAt override. */
   updatedAt: string | null;
   /** Raw wikilink targets (e.g. "My Page") — resolved to IDs post-import. */
   wikilinks: string[];
@@ -57,7 +54,6 @@ export interface ImportPage {
   imageRefs: ImageRef[];
 }
 
-/** A folder to be created (or matched to an existing one). */
 export interface ImportFolder {
   /** Stable key for linking pages → folders within a plan. */
   key: string;
@@ -81,7 +77,6 @@ export interface ImportMeta {
   transformations: string[];
 }
 
-/** Complete import plan produced by a parser. */
 export interface ImportPlan {
   source: string;
   pages: ImportPage[];
@@ -91,8 +86,6 @@ export interface ImportPlan {
   /** Vault root directory path (markdown imports only). Used to resolve image paths. */
   vaultRoot?: string;
 }
-
-// ─── CSV Column Mapping ──────────────────────────────────────────────────────
 
 /** Which Pikos field a CSV column maps to. */
 export type PikosFieldKey =
@@ -113,7 +106,6 @@ export type PikosFieldKey =
   | "repeat"
   | "skip";
 
-/** A single column mapping: CSV header → Pikos field with sample data. */
 export interface ColumnMapping {
   csvHeader: string;
   pikosField: PikosFieldKey;
@@ -121,13 +113,12 @@ export interface ColumnMapping {
   sampleValues: string[];
 }
 
-/** Maps unique source values → Pikos values for enum fields (status, priority). */
+/** Maps source values to Pikos values for the enum fields. */
 export interface ValueMapping {
   field: "status" | "priority";
   entries: { sourceValue: string; targetValue: string }[];
 }
 
-/** Complete mapping configuration produced by the column mapping UI. */
 export interface CSVMappingConfig {
   columnMappings: ColumnMapping[];
   valueMappings: ValueMapping[];

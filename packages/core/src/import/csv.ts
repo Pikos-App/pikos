@@ -21,9 +21,6 @@ import type {
   ValueMapping,
 } from "./types";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Convert a Date to local 'YYYY-MM-DDTHH:MM:SS'. */
 function toLocalISO(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -35,24 +32,20 @@ function toLocalISO(date: Date): string {
 }
 
 /**
- * Parse a date/datetime string from CSV. Returns:
- * - 'YYYY-MM-DD' for date-only values
- * - 'YYYY-MM-DDTHH:MM:SS' for datetime values (converted to local time)
- * - null if unparseable
+ * Parse a date/datetime string from CSV. Returns 'YYYY-MM-DD' for date-only values,
+ * 'YYYY-MM-DDTHH:MM:SS' (local time) for datetimes, or null if unparseable.
  */
 function parseDateValue(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
 
-  // Date-only: YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-  // Full ISO datetime (possibly with timezone offset like +0000)
   const isoMatch = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s);
   if (isoMatch) {
     const d = new Date(s);
     if (!isNaN(d.getTime())) return toLocalISO(d);
-    return s.slice(0, 19); // fallback: take the datetime portion as-is
+    return s.slice(0, 19);
   }
 
   const d = new Date(s);
@@ -65,11 +58,9 @@ function parseDateValue(raw: string): string | null {
 }
 
 /**
- * Parse a date value as date-only (YYYY-MM-DD). Used when the source row has
- * an "Is All Day" flag set: TickTick exports all-day events as midnight-UTC
- * timestamps (e.g. "2026-06-15T00:00:00+0000"), and converting through
- * `new Date()` shifts the date in non-UTC timezones. Take the calendar date
- * directly from the leading YYYY-MM-DD without timezone math.
+ * Parse a date value as date-only (YYYY-MM-DD) for rows flagged all-day. TickTick exports
+ * those as midnight-UTC timestamps, and converting through `new Date()` shifts the date in
+ * non-UTC timezones, so the leading date is taken as is.
  */
 function parseAllDayDate(raw: string): string | null {
   const s = raw.trim();
@@ -77,8 +68,6 @@ function parseAllDayDate(raw: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(s);
   return match ? match[1]! : null;
 }
-
-// ─── CSV parsing ──────────────────────────────────────────────────────────────
 
 /** Handles quoted fields containing commas/newlines. */
 export function parseCSV(text: string): Record<string, string>[] {
@@ -102,7 +91,7 @@ export function parseCSV(text: string): Record<string, string>[] {
   return rows;
 }
 
-/** Split CSV text into logical lines (respecting quoted fields that span multiple lines). */
+/** Splits on newlines outside quotes, so a quoted field can span lines. */
 function splitCSVLines(text: string): string[] {
   const lines: string[] = [];
   let current = "";
@@ -115,7 +104,7 @@ function splitCSVLines(text: string): string[] {
       inQuotes = !inQuotes;
       current += ch;
     } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
-      if (ch === "\r" && text[i + 1] === "\n") i++; // skip \r\n
+      if (ch === "\r" && text[i + 1] === "\n") i++;
       if (current.trim()) lines.push(current);
       current = "";
     } else {
@@ -152,8 +141,6 @@ function parseCSVRow(line: string): string[] {
   return fields;
 }
 
-// ─── Pre-processing ──────────────────────────────────────────────────────────
-
 /** Strip TickTick backup preamble (metadata lines before the actual CSV headers). */
 function stripTickTickPreamble(text: string): string {
   const headerPattern = /^"?Folder Name"?|^"?List Name"?/m;
@@ -162,42 +149,35 @@ function stripTickTickPreamble(text: string): string {
   return text;
 }
 
-// ─── ISO 8601 duration parsing ───────────────────────────────────────────────
-
 /**
- * Parse an ISO 8601 duration offset to minutes.
- * TickTick uses: PT0S (on time), -PT5M (5 min before), -PT30M, -PT1H, -P1D, etc.
- * Returns minutes_before (>= 0), or null if unparseable.
+ * Parse an ISO 8601 duration offset to minutes before (>= 0), or null if unparseable.
+ * TickTick writes reminders as `PT0S` (on time) or negative offsets like `-PT5M`, `-P1D`.
  */
 export function parseDurationToMinutes(duration: string): number | null {
   const trimmed = duration.trim();
   if (!trimmed) return null;
 
-  // Strip leading minus — TickTick uses negative durations for "before"
   const normalized = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
 
-  // Match ISO 8601 duration: P[nD][T[nH][nM][nS]]
   const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(normalized);
   if (!match) return null;
 
   const days = Number(match[1] ?? 0);
   const hours = Number(match[2] ?? 0);
   const minutes = Number(match[3] ?? 0);
-  // Seconds: round to nearest minute (PT0S = 0 min)
   const seconds = Number(match[4] ?? 0);
 
   return days * 1440 + hours * 60 + minutes + Math.round(seconds / 60);
 }
 
-/** Columns `preprocessTodoistRows` adds, named so the generic header heuristics
- *  map them to the source ID and the parent the import nests under. */
+/** Columns `preprocessTodoistRows` adds, named so the header heuristics map them to the
+ *  source ID and parent. */
 const TODOIST_ID_HEADERS = ["taskId", "parentId"];
 
 /**
- * Pre-process Todoist-style rows: merge TYPE="note" into previous task,
- * skip TYPE="meta"/"section"/empty rows, and give each task an ID and the ID of
- * the task it is indented under. A Todoist export carries nesting only as INDENT,
- * so without this every subtask imported flat.
+ * Merges TYPE="note" rows into the previous task, drops meta, section and empty rows, and
+ * gives each task an ID and its parent's ID. An export carries nesting only as INDENT, so
+ * without this every subtask imported flat.
  */
 function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, string>[] {
   const result: Record<string, string>[] = [];
@@ -234,8 +214,6 @@ function preprocessTodoistRows(rows: Record<string, string>[]): Record<string, s
   return result;
 }
 
-// ─── Prepare CSV rows ────────────────────────────────────────────────────────
-
 export interface PreparedCSV {
   rows: Record<string, string>[];
   headers: string[];
@@ -243,7 +221,6 @@ export interface PreparedCSV {
 
 /** Parse a CSV string into rows and headers, with BOM/preamble handling. */
 export function prepareCSVRows(text: string): PreparedCSV {
-  // Strip UTF-8 BOM
   let clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   clean = stripTickTickPreamble(clean);
 
@@ -259,8 +236,6 @@ export function prepareCSVRows(text: string): PreparedCSV {
 
   return { headers, rows };
 }
-
-// ─── Column mapping suggestions ──────────────────────────────────────────────
 
 /** Header name → suggested Pikos field (case-insensitive lookup). */
 const HEADER_HEURISTICS: Record<string, PikosFieldKey> = {
@@ -296,7 +271,6 @@ const HEADER_HEURISTICS: Record<string, PikosFieldKey> = {
   priority: "priority",
   project: "folder",
   reminder: "reminder",
-  // Recurrence (iCal RRULE)
   repeat: "repeat",
   rrule: "repeat",
   scheduled: "scheduledStart",
@@ -348,7 +322,7 @@ export function suggestColumnMappings(
       else if (normalized === "indent") suggested = "skip";
       else if (normalized === "deadline") suggested = "scheduledEnd";
     } else if (detectedSource === "TickTick") {
-      // TickTick: "Folder Name" is always empty, "List Name" has the actual folder
+      // "Folder Name" is always empty in TickTick; "List Name" has the folder.
       if (normalized === "folder name") suggested = "skip";
       else if (normalized === "list name") suggested = "folder";
       else if (normalized === "start date") suggested = "scheduledStart";
@@ -378,8 +352,6 @@ export function suggestColumnMappings(
 
   return { detectedSource, mappings };
 }
-
-// ─── Value mapping ───────────────────────────────────────────────────────────
 
 export function detectUniqueValues(rows: Record<string, string>[], header: string): string[] {
   const values = new Set<string>();
@@ -460,9 +432,7 @@ export function suggestValueMappings(
   };
 }
 
-// ─── Known skip reasons (per source) ─────────────────────────────────────────
-
-/** Explanations for why known columns are safe to skip, keyed by lowercase header. */
+/** Why a known column is safe to skip, keyed by source then lowercase header. */
 const KNOWN_SKIP_REASONS: Record<string, Record<string, string>> = {
   TickTick: {
     "column name": "TickTick Kanban column — no equivalent in Pikos",
@@ -491,10 +461,7 @@ const KNOWN_SKIP_REASONS: Record<string, Record<string, string>> = {
   },
 };
 
-/**
- * Find a column value from the raw row by matching header names (case-insensitive).
- * Used for auxiliary columns like DURATION that aren't mapped to a Pikos field.
- */
+/** First non-empty value among columns matching `names` (case-insensitive), for columns not mapped to a Pikos field. */
 function findColumnValue(
   row: Record<string, string>,
   headers: string[],
@@ -509,8 +476,6 @@ function findColumnValue(
   }
   return null;
 }
-
-// ─── Apply mappings → ImportPlan ──────────────────────────────────────────────
 
 export function applyMappings(
   rows: Record<string, string>[],
@@ -586,11 +551,9 @@ export function applyMappings(
           .filter(Boolean)
       : [];
 
-    // Dates — if scheduledStart is unparseable (e.g. Todoist natural language),
-    // fall back to scheduledEnd (e.g. DEADLINE) as the scheduled date.
-    // TickTick exports all-day events as midnight-UTC timestamps and signals
-    // all-day via a separate column; parse those as date-only so the calendar
-    // renders them in the all-day row instead of as zero-duration timed blocks.
+    // An unparseable start (Todoist natural language) falls back to the end (DEADLINE). An
+    // all-day flag parses as date-only so the event lands in the all-day row, not as a
+    // zero-duration timed block.
     const isAllDayFlag =
       (findColumnValue(row, headers, ["is all day", "is_all_day"]) ?? "").toLowerCase() === "true";
     const parseDate = isAllDayFlag ? parseAllDayDate : parseDateValue;
@@ -599,7 +562,7 @@ export function applyMappings(
     const usedEndAsFallback = !scheduledStart && !!scheduledEnd;
     if (usedEndAsFallback) {
       scheduledStart = scheduledEnd;
-      scheduledEnd = null; // clear so duration can compute a proper end
+      scheduledEnd = null;
     }
 
     // Todoist's DURATION counts DURATION_UNIT, "minute" or "day". A span in days on a
@@ -614,8 +577,7 @@ export function applyMappings(
         if (!isNaN(duration) && duration > 0) {
           let timedStart = scheduledStart;
 
-          // If start is date-only, try to extract time from the raw field value
-          // (e.g. Todoist DATE = "today at 11:00" → extract "11:00")
+          // A date-only start may still carry a time in the raw text ("today at 11:00").
           if (isAllDayIso(timedStart)) {
             const rawDateField = get(row, "scheduledStart");
             const timeMatch = /(\d{1,2}):(\d{2})/.exec(rawDateField);
@@ -646,12 +608,10 @@ export function applyMappings(
     const completedAt = parseDateValue(get(row, "completedAt"));
     const updatedAt = parseDateValue(get(row, "updatedAt"));
 
-    // Source IDs for parent resolution
     const sourceId = get(row, "sourceId") || null;
     const sourceParentId = get(row, "sourceParentId") || null;
 
-    // Reminders: TickTick uses ISO 8601 durations (e.g. "PT0S", "-PT5M", "-PT1H").
-    // Multiple reminders may be comma- or semicolon-separated.
+    // Several reminders may be comma- or semicolon-separated.
     const rawReminder = get(row, "reminder");
     const reminderMinutes: number[] = [];
     if (rawReminder) {
@@ -664,10 +624,8 @@ export function applyMappings(
     const effectiveCompletedAt =
       status === "done" ? (completedAt ?? new Date().toISOString()) : completedAt;
 
-    // Recurrence rule (TickTick "Repeat" column uses iCal RRULE format).
-    // Completed rows are historical occurrences — drop the rule silently so the
-    // page stays a one-off completed record. The active template imports as a
-    // separate row with the same rule.
+    // A completed row is a past occurrence: drop its rule silently so it stays a one-off
+    // record. The active template imports as its own row with the same rule.
     let rrule: string | null = null;
     const rawRepeat = get(row, "repeat");
     if (rawRepeat && status !== "done") {

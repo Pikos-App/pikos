@@ -1,11 +1,9 @@
 // @pikos/core — pure TS: types, parsers, storage interface
 // Zero Tauri / React / DOM dependencies
 
-// Type only, deliberately. MockStorageAdapter is a ~1,400-line test double, and
-// this index is what the production entry chunk pulls in — a value re-export
-// here pins the whole class (and the recurrence engine it reaches for) into
-// that chunk no matter who actually uses it. Tests and the test-mode adapter
-// chunk import the class from "@pikos/core/testing" instead.
+// Type only: this index feeds the production entry chunk, and a value re-export would pin the
+// whole test double (and the recurrence engine) into it. Import the class from
+// "@pikos/core/testing".
 export type { MockStorageAdapter } from "./adapters/MockStorageAdapter";
 export * from "./adapters/NoopPlatformAdapter";
 export { evict } from "./cache/eviction";
@@ -14,7 +12,6 @@ export { PageStore, summaryBytes } from "./cache/pageStore";
 export type { WriteOutcome } from "./cache/pageStore";
 export { ViewCache, viewName } from "./cache/viewCache";
 export type { FetchToken, ViewEntry } from "./cache/viewCache";
-// ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {
   assignAllDayRows,
   assignStableAllDayRows,
@@ -112,7 +109,6 @@ export {
   placeMonthWeek,
 } from "./calendar/monthGrid";
 export type { CalendarViewMode, MonthCell, MonthCellEvent } from "./calendar/monthGrid";
-// ── Shared palettes and priority labels ──
 export {
   currentPaletteColor,
   defaultColorForProvider,
@@ -132,7 +128,6 @@ export {
   caldavBaseUrl,
   caldavSendsPasswordInClear,
 } from "./format/caldavIdentity";
-// ── Date/time formatting for chips, labels and pickers ──
 export {
   computeEndTimeLabel,
   DAYS_PRESETS,
@@ -157,7 +152,6 @@ export {
 } from "./format/pageDateLabel";
 export type { PageDateLabel } from "./format/pageDateLabel";
 export { syncedScheduleLabel } from "./format/syncedScheduleLabel";
-// ── Import parsers: CSV and markdown vault → ImportPlan ──
 export {
   applyMappings,
   detectUniqueValues,
@@ -192,9 +186,7 @@ export type {
   ValueMapping,
 } from "./import/types";
 export { bodyWithTitleLinks, cleanTitle, formatSchedule, formatTimeAgo } from "./import/utils";
-// ── Preference store seam: synchronous, string-keyed, host-provided ──
 export * from "./kv";
-// ── Layout: breakpoint modes and the page-list row model ──
 export {
   BREAKPOINTS,
   getCalendarDayCount,
@@ -219,7 +211,6 @@ export { quickAddHighlightTokens } from "./nlp/quickAddHighlight";
 export type { QuickAddHighlightKind, QuickAddHighlightToken } from "./nlp/quickAddHighlight";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
-// ── Page list: view scoping, sorting, selection and schedule edits ──
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
 export { deleteAsksWhichDates, pageActions } from "./pages/pageActions";
@@ -252,13 +243,11 @@ export {
   folderIdForRestoredPage,
   writableFolders,
 } from "./pages/writableFolders";
-// ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";
 export { STORAGE_READS, watchWrites } from "./storageReads";
 export type { WriteWatcher } from "./storageReads";
 export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
-// ── Calendar sync health, derived from the read model ──
 export {
   accountConnectionState,
   accountsNotSyncing,

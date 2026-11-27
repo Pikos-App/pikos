@@ -1,9 +1,5 @@
-// Date chip labels for the page list. Every label pairs a short display string
-// with the full date as a hover tooltip, and reports whether the schedule has
-// already passed so the caller can colour it.
-//
-// Locale is left to the system (no explicit locale argument) so these read the
-// way the rest of the app does — see UsageStats and the settings surfaces.
+// Date chip labels for the page list. Locale is left to the system so these read the way the
+// rest of the app does.
 
 import { addDays, endOfDay, startOfDay } from "date-fns";
 
@@ -64,8 +60,7 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
 
   const tooltip = tooltipFor(iso);
 
-  // Timed events today always show the time (past ones in red, upcoming as muted).
-  // This keeps them visually distinct from any all-day event on the same date.
+  // A timed event today shows its time, which keeps it distinct from an all-day event that day.
   if (!isAllDay && isToday) {
     return { isPast, label: formatCompactTime(date), tooltip };
   }
@@ -80,7 +75,6 @@ export function formatPageDate(iso: string, now: Date = new Date()): PageDateLab
     ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 
-  // Timed non-today: show date only; time is available on hover via tooltip
   const label = dateLabel;
   return { isPast, label, tooltip };
 }

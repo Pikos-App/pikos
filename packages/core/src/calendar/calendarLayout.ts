@@ -152,9 +152,8 @@ function groupByPixelOverlap(blocks: CalendarBlock[]): CalendarBlock[][] {
   return clusters;
 }
 
-/** Blocks still showing whose title row the pill would sit on. Three pages at one time share the
- *  right half between the second and third, so the third's pill landed on the second and read
- *  "+1 more" over a page nobody could see. */
+/** Blocks still showing whose title row the pill would sit on. Without this, with three pages at
+ *  one time the third's pill landed on the second and read "+1 more" over a page nobody could see. */
 function coveredTitles(
   cluster: CalendarBlock[],
   first: CalendarBlock,
@@ -236,10 +235,8 @@ export function remapBlocksForCollapse(
       continue;
     }
 
-    // A straddling block starts just past the band's pill, so all of them emerge at the same y
-    // whatever their start within the band, yet still reach into the collapsed space. Otherwise
-    // they would cascade by start minute (meaningless on a compressed band) or sit flush at the
-    // boundary with no cue that they extend into it.
+    // A straddling block starts just past the band's pill, so all emerge at the same y whatever
+    // their start within the band, with a cue that they extend into it.
     const rawTop = mapHourToY(startHour, geometry);
     const rawBottom = mapHourToY(endHour, geometry);
     const straddlesTopBand = config.topCollapsed && fallsShortOf(startHour, config.topHour);
@@ -402,13 +399,12 @@ export function buildDayBlocks(
       let leftPct: number;
       let widthPct: number;
 
-      // Depth is always the cluster's sweep-line column: a close-top pair only changes the layout
-      // (50/50 split), not the depth. Promoting it would keep a pair at cluster columns 2 and 3
-      // visible past the MAX_VISIBLE_CASCADE_DEPTH cap that applies to the rest of the cluster.
+      // A close-top pair changes the layout, never the depth, or a pair at cluster columns 2 and 3
+      // would stay visible past MAX_VISIBLE_CASCADE_DEPTH.
       const cascadeDepth = assignments[i]!;
 
-      // The 50/50 split applies only when the pair owns the cluster host (depth 0). A mid-cluster
-      // pair would paint at leftPct 0 and collide with the real host, so it cascades normally.
+      // Only a pair that owns the cluster host splits 50/50; a mid-cluster pair would paint at
+      // leftPct 0 over the real host.
       const splitsClusterHost =
         component.length > 1 && component.some((idx) => assignments[idx]! === 0);
 
@@ -543,7 +539,7 @@ function assignColumns(cluster: RawBlock[]): number[] {
     const startMs = raw.visualStart.getTime();
     let assigned = -1;
     for (let col = columnOverlapEnds.length - 1; col >= 0; col--) {
-      if (columnOverlapEnds[col]! > startMs) break; // alive — block fallback
+      if (columnOverlapEnds[col]! > startMs) break;
       assigned = col;
     }
     if (assigned === -1) {
@@ -649,9 +645,8 @@ function buildRawBlock(
     Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
   );
   const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
-  // Not `metrics.gridHeight`: that is the collapse-remapped total, which is smaller when bands
-  // are collapsed and would clamp end-of-day events above their start, squashing them to the
-  // height floor. `startY` is in these raw coordinates; `remapBlocksForCollapse` projects later.
+  // Not `metrics.gridHeight`: that is the collapse-remapped total, smaller with bands collapsed,
+  // and would squash end-of-day events to the height floor.
   const rawGridHeight = metrics.hourHeight * VISIBLE_HOURS;
   let endY: number;
   if (isContinuationAfter) {

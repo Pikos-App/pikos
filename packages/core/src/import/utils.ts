@@ -2,21 +2,18 @@ import { isTimedIso } from "../utils/dates";
 
 const MARKDOWN_LINK = /\[([^\]]+)\]\([^)]+\)/g;
 
-/** Strip markdown formatting from titles before storing in DB or displaying in preview. */
+/** Strips markdown formatting from a title. */
 export function cleanTitle(title: string): string {
   return title
-    .replace(MARKDOWN_LINK, "$1") // [text](url) → text
-    .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** → bold
-    .replace(/\*(.+?)\*/g, "$1") // *italic* → italic
-    .replace(/__(.+?)__/g, "$1") // __bold__ → bold
-    .replace(/_(.+?)_/g, "$1") // _italic_ → italic
+    .replace(MARKDOWN_LINK, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
     .trim();
 }
 
-/**
- * The body with the title's links set above it, one paragraph each. A title holds
- * plain text, so `cleanTitle` keeps only a link's text and its URL lives here.
- */
+/** The body with the title's links set above it, one paragraph each, since `cleanTitle` keeps only a link's text. */
 export function bodyWithTitleLinks(title: string, body: string): string {
   const links = title.match(MARKDOWN_LINK) ?? [];
   if (links.length === 0) return body;

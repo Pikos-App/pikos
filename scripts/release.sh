@@ -5,7 +5,7 @@ set -euo pipefail
 # Bumps version in all manifest files, commits, tags, and pushes.
 #
 # Every bypass a release takes is written into its release record after the tag, beside
-# the QA counts (PKOS-0115), so skipping a gate is possible and never invisible.
+# the QA counts, so skipping a gate is possible and never invisible.
 
 BUMP="${1:-}"
 HOTFIX="${2:-}"
@@ -24,13 +24,10 @@ TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 CARGO_TOML="$ROOT/apps/desktop/src-tauri/Cargo.toml"
 
-# Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
 
-# A prerelease left in the manifests by scripts/release-beta.sh breaks the
-# arithmetic below, and the dangerous half is silent: from 0.4.0-beta.1 a `minor`
-# bump yields 0.5.0, skipping the very release the beta was for. (`patch` is
-# harmless by comparison — it dies on a bad math expression.) Refuse instead.
+# A prerelease left in the manifests by scripts/release-beta.sh breaks the arithmetic below, and
+# silently: from a beta of 0.4.0 a `minor` bump yields 0.5.0, skipping the release the beta was for.
 if [[ "$CURRENT" == *-* ]]; then
   echo "Error: $TAURI_CONF is at $CURRENT, which is a prerelease."
   echo "Reset tauri.conf.json, apps/desktop/package.json and src-tauri/Cargo.toml"
@@ -49,8 +46,8 @@ esac
 NEW="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEW}"
 
-# One notes file per version, which the site, the GitHub release and the update dialog all show
-# (PKOS-0198). The release workflow reads it from the tag.
+# One notes file per version, which the site, the GitHub release and the update dialog all show.
+# The release workflow reads it from the tag.
 NOTES_FILE="$ROOT/apps/marketing/src/content/release-notes/${NEW}.md"
 notes_body() { awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$NOTES_FILE"; }
 if [ ! -f "$NOTES_FILE" ] || [ -z "$(notes_body | tr -d '[:space:]')" ]; then
@@ -80,8 +77,8 @@ if [ "$AGE_MONTHS" -gt 3 ]; then
   RECORD+=("Bypass: SKIP_COMPARISON_CHECK=1, published a comparison last checked $CHECKED.")
 fi
 
-# The release's QA copy has to be finished, or for a hotfix its hotfix block signed
-# (PKOS-0118, PKOS-0117). SKIP_QA="<why>" lets a release through and records why.
+# The release's QA copy has to be finished, or for a hotfix its hotfix block signed.
+# SKIP_QA="<why>" lets a release through and records why.
 if [ -n "${SKIP_QA:-}" ]; then
   RECORD+=("Bypass: SKIP_QA, the QA copy wasn't checked: ${SKIP_QA}")
 else
@@ -91,7 +88,7 @@ fi
 
 # The app's own log, from the day the QA pass ran: a warning the app emits about itself
 # is a defect or a line that shouldn't be there, and both want a decision before a tag.
-# The QA pass runs on Pikos Staging (PKOS-0134), so its log is the one that judges this build.
+# The QA pass runs on Pikos Staging, so its log is the one that judges this build.
 # SKIP_LOG_CHECK="<why>" lets a release through and records why.
 if [ -n "${SKIP_LOG_CHECK:-}" ]; then
   RECORD+=("Bypass: SKIP_LOG_CHECK, the app log wasn't checked: ${SKIP_LOG_CHECK}")
@@ -113,7 +110,7 @@ else
   bash "$ROOT/scripts/check-marketing-build.sh" || exit 1
 fi
 
-# The formal benchmark /speed publishes has to pass PKOS-0133 and have measured this code.
+# The formal benchmark /speed publishes has to pass its gate and have measured this code.
 # SKIP_SPEED="<why>" lets a release that changes no product code through and records why.
 if [ -n "${SKIP_SPEED:-}" ]; then
   RECORD+=("Bypass: SKIP_SPEED, the published benchmark wasn't checked: ${SKIP_SPEED}")
@@ -131,9 +128,7 @@ else
   RECORD+=("Egress: the app reached no host through a full session with no account connected.")
 fi
 
-# ── Release-notes sign-off ───────────────────────────────────────────────────
-# Tagging triggers the publish pipeline and is irreversible, so require an
-# explicit human review of the notes before proceeding.
+# Tagging triggers the publish pipeline and is irreversible, so a person signs off the notes first.
 echo "Bumping $CURRENT → $NEW, with the notes dated $TODAY"
 echo ""
 echo "Release notes. The site shows all of it; the update dialog and GitHub show what's above"
@@ -148,9 +143,8 @@ if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
   exit 0
 fi
 
-# Check for uncommitted changes. The version's notes file is exempt: it may be
-# written right before cutting and is committed by the version-bump commit below,
-# so requiring a separate commit (plus its own green CI run) adds nothing.
+# The version's notes file is exempt from the uncommitted-changes check: the bump commit below
+# commits it, so a separate commit and CI run would add nothing.
 NOTES_REL="${NOTES_FILE#"$ROOT"/}"
 if ! git diff --quiet -- . ":(exclude)$NOTES_REL" \
   || ! git diff --cached --quiet -- . ":(exclude)$NOTES_REL"; then
@@ -158,13 +152,10 @@ if ! git diff --quiet -- . ":(exclude)$NOTES_REL" \
   exit 1
 fi
 
-# Release gate — require a green ci.yml run for HEAD. The release pipeline no
-# longer re-validates; CI on `main` is the single authoritative gate, so we
-# only cut a release from a commit CI has already passed. The version-bump
-# commit below only touches version strings, Cargo.lock and the notes file and
-# re-enters CI when pushed, so it needs no separate validation — hence
-# --no-verify to skip the (now-redundant) pre-commit/pre-push hooks.
-# SKIP_CI_CHECK=1 bypasses the gate; in that case keep hooks on as a fallback.
+# Require a green ci.yml run for HEAD: CI on `main` is the one authoritative gate, and the
+# release pipeline doesn't re-validate. The bump commit only touches version strings, Cargo.lock
+# and the notes file and re-enters CI when pushed, hence --no-verify. SKIP_CI_CHECK=1 bypasses
+# the gate and keeps the hooks on as a fallback.
 HOOK_FLAG="--no-verify"
 bash "$ROOT/scripts/require-green-ci.sh" || exit 1
 if [ "${SKIP_CI_CHECK:-}" = "1" ]; then
@@ -172,7 +163,6 @@ if [ "${SKIP_CI_CHECK:-}" = "1" ]; then
   RECORD+=("Bypass: SKIP_CI_CHECK=1, tagged without a green CI run.")
 fi
 
-# Update version in all files
 if [[ "$(uname)" == "Darwin" ]]; then
   sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$TAURI_CONF"
   sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$DESKTOP_PKG"
@@ -183,13 +173,9 @@ else
   sed -i "s/^version = \"$CURRENT\"/version = \"$NEW\"/" "$CARGO_TOML"
 fi
 
-# Pick up the version bump in Cargo.lock. Deliberately NOT `cargo
-# generate-lockfile`, which re-resolves the entire graph rather than editing the
-# one line that changed: measured on the 0.4.0 tree it moved 364 dependency
-# versions and pulled in crates that were not there before, so the release would
-# have built against a dependency set nothing had tested. Reading the metadata
-# updates the lockfile minimally instead. The diff it produces should be a single
-# version line; anything more means something else moved and wants looking at.
+# Pick up the bump in Cargo.lock with `cargo metadata`, not `cargo generate-lockfile`, which
+# re-resolves the whole graph (hundreds of versions moved) and would build the release against
+# dependencies nothing had tested. The diff should be a single version line.
 (cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
 
 awk -v today="$TODAY" 'NR==1 && /^---$/ {fm=1; print; next} fm && /^---$/ {fm=0} fm && /^date:/ {$0 = "date: " today} {print}' \
@@ -218,10 +204,9 @@ echo ""
 echo "Created tag $TAG"
 echo ""
 
-# Push and get workflow URL
 git push --atomic $HOOK_FLAG origin "$RELEASE_BRANCH" "$TAG"
 
-# Wait briefly for the run to register, then grab the URL
+# The run takes a moment to register.
 sleep 3
 RUN_URL=$(gh run list --workflow=release.yml --limit=1 --json url --jq '.[0].url' 2>/dev/null || true)
 if [ -n "$RUN_URL" ]; then

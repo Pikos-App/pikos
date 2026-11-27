@@ -1,20 +1,13 @@
-// Pure planning for the Today view's "Move to today" bulk action on the Overdue
-// section. Deciding WHAT moves and WHERE it lands is date math with no I/O in
-// it, so it lives here and is tested here; the caller only runs the resulting
-// list through the ordinary one-off schedule write.
+// Plans the Overdue section's "Move to today". Two kinds of overdue page stay put:
 //
-// Two kinds of overdue page are deliberately left where they are:
+//   * recurring occurrences: an overdue one means the series has a gap, which the
+//     recurring-gap dialog closes (skip vs complete). Dragging the anchor forward would
+//     erase the gap instead.
+//   * synced mirrors (`scheduleLocked`): the reconciler owns their schedule, and the
+//     backend rejects the write.
 //
-//   * recurring occurrences — an overdue occurrence means the series has a gap,
-//     and closing that gap is the recurring-gap dialog's job (skip vs complete
-//     the backlog). Silently dragging the anchor forward would erase the gap
-//     rather than resolve it.
-//   * synced mirrors (`scheduleLocked`) — the reconciler owns their schedule;
-//     the backend rejects the write and the row snaps back.
-//
-// Everything else keeps its wall-clock shape: the whole schedule is shifted by a
-// whole number of days, so a 9:00–10:00 from last week is 9:00–10:00 today, and
-// an all-day page stays all-day (a two-day all-day span stays two days).
+// Everything else shifts by whole days, so it keeps its wall-clock shape: a 9:00-10:00 from
+// last week is 9:00-10:00 today, and an all-day span keeps its length.
 
 import { addDays, differenceInCalendarDays } from "date-fns";
 
@@ -33,32 +26,27 @@ export interface OverdueMove {
   /** Where the page lands. */
   start: string;
   end: string | undefined;
-  /** What it was, so a single undo can put the whole batch back. */
+  /** What it was, for undo. */
   previousStart: string;
   previousEnd: string | undefined;
 }
 
 export interface OverdueMovePlan {
   moves: OverdueMove[];
-  /** Left in place — see the module note. */
+  /** Left in place, per the module note. */
   recurringKept: number;
   syncedKept: number;
 }
 
-/** Shifts an ISO schedule string by whole days, preserving its all-day/timed
- *  shape. `addDays` (not a ms offset) so the wall-clock time survives DST. */
+/** Shifts an ISO schedule string by whole days. `addDays`, not a ms offset, so the wall-clock time survives DST. */
 function shiftByDays(iso: string, days: number): string {
   const shifted = addDays(parseLocalISO(iso), days);
   return isAllDayIso(iso) ? formatDateOnly(shifted) : formatLocalISO(shifted);
 }
 
 /**
- * Plans the move for the pages currently in the Overdue section.
- *
- * A page already dated today is neither moved nor counted as kept: there is
- * nowhere for it to go, and reporting it as "left" would read as a refusal.
- * Overdue holds only earlier days, so nothing sent from the Today view can hit
- * that case; it stays for a caller that assembles its own set.
+ * Plans the move for the pages in the Overdue section. A page already dated today is neither
+ * moved nor counted as kept: reporting it as "left" would read as a refusal.
  */
 export function planMoveOverdueToToday(
   pages: PageSummary[],
@@ -98,10 +86,7 @@ function countPages(count: number): string {
   return `${count} ${count === 1 ? "page" : "pages"}`;
 }
 
-/**
- * Toast copy: what moved, then what stayed and why, in the module note's two
- * reasons ("Moved 4 pages to today. Left 2 repeating pages to catch up").
- */
+/** Toast copy: what moved, then what stayed and why ("Moved 4 pages to today. Left 2 repeating pages to catch up"). */
 export function moveOverdueToTodayLabel(plan: OverdueMovePlan): string {
   const moved =
     plan.moves.length === 0 ? "Nothing to move" : `Moved ${countPages(plan.moves.length)} to today`;

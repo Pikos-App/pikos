@@ -1,13 +1,8 @@
-// The editor the iOS app loads into a WKWebView.
+// The editor the iOS app loads into a WKWebView. The document comes from @pikos/editor-schema,
+// so a page written here is byte-identical to one written on desktop; behaviour is local and
+// differs on purpose (no Tab key, a keyboard covering half the screen).
 //
-// Everything that decides the *document* comes from @pikos/editor-schema, so a
-// page written here is byte-identical to one written on desktop. Everything
-// that decides *behaviour* is local to this file and deliberately different: a
-// phone has no Tab key, no slash-menu ergonomics worth speaking of, and a
-// keyboard that covers half the screen.
-//
-// The one rule from the plan that shapes the whole file: the webview never
-// talks to the database. It reports what changed; Swift decides what to store.
+// The webview never talks to the database. It reports what changed; Swift decides what to store.
 
 import { extractText } from "@pikos/core";
 import { createDocumentExtensions, createPikosImageNode } from "@pikos/editor-schema";
@@ -19,13 +14,10 @@ import { createInputTimings } from "./inputTimings";
 import { parseHostMessage, PROTOCOL_VERSION } from "./protocol";
 
 /**
- * How long to wait after typing stops before sending the document to the host.
- *
- * Every send serialises the full document plus its extracted plain text and
- * crosses the bridge, so coalescing matters at typing speed. 300ms is short
- * enough that a backgrounded app flush (see `bridge.flush`) rarely has anything
- * to do, and long enough to collapse a burst of keystrokes into one message.
- * The M0 spike should confirm this against a real device rather than trust it.
+ * How long to wait after typing stops before sending the document to the host. Every send
+ * serialises the full document plus its plain text across the bridge, so a burst of keystrokes
+ * should collapse into one message, yet stay short enough that a backgrounded-app flush
+ * (`bridge.flush`) rarely has anything to do.
  */
 const DOC_CHANGE_DEBOUNCE_MS = 300;
 
@@ -56,9 +48,7 @@ function mount(): Mounted {
     send("docChanged", {
       doc: JSON.stringify(doc),
       pageId: currentPageId,
-      // Extracted here rather than on the host: it is the same function the
-      // desktop app uses for the FTS column, so search behaves identically for
-      // a page typed on the phone.
+      // Extracted here with the desktop's FTS function, so search behaves the same on both.
       plainText: extractText(doc),
     });
     const timing = inputTimings.drain();
@@ -75,11 +65,9 @@ function mount(): Mounted {
         resolveAssetUrl,
       }),
     ],
-    // Reported on focus and on every transaction that could change what the
-    // toolbar shows. Tiptap's selection update fires only when the selection
-    // moves, so tapping into the document where the caret already sits
-    // produced nothing, and neither did a mark toggled from the toolbar: the
-    // button stayed unlit, and a second tap to make sure turned the mark off.
+    // Tiptap's selection update fires only when the selection moves, so tapping in where the
+    // caret already sits, or toggling a mark from the toolbar, reported nothing and the button
+    // stayed unlit.
     onFocus: ({ editor: e }) => reportSelection(e),
     onTransaction: ({ editor: e, transaction }) => {
       const mayChangeToolbar =
@@ -87,9 +75,7 @@ function mount(): Mounted {
       if (mayChangeToolbar) reportSelection(e);
     },
     onUpdate: ({ editor: e }) => {
-      // A host-initiated load fires onUpdate too. Sending that back would have
-      // the host persist a document it just supplied — harmless in isolation,
-      // but it makes every page open look like an edit in the change log.
+      // A host load fires onUpdate too; echoing it would make every page open look like an edit.
       if (applyingHostDocument) return;
       inputTimings.finishOnNextFrame();
       sendDocChanged(e);
@@ -97,27 +83,19 @@ function mount(): Mounted {
     },
   });
 
-  // Tapping a link reports it to the host, which decides whether to open it.
-  //
-  // The schema sets `openOnClick: false` — correct for an editor, where a tap
-  // should place the caret rather than navigate — so nothing happens on its
-  // own. On desktop the app supplies the rest; here, without this, a link in a
-  // page was simply inert. The host must be the one to act on it in any case:
-  // a webview that navigated would replace the editor with a web page.
+  // The schema sets `openOnClick: false`, so a tapped link is inert unless reported. The host
+  // acts on it: a webview that navigated would replace the editor with a web page.
   element.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest("a");
     const href = anchor?.getAttribute("href");
     if (!href) return;
-    // The caret still moves; only the navigation is refused, and there is none
-    // to refuse unless the browser decided to follow the href itself.
     event.preventDefault();
     send("linkTapped", { url: href });
   });
 
-  // iOS can suspend the process shortly after backgrounding, which would take a
-  // pending debounce — and the user's last keystrokes — with it.
+  // iOS can suspend the process soon after backgrounding, taking a pending debounce with it.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") sendDocChanged.flush();
   });
@@ -126,12 +104,10 @@ function mount(): Mounted {
   return { editor, hasUnsentChange: sendDocChanged.isPending };
 }
 
-/** Tell the host what the caret is currently inside, for its formatting UI. */
 function reportSelection(editor: Editor): void {
   const { $from, empty } = editor.state.selection;
   send("selectionChanged", {
     isEmpty: empty,
-    // Drives the native toolbar's active states.
     marks: Object.keys(editor.schema.marks).filter((mark) => editor.isActive(mark)),
     nodeType: $from.parent.type.name,
   });
@@ -141,8 +117,7 @@ let lastReportedHeight = 0;
 
 function reportHeight(element: HTMLElement): void {
   const px = Math.ceil(element.getBoundingClientRect().height);
-  // Sub-pixel jitter during typing would otherwise send a message per
-  // keystroke for a height that has not meaningfully moved.
+  // Sub-pixel jitter would otherwise send a message per keystroke.
   if (Math.abs(px - lastReportedHeight) < 1) return;
   lastReportedHeight = px;
   send("heightChanged", { px });
@@ -155,9 +130,9 @@ function applyTheme(scheme: string, accent: string): void {
 }
 
 /**
- * Replace the document with `doc` by changing only the stretch that differs, so the caret and the
- * scroll stay with the text around them. Resetting the whole document and putting the caret back
- * at the same offset would move it into other text whenever the change sat above it.
+ * Replaces the document with `doc` by changing only the stretch that differs, so the caret and
+ * scroll stay with the text around them. A full reset with the caret restored at the same offset
+ * would land it in other text whenever the change sat above it.
  */
 function showInPlace(editor: Editor, doc: string): boolean {
   const next = parseDocument(editor, doc);
@@ -200,8 +175,8 @@ function parseDocument(editor: Editor, doc: string): ReturnType<typeof createDoc
 function handleHostMessage({ editor, hasUnsentChange }: Mounted, raw: unknown): void {
   const parsed = parseHostMessage(raw);
   if (!parsed.ok) {
-    // Reported rather than thrown: a throw here is swallowed by the JS
-    // evaluation context and the host sees only a generic failure.
+    // Logged, not thrown: the JS evaluation context swallows a throw and the host sees only a
+    // generic failure.
     // eslint-disable-next-line no-console
     console.error("[pikos-bridge]", parsed.error);
     return;
@@ -214,24 +189,17 @@ function handleHostMessage({ editor, hasUnsentChange }: Mounted, raw: unknown): 
       changesSent = 0;
       applyingHostDocument = true;
       try {
-        // Three things at once, each load-bearing:
-        //
-        //   addToHistory: false  keeps the load out of the undo stack. Without
-        //     it, undo on a freshly-opened page reverts to the empty document
-        //     the editor started with. That is worse on a phone than a desktop:
-        //     iOS offers shake-to-undo and an undo key on the keyboard, both
-        //     easy to hit by accident.
-        //   emitUpdate: false    stops the load being reported back as a change.
-        //   applyingHostDocument also covers the transactions Tiptap runs while
-        //     normalising, which emitUpdate alone does not.
+        // addToHistory: false keeps undo on a freshly opened page from reverting to the empty
+        // document (shake-to-undo makes that easy to hit). emitUpdate: false stops the load
+        // reporting as a change, and applyingHostDocument covers the transactions Tiptap runs
+        // while normalising, which emitUpdate does not.
         editor
           .chain()
           .setMeta("addToHistory", false)
           .setContent(JSON.parse(doc) as object, { emitUpdate: false })
           .run();
       } catch {
-        // A document that will not parse is corrupt, not a reason to leave the
-        // user staring at the previous page's content.
+        // A corrupt document must not leave the previous page's content on screen.
         editor.commands.clearContent();
         // eslint-disable-next-line no-console
         console.error("[pikos-bridge] could not parse the document for", pageId);
@@ -259,9 +227,8 @@ function handleHostMessage({ editor, hasUnsentChange }: Mounted, raw: unknown): 
     }
     case "setEditable": {
       const { editable } = parsed.payload as { editable: boolean };
-      // Tiptap flips `contenteditable` and drops the caret. No blur is sent
-      // separately: a read-only surface that still owned the keyboard would
-      // show a keyboard for a page that cannot take a keystroke.
+      // Blur too: a read-only surface that kept the keyboard would show one for a page that
+      // cannot take a keystroke.
       editor.setEditable(editable);
       if (!editable) editor.commands.blur();
       return;
@@ -296,13 +263,7 @@ function handleHostMessage({ editor, hasUnsentChange }: Mounted, raw: unknown): 
   }
 }
 
-/**
- * Marks the host may toggle.
- *
- * An allowlist rather than passing the name straight through: the message
- * carries a string from outside the webview, and `chain()[name]()` on an
- * arbitrary string is a call into whatever the editor happens to expose.
- */
+/** Marks the host may toggle. An allowlist because the name comes from outside the webview, and `chain()[name]()` on an arbitrary string calls anything the editor exposes. */
 const TOGGLEABLE_MARKS = new Set(["bold", "italic", "underline", "strike", "code"]);
 
 function toggleMark(editor: Editor, mark: string): void {
@@ -311,8 +272,7 @@ function toggleMark(editor: Editor, mark: string): void {
     console.warn("[pikos-bridge] unknown mark:", mark);
     return;
   }
-  // focus() first, or the toggle applies to a selection the editor no longer
-  // considers current — the native toolbar takes focus when tapped.
+  // focus() first: the native toolbar takes focus when tapped, so the selection is stale otherwise.
   editor.chain().focus().toggleMark(mark).run();
 }
 
@@ -323,8 +283,7 @@ function toggleBlock(editor: Editor, nodeType: string, headingLevel: number): vo
       chain.setParagraph().run();
       return;
     case "heading": {
-      // The schema declares levels 1–3; anything else would be dropped on the
-      // next parse, which reads to the user as the heading not sticking.
+      // The schema declares levels 1-3; another level is dropped on the next parse.
       const level = Math.min(3, Math.max(1, Math.round(headingLevel))) as 1 | 2 | 3;
       chain.toggleHeading({ level }).run();
       return;
@@ -364,9 +323,7 @@ function start(): void {
   const mounted = mount();
   const { editor } = mounted;
 
-  // The host calls this through evaluateJavaScript. Exposed as a single
-  // function rather than several so there is one place to version and one
-  // place to validate.
+  // One entry point for evaluateJavaScript, so there is one place to version and validate.
   window.pikosEditor = {
     receive: (raw: unknown) => handleHostMessage(mounted, raw),
   };
@@ -374,8 +331,7 @@ function start(): void {
   send("ready", { protocolVersion: PROTOCOL_VERSION });
 
   if (!hasHost()) {
-    // Standalone in a browser — give it something to type into so the editor
-    // can be exercised without building the app.
+    // Standalone in a browser: give it content so the editor works without the app.
     editor.commands.setContent({
       content: [
         {

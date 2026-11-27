@@ -15,13 +15,8 @@ fail() { printf "${RED}✗${RESET} %s\n" "$1"; }
 errors=""
 overall=0
 
-# ── What this diff can actually break ────────────────────────────────────────
-# No code gate reads a committed .md, so a markdown-only diff cannot change any
-# of their outcomes. Running the full set anyway costs about a minute to fix a
-# typo, and a gate that expensive on trivial edits is one people learn to skip.
-#
-# DIFF_BASE lets pre-push and CI pass the range they are actually gating; unset
-# it means the working tree, which is what a pre-commit run cares about.
+# No code gate reads a committed .md, so a markdown-only diff skips them. DIFF_BASE is the range
+# pre-push and CI are gating; unset means the working tree, which pre-commit cares about.
 changed_paths() {
   if [ -n "$DIFF_BASE" ]; then
     git diff --name-only "$DIFF_BASE" 2>/dev/null
@@ -35,8 +30,6 @@ changed_paths() {
 
 files=$(changed_paths)
 
-# The footnote checker used to be a line in functionality-matrix.md asking a
-# person to remember. Running it here is what makes it a gate.
 if printf '%s\n' "$files" | grep -q '^docs/.*\.md$' && [ -f scripts/check-doc-footnotes.py ]; then
   if python3 scripts/check-doc-footnotes.py >/dev/null 2>&1; then
     pass "doc-footnotes"
@@ -52,7 +45,7 @@ if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '(\.md|\.txt|LICENSE)
   exit $overall
 fi
 
-# ── Auto-fix (skip in CI — clean checkout has no changed files) ───────────────
+# Auto-fix, skipped in CI where a clean checkout has no changed files.
 changed=()
 if [ -z "$CI" ]; then
   while IFS= read -r f; do
@@ -70,7 +63,6 @@ if [ -z "$CI" ]; then
   fi
 fi
 
-# ── Parallel checks ──────────────────────────────────────────────────────────
 tmpdir=$(mktemp -d)
 
 run_check() {
@@ -82,53 +74,40 @@ run_check() {
   fi
 }
 
-# Every package that declares a typecheck, not a hand-listed three. The list used
-# to name desktop, core and ui, which left the parser bridge the CLI ships and the
-# whole marketing site checked by nothing. Turbo hashes content, so the packages
-# that did not change cost nothing to include.
+# Every package that declares a typecheck, not a hand-listed few. Turbo hashes content, so
+# unchanged packages cost nothing.
 run_check "typecheck"         pnpm exec turbo typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
-# Every Playwright project is grep-scoped by tag, so an untagged test runs in no
-# project at all — silently. Text scan, no Playwright runtime: cheap enough to
-# ride along here (and so pre-commit and CI's verify job) instead of a new job.
+# Every Playwright project is grep-scoped by tag, so an untagged test runs nowhere, silently.
 run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
-# app.css's token tiers are generated from packages/ui/src/tokens.ts. Nothing
-# else compares the two, so a token edited without regenerating would ship the
-# old value with every check green. Pure node + string compare, same cheap-guard
-# reasoning as e2e-tags.
+# app.css's token tiers are generated from packages/ui/src/tokens.ts; nothing else compares the
+# two, so an unregenerated edit would ship the old value with every check green.
 run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
 # A shipped migration edited in place locks installs out on upgrade; the script says how.
 run_check "migrations"        bash scripts/check-migrations-frozen.sh &
 # A reader left on the stored body column returns the right page until saves write chunks alone.
 run_check "body-reads"        bash scripts/check-body-reads.sh &
-# The keyboard registry logs a warning for a duplicate combo and registers both
-# anyway, so the winner is whichever component mounted last. Same cheap-guard
-# reasoning again: a text scan over call sites, catching what a runtime check
-# cannot, since the collisions that matter are the ones where two owners rarely
-# mount together.
+# The keyboard registry registers a duplicate combo anyway, so the winner is whichever mounted
+# last. A text scan over call sites catches what a runtime check cannot, since the colliding
+# owners rarely mount together.
 run_check "shortcut-conflicts" node scripts/check-shortcut-conflicts.mjs &
 # Pre-push tests only the crates a push reaches, and this is what keeps that selection honest
 # against the real crate graph. Reads Cargo manifests only, so it costs a fraction of a second.
 run_check "rust-slice"        node --test scripts/rust-affected.test.mjs &
 # Release cleanup removes worktrees and branches, so what it counts as merged is tested.
 run_check "merged-cleanup"    node --test scripts/clean-merged-work.test.mjs &
-# A behaviour lands with a test claiming its QA row (PKOS-0193). The master is gitignored, so CI
-# has none to read and this gate is local, which is where rows are added.
+# A behaviour lands with a test claiming its QA row. The master is gitignored, so CI has none to
+# read and this gate is local, which is where rows are added.
 if [ -f .agent/qa/full-qa-checklist.md ]; then
   run_check "qa-rows"         node scripts/qa-marks.mjs --owed &
 fi
 
-# SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
-# runs the same desktop+core suite, with thresholds) is the single test pass.
+# SKIP_UNIT_TESTS=1 omits the unit run; CI sets it so the coverage job is the single test pass.
 #
-# Always the full suite, never `vitest --changed`. Scoping to the diff measured
-# slower and burned six times the CPU: vitest rebuilds the module graph on every
-# invocation and carries nothing between runs, so a branch with a broad working
-# diff selects most of the suite and pays for the selection on top. Turbo hashes
-# content, so an untouched re-run is free and an edit re-runs only the packages
-# that can reach it. Running everything is also what lets one command be the
-# whole gate: a spec reached only at runtime was invisible to `--changed`.
+# Always the full suite, never `vitest --changed`: it measured slower and burned six times the
+# CPU, since vitest rebuilds the module graph on every invocation, and it can't see a spec
+# reached only at runtime. Turbo hashes content, so an untouched re-run is free.
 if [ -z "$SKIP_UNIT_TESTS" ]; then
   run_check "tests"           pnpm exec turbo test &
 fi
@@ -139,7 +118,6 @@ fi
 
 wait
 
-# ── Report results ────────────────────────────────────────────────────────────
 for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts rust-slice qa-rows tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
@@ -150,7 +128,6 @@ for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body
     if [ "$name" = "tests" ]; then
       filtered=$(cat "$tmpdir/$name.out" | grep -E '(FAIL|Error|✗|×|expected|received|AssertionError)' | head -20)
     else
-      # Strip turbo noise and prefixes, keep only meaningful error lines
       filtered=$(sed 's/^@[^:]*:[^:]*: *//' "$tmpdir/$name.out" \
         | grep -vE '(^[[:space:]]*$|cache (hit|miss)|replaying logs|Packages in scope|Running |Remote caching|Tasks:|Cached:|Time:|Failed:|ERROR.*run failed|ELIFECYCLE|ERR_PNPM|command.*exited|• turbo|^> eslint|^> echo|^No lint configured|^> @|^> pnpm|Exit status|^/Users/.*:$)' \
         | tail -10)
@@ -162,7 +139,6 @@ for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body
   fi
 done
 
-# ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 if [ $overall -eq 0 ]; then
   printf "${GREEN}All checks passed.${RESET}\n"
@@ -173,12 +149,8 @@ fi
 
 rm -rf "$tmpdir"
 
-# ── Cleanup nag ──────────────────────────────────────────────────────────────
-# Mention `pnpm cleanup` when build artifacts haven't been swept in >14 days.
-# Marker written by scripts/cleanup-builds.sh into .git/ (per-checkout, never
-# committed, survives `cargo clean`). Silent during the 14-day window; silent
-# on a fresh clone with no target/ yet (nothing to sweep). One line, easy to
-# ignore — verify exit code unchanged.
+# Mentions `pnpm cleanup` when build artifacts haven't been swept in over 14 days. The marker is
+# written by scripts/cleanup-builds.sh into .git/, so it is per-checkout and survives `cargo clean`.
 sweep_marker=".git/last-cleanup-builds"
 nag=""
 if [ -f "$sweep_marker" ]; then
@@ -191,8 +163,7 @@ elif [ -d apps/desktop/src-tauri/target ] || [ -d target ]; then
   nag="never swept"
 fi
 if [ -n "$nag" ]; then
-  # Escape sequences must be interpolated into the format string (printf
-  # interprets them at parse time); passing them via %s prints them literally.
+  # Escapes go in the format string; passed through %s they print literally.
   BOLD='\033[1m'
   printf "${DIM}tip:${RESET} build artifacts can pile up (%s) — run ${BOLD}pnpm cleanup${RESET}\n" "$nag"
 fi
