@@ -351,8 +351,12 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
             }),
             window,
         ) => {
+            let start = scheduled_start
+                .as_deref()
+                .and_then(parse_local_iso)
+                .unwrap_or(reference);
             let bound =
-                window.map(|window| bound_for(window, scheduled_start.as_deref(), reference));
+                window.map(|window| bound_for(window, start, freq, byday.as_deref(), interval));
             let rrule = recurrence::to_rrule(freq, byday.as_deref(), interval, bound.as_ref());
             ParseResult::Recurring { input: base, rrule }
         }
@@ -427,18 +431,33 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
 }
 
 /// The bound an RRULE carries for a given window.
-fn bound_for(window: Window, scheduled_start: Option<&str>, reference: NaiveDateTime) -> Bound {
+///
+/// A window of days ends on the rule's last occurrence inside it, not the window's
+/// last day, so "every saturday for 8 weeks" ends on a Saturday. A rule here fires
+/// at most daily, so the window's day count bounds the expansion.
+fn bound_for(
+    window: Window,
+    start: NaiveDateTime,
+    freq: Frequency,
+    byday: Option<&[Weekday]>,
+    interval: Option<u32>,
+) -> Bound {
     match window {
         Window::Count(count) => Bound::Count(count),
         Window::Until(until) => Bound::Until(until),
         Window::Days(count) => {
-            let start = scheduled_start
-                .and_then(parse_local_iso)
-                .unwrap_or(reference);
-            match add_days(start, i64::from(count).saturating_sub(1)) {
-                Some(boundary) => Bound::Until(boundary),
-                None => Bound::Until(start),
-            }
+            let Some(window_end) = add_days(start, i64::from(count).saturating_sub(1)) else {
+                return Bound::Until(start);
+            };
+
+            let in_window =
+                recurrence::to_rrule(freq, byday, interval, Some(&Bound::Until(window_end)));
+            let last_in_window =
+                pikos_recurrence::list_occurrences(&in_window, &format_local_iso(&start), count)
+                    .last()
+                    .and_then(|at| parse_local_iso(at));
+
+            Bound::Until(last_in_window.unwrap_or(window_end))
         }
     }
 }
@@ -677,6 +696,23 @@ mod tests {
             panic!("expected a recurring page");
         };
         assert_eq!(rrule, "FREQ=DAILY;COUNT=10");
+    }
+
+    #[test]
+    fn a_window_of_weeks_ends_on_its_last_occurrence() {
+        let rrule_of = |text: &str| match parse_input(text, sunday_noon()) {
+            ParseResult::Recurring { rrule, .. } => rrule,
+            other => panic!("expected a recurring page, got {other:?}"),
+        };
+
+        assert_eq!(
+            rrule_of("every saturday for 8 weeks"),
+            "FREQ=WEEKLY;BYDAY=SA;UNTIL=20260509T235959"
+        );
+        assert_eq!(
+            rrule_of("standup every monday for 2 weeks"),
+            "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260323T235959"
+        );
     }
 
     #[test]

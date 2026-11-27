@@ -7415,7 +7415,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260413T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260315T235959",
           "type": "recurring"
         }
       }
@@ -7431,7 +7431,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260416T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260318T235959",
           "type": "recurring"
         }
       }
@@ -7447,7 +7447,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260414T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260316T235959",
           "type": "recurring"
         }
       }
@@ -7463,7 +7463,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260419T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260321T235959",
           "type": "recurring"
         }
       }
@@ -7479,7 +7479,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260426T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260328T235959",
           "type": "recurring"
         }
       }
@@ -7511,7 +7511,7 @@
             "title": "",
             "durationMinutes": 60
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20270129T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20261231T235959",
           "type": "recurring"
         }
       }
@@ -8094,7 +8094,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20260328T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20260315T235959",
           "type": "recurring"
         }
       }
@@ -8110,7 +8110,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20260331T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20260318T235959",
           "type": "recurring"
         }
       }
@@ -8126,7 +8126,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20260329T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20260316T235959",
           "type": "recurring"
         }
       }
@@ -8142,7 +8142,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20260403T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20260321T235959",
           "type": "recurring"
         }
       }
@@ -8158,7 +8158,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20260410T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20260328T235959",
           "type": "recurring"
         }
       }
@@ -8174,7 +8174,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20240313T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20240229T235959",
           "type": "recurring"
         }
       }
@@ -8190,7 +8190,7 @@
             "title": "1:1 with sam",
             "durationMinutes": 90
           },
-          "rrule": "FREQ=YEARLY;UNTIL=20270113T235959",
+          "rrule": "FREQ=YEARLY;UNTIL=20261231T235959",
           "type": "recurring"
         }
       }
@@ -15687,111 +15687,6 @@
           "input": {
             "tags": [],
             "title": "A/B TEST",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "sun_noon",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "wed_noon",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "mon_morning",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "sat_late",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "dst_eve",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "leap_day",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
-            "priority": "high"
-          },
-          "type": "single"
-        }
-      }
-    },
-    {
-      "input": "!High,",
-      "ref": "year_end",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "",
             "priority": "high"
           },
           "type": "single"
@@ -39951,6 +39846,111 @@
       }
     },
     {
+      "input": "7.81d.cq0k4",
+      "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2026-03-23T07:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2026-03-26T07:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "mon_morning",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2026-03-24T03:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "sat_late",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2026-03-29T17:30:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "dst_eve",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2026-04-05T07:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "leap_day",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2024-03-08T04:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
+      "input": "7.81d.cq0k4",
+      "ref": "year_end",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": ".cq0k4",
+            "scheduledStart": "2027-01-08T18:00:00"
+          },
+          "type": "single"
+        }
+      }
+    },
+    {
       "input": "7/#",
       "ref": "sun_noon",
       "result": {
@@ -55110,7 +55110,7 @@
             "title": "",
             "scheduledStart": "2026-03-16T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260329T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260323T235959",
           "type": "recurring"
         }
       }
@@ -55126,7 +55126,7 @@
             "title": "",
             "scheduledStart": "2026-03-19T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260401T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260326T235959",
           "type": "recurring"
         }
       }
@@ -55142,7 +55142,7 @@
             "title": "",
             "scheduledStart": "2026-03-17T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260330T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260324T235959",
           "type": "recurring"
         }
       }
@@ -55158,7 +55158,7 @@
             "title": "",
             "scheduledStart": "2026-03-22T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260404T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260329T235959",
           "type": "recurring"
         }
       }
@@ -55174,7 +55174,7 @@
             "title": "",
             "scheduledStart": "2026-03-29T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260411T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260405T235959",
           "type": "recurring"
         }
       }
@@ -55190,7 +55190,7 @@
             "title": "",
             "scheduledStart": "2024-03-01T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20240314T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20240308T235959",
           "type": "recurring"
         }
       }
@@ -55206,7 +55206,7 @@
             "title": "",
             "scheduledStart": "2027-01-01T20:00:00"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20270114T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20270108T235959",
           "type": "recurring"
         }
       }
@@ -63137,7 +63137,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2026-03-17"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260415T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260414T235959",
           "type": "recurring"
         }
       }
@@ -63154,7 +63154,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2026-03-24"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260422T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260421T235959",
           "type": "recurring"
         }
       }
@@ -63171,7 +63171,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2026-03-17"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260415T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260414T235959",
           "type": "recurring"
         }
       }
@@ -63188,7 +63188,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2026-03-24"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260422T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260421T235959",
           "type": "recurring"
         }
       }
@@ -63205,7 +63205,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2026-03-31"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260429T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260428T235959",
           "type": "recurring"
         }
       }
@@ -63222,7 +63222,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2024-03-05"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20240403T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20240402T235959",
           "type": "recurring"
         }
       }
@@ -63239,7 +63239,7 @@
             "durationMinutes": 45,
             "scheduledStart": "2027-01-05"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20270203T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20270202T235959",
           "type": "recurring"
         }
       }
@@ -63683,7 +63683,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260413T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260315T235959",
           "type": "recurring"
         }
       }
@@ -63698,7 +63698,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260416T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260318T235959",
           "type": "recurring"
         }
       }
@@ -63713,7 +63713,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260414T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260316T235959",
           "type": "recurring"
         }
       }
@@ -63728,7 +63728,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260419T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260321T235959",
           "type": "recurring"
         }
       }
@@ -63743,7 +63743,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260426T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20260328T235959",
           "type": "recurring"
         }
       }
@@ -63758,7 +63758,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20240329T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20240229T235959",
           "type": "recurring"
         }
       }
@@ -63773,7 +63773,7 @@
             "tags": [],
             "title": "TODO: fix"
           },
-          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20270129T235959",
+          "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20261231T235959",
           "type": "recurring"
         }
       }
@@ -74195,7 +74195,7 @@
             "title": "",
             "scheduledStart": "2026-03-16T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260329T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260327T235959",
           "type": "recurring"
         }
       }
@@ -74211,7 +74211,7 @@
             "title": "",
             "scheduledStart": "2026-03-23T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260403T235959",
           "type": "recurring"
         }
       }
@@ -74227,7 +74227,7 @@
             "title": "",
             "scheduledStart": "2026-03-23T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260403T235959",
           "type": "recurring"
         }
       }
@@ -74243,7 +74243,7 @@
             "title": "",
             "scheduledStart": "2026-03-23T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260403T235959",
           "type": "recurring"
         }
       }
@@ -74259,7 +74259,7 @@
             "title": "",
             "scheduledStart": "2026-03-30T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260412T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20260410T235959",
           "type": "recurring"
         }
       }
@@ -74275,7 +74275,7 @@
             "title": "",
             "scheduledStart": "2024-03-04T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240317T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240315T235959",
           "type": "recurring"
         }
       }
@@ -74291,7 +74291,7 @@
             "title": "",
             "scheduledStart": "2027-01-04T15:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20270117T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20270115T235959",
           "type": "recurring"
         }
       }
@@ -76049,7 +76049,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76067,7 +76067,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76085,7 +76085,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76103,7 +76103,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76121,7 +76121,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76139,7 +76139,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -76157,7 +76157,7 @@
             "title": "",
             "scheduledStart": "2026-04-01"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260430T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20260429T235959",
           "type": "recurring"
         }
       }
@@ -83365,7 +83365,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2026-03-20"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260418T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260414T235959",
           "type": "recurring"
         }
       }
@@ -83382,7 +83382,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2026-03-27"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260425T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260421T235959",
           "type": "recurring"
         }
       }
@@ -83399,7 +83399,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2026-03-27"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260425T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260421T235959",
           "type": "recurring"
         }
       }
@@ -83416,7 +83416,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2026-03-27"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260425T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260421T235959",
           "type": "recurring"
         }
       }
@@ -83433,7 +83433,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2026-04-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260502T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260428T235959",
           "type": "recurring"
         }
       }
@@ -83450,7 +83450,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2024-03-08"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20240406T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20240402T235959",
           "type": "recurring"
         }
       }
@@ -83467,7 +83467,7 @@
             "durationMinutes": 120,
             "scheduledStart": "2027-01-08"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20270206T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20270202T235959",
           "type": "recurring"
         }
       }
@@ -86388,7 +86388,7 @@
             "title": "",
             "scheduledStart": "2026-05-01"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260503T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260501T235959",
           "type": "recurring"
         }
       }
@@ -86404,7 +86404,7 @@
             "title": "",
             "scheduledStart": "2026-05-01"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260503T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260501T235959",
           "type": "recurring"
         }
       }
@@ -86420,7 +86420,7 @@
             "title": "",
             "scheduledStart": "2026-05-01"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260503T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260501T235959",
           "type": "recurring"
         }
       }
@@ -86436,7 +86436,7 @@
             "title": "",
             "scheduledStart": "2026-05-01"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260503T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260501T235959",
           "type": "recurring"
         }
       }
@@ -86452,7 +86452,7 @@
             "title": "",
             "scheduledStart": "2026-05-01"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260503T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260501T235959",
           "type": "recurring"
         }
       }
@@ -91862,7 +91862,7 @@
             "title": "",
             "scheduledStart": "2026-03-16"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260329T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260323T235959",
           "type": "recurring"
         }
       }
@@ -91878,7 +91878,7 @@
             "title": "",
             "scheduledStart": "2026-03-23"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -91894,7 +91894,7 @@
             "title": "",
             "scheduledStart": "2026-03-23"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -91910,7 +91910,7 @@
             "title": "",
             "scheduledStart": "2026-03-23"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -91926,7 +91926,7 @@
             "title": "",
             "scheduledStart": "2026-03-30"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260406T235959",
           "type": "recurring"
         }
       }
@@ -91942,7 +91942,7 @@
             "title": "",
             "scheduledStart": "2024-03-04"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20240317T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20240311T235959",
           "type": "recurring"
         }
       }
@@ -91958,7 +91958,7 @@
             "title": "",
             "scheduledStart": "2027-01-04"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20270117T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20270111T235959",
           "type": "recurring"
         }
       }
@@ -91976,7 +91976,7 @@
             "scheduledStart": "2026-03-16T23:59:00",
             "scheduledEnd": "2026-03-17T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260329T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260323T235959",
           "type": "recurring"
         }
       }
@@ -91994,7 +91994,7 @@
             "scheduledStart": "2026-03-23T23:59:00",
             "scheduledEnd": "2026-03-24T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -92012,7 +92012,7 @@
             "scheduledStart": "2026-03-23T23:59:00",
             "scheduledEnd": "2026-03-24T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -92030,7 +92030,7 @@
             "scheduledStart": "2026-03-23T23:59:00",
             "scheduledEnd": "2026-03-24T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260405T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959",
           "type": "recurring"
         }
       }
@@ -92048,7 +92048,7 @@
             "scheduledStart": "2026-03-30T23:59:00",
             "scheduledEnd": "2026-03-31T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260406T235959",
           "type": "recurring"
         }
       }
@@ -92066,7 +92066,7 @@
             "scheduledStart": "2024-03-04T23:59:00",
             "scheduledEnd": "2024-03-05T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20240317T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20240311T235959",
           "type": "recurring"
         }
       }
@@ -92084,7 +92084,7 @@
             "scheduledStart": "2027-01-04T23:59:00",
             "scheduledEnd": "2027-01-05T01:59:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20270117T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20270111T235959",
           "type": "recurring"
         }
       }
@@ -92101,7 +92101,7 @@
             "scheduledStart": "2026-12-28",
             "scheduledEnd": "2027-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261228T235959",
           "type": "recurring"
         }
       }
@@ -92118,7 +92118,7 @@
             "scheduledStart": "2026-12-28",
             "scheduledEnd": "2027-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261228T235959",
           "type": "recurring"
         }
       }
@@ -92135,7 +92135,7 @@
             "scheduledStart": "2026-12-28",
             "scheduledEnd": "2027-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261228T235959",
           "type": "recurring"
         }
       }
@@ -92152,7 +92152,7 @@
             "scheduledStart": "2026-12-28",
             "scheduledEnd": "2027-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261228T235959",
           "type": "recurring"
         }
       }
@@ -92169,7 +92169,7 @@
             "scheduledStart": "2026-12-28",
             "scheduledEnd": "2027-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261228T235959",
           "type": "recurring"
         }
       }
@@ -92186,7 +92186,7 @@
             "scheduledStart": "2024-12-28",
             "scheduledEnd": "2025-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20250110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20241228T235959",
           "type": "recurring"
         }
       }
@@ -92203,7 +92203,7 @@
             "scheduledStart": "2027-12-28",
             "scheduledEnd": "2028-01-03"
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20280110T235959",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20271228T235959",
           "type": "recurring"
         }
       }
@@ -93158,7 +93158,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2026-03-17"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260330T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260326T235959",
           "type": "recurring"
         }
       }
@@ -93175,7 +93175,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2026-03-24"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260406T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260402T235959",
           "type": "recurring"
         }
       }
@@ -93192,7 +93192,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2026-03-17"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260330T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260326T235959",
           "type": "recurring"
         }
       }
@@ -93209,7 +93209,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2026-03-24"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260406T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260402T235959",
           "type": "recurring"
         }
       }
@@ -93226,7 +93226,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2026-03-31"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260413T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20260409T235959",
           "type": "recurring"
         }
       }
@@ -93243,7 +93243,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2024-03-05"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20240318T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20240314T235959",
           "type": "recurring"
         }
       }
@@ -93260,7 +93260,7 @@
             "durationMinutes": 90,
             "scheduledStart": "2027-01-05"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20270118T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20270114T235959",
           "type": "recurring"
         }
       }
@@ -95026,7 +95026,7 @@
             "title": "",
             "scheduledStart": "2026-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260320T235959",
           "type": "recurring"
         }
       }
@@ -95042,7 +95042,7 @@
             "title": "",
             "scheduledStart": "2026-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260320T235959",
           "type": "recurring"
         }
       }
@@ -95058,7 +95058,7 @@
             "title": "",
             "scheduledStart": "2026-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20260322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20260320T235959",
           "type": "recurring"
         }
       }
@@ -95074,7 +95074,7 @@
             "title": "",
             "scheduledStart": "2027-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20270322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20270320T235959",
           "type": "recurring"
         }
       }
@@ -95090,7 +95090,7 @@
             "title": "",
             "scheduledStart": "2027-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20270322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20270320T235959",
           "type": "recurring"
         }
       }
@@ -95106,7 +95106,7 @@
             "title": "",
             "scheduledStart": "2024-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20240322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20240320T235959",
           "type": "recurring"
         }
       }
@@ -95122,7 +95122,7 @@
             "title": "",
             "scheduledStart": "2027-03-20"
           },
-          "rrule": "FREQ=MONTHLY;UNTIL=20270322T235959",
+          "rrule": "FREQ=MONTHLY;UNTIL=20270320T235959",
           "type": "recurring"
         }
       }
@@ -108383,7 +108383,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108400,7 +108400,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108417,7 +108417,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108434,7 +108434,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108451,7 +108451,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108468,7 +108468,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -108485,7 +108485,7 @@
             "scheduledStart": "2026-05-02T05:00:00",
             "scheduledEnd": "2026-05-02T05:00:00"
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260531T235959",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20260529T235959",
           "type": "recurring"
         }
       }
@@ -142345,7 +142345,7 @@
             "scheduledEnd": "2026-03-16T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260413T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260412T235959",
           "type": "recurring"
         }
       }
@@ -142363,7 +142363,7 @@
             "scheduledEnd": "2026-03-19T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260416T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260415T235959",
           "type": "recurring"
         }
       }
@@ -142381,7 +142381,7 @@
             "scheduledEnd": "2026-03-17T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260414T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260413T235959",
           "type": "recurring"
         }
       }
@@ -142399,7 +142399,7 @@
             "scheduledEnd": "2026-03-23T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260420T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260419T235959",
           "type": "recurring"
         }
       }
@@ -142417,7 +142417,7 @@
             "scheduledEnd": "2026-03-29T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260426T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260425T235959",
           "type": "recurring"
         }
       }
@@ -142432,7 +142432,7 @@
             "tags": [],
             "title": "9pm to 5am."
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20240329T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20240328T235959",
           "type": "recurring"
         }
       }
@@ -142450,7 +142450,7 @@
             "scheduledEnd": "2027-01-02T05:00:00",
             "durationMinutes": 480
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20270130T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20270129T235959",
           "type": "recurring"
         }
       }
@@ -142458,6 +142458,36 @@
     {
       "input": "weekly for 3 days for 1 month 1:1 with sam",
       "ref": "sun_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "1:1 with sam"
+          },
+          "rrule": "FREQ=WEEKLY;UNTIL=20260412T235959",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "weekly for 3 days for 1 month 1:1 with sam",
+      "ref": "wed_noon",
+      "result": {
+        "ok": true,
+        "value": {
+          "input": {
+            "tags": [],
+            "title": "1:1 with sam"
+          },
+          "rrule": "FREQ=WEEKLY;UNTIL=20260415T235959",
+          "type": "recurring"
+        }
+      }
+    },
+    {
+      "input": "weekly for 3 days for 1 month 1:1 with sam",
+      "ref": "mon_morning",
       "result": {
         "ok": true,
         "value": {
@@ -142472,36 +142502,6 @@
     },
     {
       "input": "weekly for 3 days for 1 month 1:1 with sam",
-      "ref": "wed_noon",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "1:1 with sam"
-          },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260416T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "weekly for 3 days for 1 month 1:1 with sam",
-      "ref": "mon_morning",
-      "result": {
-        "ok": true,
-        "value": {
-          "input": {
-            "tags": [],
-            "title": "1:1 with sam"
-          },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260414T235959",
-          "type": "recurring"
-        }
-      }
-    },
-    {
-      "input": "weekly for 3 days for 1 month 1:1 with sam",
       "ref": "sat_late",
       "result": {
         "ok": true,
@@ -142510,7 +142510,7 @@
             "tags": [],
             "title": "1:1 with sam"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260419T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260418T235959",
           "type": "recurring"
         }
       }
@@ -142525,7 +142525,7 @@
             "tags": [],
             "title": "1:1 with sam"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260426T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260425T235959",
           "type": "recurring"
         }
       }
@@ -142540,7 +142540,7 @@
             "tags": [],
             "title": "1:1 with sam"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20240329T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20240328T235959",
           "type": "recurring"
         }
       }
@@ -142555,7 +142555,7 @@
             "tags": [],
             "title": "1:1 with sam"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20270129T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20270128T235959",
           "type": "recurring"
         }
       }
@@ -142570,7 +142570,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260317T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260315T235959",
           "type": "recurring"
         }
       }
@@ -142585,7 +142585,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260320T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260318T235959",
           "type": "recurring"
         }
       }
@@ -142600,7 +142600,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260318T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260316T235959",
           "type": "recurring"
         }
       }
@@ -142615,7 +142615,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260323T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260321T235959",
           "type": "recurring"
         }
       }
@@ -142630,7 +142630,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20260330T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20260328T235959",
           "type": "recurring"
         }
       }
@@ -142645,7 +142645,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20240302T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20240229T235959",
           "type": "recurring"
         }
       }
@@ -142660,7 +142660,7 @@
             "tags": [],
             "title": "re: the thing"
           },
-          "rrule": "FREQ=WEEKLY;UNTIL=20270102T235959",
+          "rrule": "FREQ=WEEKLY;UNTIL=20261231T235959",
           "type": "recurring"
         }
       }
