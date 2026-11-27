@@ -98,45 +98,6 @@ impl AppError {
     }
 }
 
-/// A sqlx error's class, plus the SQLite extended result code when there is one. Both are numbers
-/// and fixed names, never the message, which can echo SQL and its parameters.
-pub fn classify_sqlx(e: &sqlx::Error) -> String {
-    use sqlx::Error::*;
-    let class = match e {
-        Configuration(_) => "configuration",
-        Database(_) => "database",
-        Io(_) => "io",
-        Tls(_) => "tls",
-        Protocol(_) => "protocol",
-        RowNotFound => "row_not_found",
-        TypeNotFound { .. } => "type_not_found",
-        ColumnIndexOutOfBounds { .. } => "column_index_out_of_bounds",
-        ColumnNotFound(_) => "column_not_found",
-        ColumnDecode { .. } => "column_decode",
-        Encode(_) => "encode",
-        Decode(_) => "decode",
-        AnyDriverError(_) => "any_driver",
-        PoolTimedOut => "pool_timed_out",
-        PoolClosed => "pool_closed",
-        WorkerCrashed => "worker_crashed",
-        Migrate(_) => "migrate",
-        _ => "other",
-    };
-
-    let code = match e {
-        Database(db) => db.code().map(|c| format!(" code={c}")),
-        _ => None,
-    };
-    format!("{class}{}", code.unwrap_or_default())
-}
-
-fn scrub_home(shown: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => shown.replacen(&home, "~", 1),
-        _ => shown.to_string(),
-    }
-}
-
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
         if says_the_file_is_damaged(&err) {
@@ -192,6 +153,45 @@ impl Serialize for AppError {
 }
 
 pub type AppResult<T> = std::result::Result<T, AppError>;
+
+/// A sqlx error's class, plus the SQLite extended result code when there is one. Both are numbers
+/// and fixed names, never the message, which can echo SQL and its parameters.
+pub fn classify_sqlx(e: &sqlx::Error) -> String {
+    use sqlx::Error::*;
+    let class = match e {
+        Configuration(_) => "configuration",
+        Database(_) => "database",
+        Io(_) => "io",
+        Tls(_) => "tls",
+        Protocol(_) => "protocol",
+        RowNotFound => "row_not_found",
+        TypeNotFound { .. } => "type_not_found",
+        ColumnIndexOutOfBounds { .. } => "column_index_out_of_bounds",
+        ColumnNotFound(_) => "column_not_found",
+        ColumnDecode { .. } => "column_decode",
+        Encode(_) => "encode",
+        Decode(_) => "decode",
+        AnyDriverError(_) => "any_driver",
+        PoolTimedOut => "pool_timed_out",
+        PoolClosed => "pool_closed",
+        WorkerCrashed => "worker_crashed",
+        Migrate(_) => "migrate",
+        _ => "other",
+    };
+
+    let code = match e {
+        Database(db) => db.code().map(|c| format!(" code={c}")),
+        _ => None,
+    };
+    format!("{class}{}", code.unwrap_or_default())
+}
+
+fn scrub_home(shown: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() => shown.replacen(&home, "~", 1),
+        _ => shown.to_string(),
+    }
+}
 
 #[cfg(test)]
 #[path = "error_tests.rs"]
