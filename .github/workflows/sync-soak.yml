@@ -3,6 +3,10 @@ name: Sync soak
 # The randomized sync runs, over far more seeds than a push can afford and from a different first
 # seed each night, so a rare order of events gets its chance. A failure prints its seed;
 # `PIKOS_CONVERGENCE_SEED=<n> cargo test -p pikos-db --lib -- convergence_tests` replays it.
+#
+# It soaks `main` and the newest release branch, since the release branch is where sync work
+# lands first and `main` lacks it until the release merges. A red night opens an issue, because a
+# red scheduled run on its own is seen by nobody.
 
 on:
   schedule:
@@ -18,19 +22,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  soak:
-    name: Randomized sync runs
+  refs:
+    name: Pick the branches
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    outputs:
+      refs: ${{ steps.pick.outputs.refs }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: main and the newest release branch
+        id: pick
+        run: |
+          git fetch --no-tags --filter=blob:none --depth=1 origin '+refs/heads/feat/*:refs/remotes/origin/feat/*' || true
+          release=$(git for-each-ref --sort=-committerdate --count=1 --format='%(refname:lstrip=3)' 'refs/remotes/origin/feat/*')
+          if [ -n "$release" ]; then
+            echo "refs=[\"main\",\"$release\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo 'refs=["main"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  soak:
+    name: Randomized sync runs (${{ matrix.ref }})
+    needs: refs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJSON(needs.refs.outputs.refs) }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.ref }}
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
 
-      - uses: dtolnay/rust-toolchain@stable
+      # The compiler comes from rust-toolchain.toml, on whichever branch this run checked out.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
@@ -38,6 +75,40 @@ jobs:
         env:
           PIKOS_CONVERGENCE_SEEDS: ${{ inputs.seeds || '2000' }}
         run: |
+          set -o pipefail
           export PIKOS_CONVERGENCE_FROM=$(( $(date +%s) / 86400 * 10000 ))
           echo "seeds $PIKOS_CONVERGENCE_FROM onward, $PIKOS_CONVERGENCE_SEEDS of them"
-          cargo test --release -p pikos-db --lib -- replica::convergence_tests
+          cargo test --release -p pikos-db --lib -- replica::convergence_tests 2>&1 | tee soak.log
+
+      - name: File the failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: ${{ matrix.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # The panic line carries the seed: "seed 207831147: device 0 lacks images".
+          failed=$(awk '
+            /^---- .* stdout ----$/ { test = $2 }
+            match($0, /seed [0-9]+:/) && test { print test, substr($0, RSTART + 5, RLENGTH - 6); test = "" }
+          ' soak.log | sort -u)
+          [ -n "$failed" ] || failed="(no-failed-test-found-in-log) unknown"
+          {
+            echo "The nightly sync soak failed on \`$REF\` at $(git rev-parse --short HEAD): $RUN_URL"
+            echo
+            echo "$failed" | while read -r test seed; do
+              echo "- \`$test\`, seed $seed. Replay on \`$REF\`:"
+              echo "  \`PIKOS_CONVERGENCE_SEED=$seed cargo test --release -p pikos-db --lib -- replica::convergence_tests\`"
+            done
+            echo
+            echo "Once fixed, pin the seed as a named test beside the others at the foot of \`convergence_tests.rs\`."
+          } > issue.md
+          gh label create sync-soak --color B60205 --description "The nightly sync soak failed" --force
+          title="Sync soak failed on $REF"
+          open=$(gh issue list --label sync-soak --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file issue.md
+          else
+            gh issue create --label sync-soak --title "$title" --body-file issue.md
+          fi

@@ -60,6 +60,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The compiler comes from rust-toolchain.toml; build-ios-framework.sh adds the targets.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+
       - name: Read the Rust toolchain
         id: rust
         run: echo "version=$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
@@ -138,13 +142,33 @@ jobs:
       - name: Generate the Xcode project
         run: cd apps/ios/Pikos && xcodegen generate
 
+      # Some runners start with no simulator listed while the runtimes still mount, and a build
+      # aimed at one by name then fails with "Unable to find a device". Wait for one, preferring
+      # $SIMULATOR, and aim at it by id.
+      - name: Pick a simulator
+        run: |
+          for _ in $(seq 1 24); do
+            devices=$(xcrun simctl list devices available -j)
+            id=$(jq -r --arg n "$SIMULATOR" '[.devices[][] | select(.name == $n)][0].udid // empty' <<<"$devices")
+            [ -n "$id" ] || id=$(jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last.udid // empty' <<<"$devices")
+            [ -n "$id" ] && break
+            sleep 5
+          done
+          if [ -z "$id" ]; then
+            echo "::error::No iPhone simulator appeared on this runner within two minutes."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$id"
+          echo "SIM_ID=$id" >> "$GITHUB_ENV"
+
       - name: Build the app
         run: |
           set -o pipefail
           xcodebuild build \
             -project apps/ios/Pikos/Pikos.xcodeproj \
             -scheme Pikos \
-            -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify
 
@@ -176,7 +200,7 @@ jobs:
           xcodebuild test \
             -project apps/ios/Pikos/Pikos.xcodeproj \
             -scheme Pikos \
-            -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
             -only-testing:PikosUITests \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify

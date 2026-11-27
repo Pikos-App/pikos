@@ -1,7 +1,6 @@
 import js from "@eslint/js";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import perfectionist from "eslint-plugin-perfectionist";
-import reactCompiler from "eslint-plugin-react-compiler";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
@@ -63,7 +62,6 @@ export default tseslint.config(
     plugins: {
       "jsx-a11y": jsxA11y,
       perfectionist,
-      "react-compiler": reactCompiler,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
     },
@@ -94,12 +92,8 @@ export default tseslint.config(
       "perfectionist/sort-exports": ["error", { type: "natural" }],
       "perfectionist/sort-objects": ["error", { type: "natural" }],
       "perfectionist/sort-jsx-props": ["error", { type: "natural" }],
-      "react-compiler/react-compiler": "error",
-      // The React Compiler memoizes for us (see react-compiler/react-compiler
-      // above), so hand-written useMemo/useCallback is at best redundant and at
-      // worst a stale-closure bug the compiler would not have written. The
-      // codebase has zero of them today — this keeps it that way rather than
-      // letting the convention live only in the maintainer's head.
+      // The React Compiler memoizes for us, so hand-written useMemo/useCallback is at best
+      // redundant and at worst a stale-closure bug the compiler would not have written.
       "no-restricted-imports": [
         "error",
         {

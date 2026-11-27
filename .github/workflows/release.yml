@@ -65,9 +65,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+      # The compiler comes from rust-toolchain.toml; the targets go onto that same toolchain.
+      - name: Install the pinned Rust toolchain and its targets
+        env:
+          TARGETS: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+        run: |
+          rustup toolchain install
+          IFS=, read -ra targets <<<"$TARGETS"
+          rustup target add "${targets[@]}"
 
       # Why: scripts/no-build-paths-check.sh. Set before the cache step so its key sees the same
       # flags as the build.
@@ -282,9 +287,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+      # The compiler comes from rust-toolchain.toml; the targets go onto that same toolchain.
+      - name: Install the pinned Rust toolchain and its targets
+        env:
+          TARGETS: ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          IFS=, read -ra targets <<<"$TARGETS"
+          rustup target add "${targets[@]}"
 
       # The same remap as the app build's.
       - name: Remap build paths out of the binaries
