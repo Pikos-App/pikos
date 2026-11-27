@@ -189,7 +189,7 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     }
 
     public func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
-        Self.log.info("event: \(String(describing: event), privacy: .public)")
+        Self.log.info("event: \(Self.summary(of: event), privacy: .public)")
         defer { Self.log.info("event handled") }
         guard await coordinator.paused == nil else { return }
 
@@ -256,6 +256,46 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         case .didSendChanges: "didSendChanges"
         @unknown default: "unknownEvent"
         }
+    }
+
+    /// What the log says about an event: its kind, how many records or zones it carried and the
+    /// records' names. An event's own description prints every value its records hold, and an
+    /// account change's prints the iCloud user's record ID.
+    static func summary(of event: CKSyncEngine.Event) -> String {
+        let kind = kind(of: event)
+        switch event {
+        case .fetchedRecordZoneChanges(let changes):
+            let ids = changes.modifications.map(\.record.recordID) + changes.deletions.map(\.recordID)
+            return "\(kind) \(changes.modifications.count) modified, \(changes.deletions.count) deleted\(names(ids))"
+        case .sentRecordZoneChanges(let sent):
+            let ids =
+                sent.savedRecords.map(\.recordID) + sent.failedRecordSaves.map(\.record.recordID)
+                + sent.deletedRecordIDs + Array(sent.failedRecordDeletes.keys)
+            return
+                "\(kind) \(sent.savedRecords.count) saved, \(sent.failedRecordSaves.count) failed, \(sent.deletedRecordIDs.count) deleted, \(sent.failedRecordDeletes.count) failed to delete\(names(ids))"
+        case .fetchedDatabaseChanges(let changes):
+            return "\(kind) \(changes.modifications.count) zones changed, \(changes.deletions.count) deleted"
+        case .sentDatabaseChanges(let sent):
+            return
+                "\(kind) \(sent.savedZones.count) zones saved, \(sent.failedZoneSaves.count) failed, \(sent.deletedZoneIDs.count) deleted, \(sent.failedZoneDeletes.count) failed to delete"
+        case .accountChange(let change):
+            switch change.changeType {
+            case .signIn: return "\(kind) signIn"
+            case .signOut: return "\(kind) signOut"
+            case .switchAccounts: return "\(kind) switchAccounts"
+            @unknown default: return "\(kind) unknown"
+            }
+        default:
+            return kind
+        }
+    }
+
+    private static func names(_ ids: [CKRecord.ID]) -> String {
+        guard !ids.isEmpty else { return "" }
+
+        let shown = ids.prefix(SyncFailure.partialLimit).map(\.recordName).joined(separator: ", ")
+        let more = ids.count > SyncFailure.partialLimit ? " and \(ids.count - SyncFailure.partialLimit) more" : ""
+        return ": \(shown)\(more)"
     }
 
     public func nextRecordZoneChangeBatch(
