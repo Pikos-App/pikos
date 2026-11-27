@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Periodic cleanup of stale Rust build artifacts in this checkout.
+# Keep this checkout's Rust build output from filling the disk.
 #
-# - cargo-sweep drops cached build outputs untouched for $DAYS days, so the next build stays fast.
+# - Each Cargo build folder is held under $PIKOS_CLEANUP_MAX_GB (15 by default), its least
+#   recently built units removed first, so the next build stays fast (cap-build-size.mjs).
 # - Stale .app bundles in target/**/bundle/macos/ are removed: Spotlight indexes them and may
 #   launch the wrong version.
 # - bundle_dmg.sh's `rw.*.dmg` scratch images go too, detached first if mounted. An interrupted
@@ -10,31 +11,29 @@
 #   one is worse: hdiutil cannot convert a busy volume, so the next build fails too.
 #   reset-launch-services.sh clears registrations that already exist.
 #
-# Run by hand from the repo root, or by a launchd agent every 14 days.
+# Runs after every pull that merges (the `post-merge` hook) with --quiet, which prints only what
+# it removed, and by hand as `pnpm cleanup`.
 
 set -euo pipefail
 
-DAYS="${PIKOS_CLEANUP_DAYS:-14}"
+MAX_GB="${PIKOS_CLEANUP_MAX_GB:-15}"
+QUIET=""
+[ "${1:-}" = "--quiet" ] && QUIET="--quiet"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-log() { printf '[cleanup-builds] %s\n' "$*"; }
-
-if ! command -v cargo-sweep >/dev/null 2>&1; then
-  log "cargo-sweep not installed — run: cargo install cargo-sweep --locked"
-  exit 1
-fi
+log() { [ -n "$QUIET" ] || printf '[cleanup-builds] %s\n' "$*"; }
 
 before=$(df -k "$ROOT" | awk 'NR==2 {print $4}')
 
-# cargo-sweep runs per path so the desktop crate, excluded from the workspace, gets its own pass.
-for path in . apps/desktop/src-tauri; do
-  if [ ! -d "$path/target" ]; then
-    log "skip $path (no target dir)"
+# One pass per build folder, since the desktop crate is excluded from the workspace and builds
+# into its own.
+for path in target apps/desktop/src-tauri/target; do
+  if [ ! -d "$path" ]; then
+    log "skip $path (not built)"
     continue
   fi
-  log "sweep $path target (>${DAYS}d)"
-  cargo sweep --time "$DAYS" "$path" 2>&1 | sed 's/^/  /' || true
+  node scripts/cap-build-size.mjs "$path" --max-gb "$MAX_GB" $QUIET
 done
 
 # Detach first: rm cannot remove a scratch image that is still attached, which is
@@ -54,8 +53,7 @@ find apps/desktop/src-tauri/target -path "*/bundle/macos/*.app" -type d -prune \
 find apps/desktop/src-tauri/target -name "rw.*.dmg" -type f -delete 2>/dev/null || true
 
 after=$(df -k "$ROOT" | awk 'NR==2 {print $4}')
-freed_mb=$(( (after - before) / 1024 ))
-log "done — freed ~${freed_mb} MB"
+log "done, freed ~$(( (after - before) / 1024 )) MB"
 
 # A timestamp in .git/ lets `pnpm verify` nag when cleanup hasn't run: it is per-checkout, never
 # committed, and survives `cargo clean`.
