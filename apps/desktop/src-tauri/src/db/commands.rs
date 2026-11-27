@@ -92,7 +92,11 @@ macro_rules! db_commands {
                         $($arg: $arg_ty),*
                     ) -> AppResult<$ret> {
                         let pool = state.get_pool().await?;
-                        $($writer)::+(&pool, $($call),*).await
+                        let result = $($writer)::+(&pool, $($call),*).await;
+                        if let Err(e) = &result {
+                            super::log_failure(stringify!($name), e);
+                        }
+                        result
                     }
                 )*
             }
@@ -204,6 +208,16 @@ fn dispatch_arg<T: serde::de::DeserializeOwned>(
     }
     let value = args.get(&key).cloned().unwrap_or(serde_json::Value::Null);
     Ok(serde_json::from_value(value)?)
+}
+
+/// The webview logs every failed command with its kind. This adds what only Rust can see, the
+/// SQLite code, io kind or serde position, for the kinds where that tells failures apart.
+fn log_failure(command: &str, error: &pikos_db::AppError) {
+    let summary = error.log_summary();
+    let adds_detail = summary != error.kind();
+    if adds_detail {
+        log::warn!("command_failed command={command} error={summary}");
+    }
 }
 
 db_commands! {
