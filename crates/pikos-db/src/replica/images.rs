@@ -132,7 +132,10 @@ pub(crate) async fn build(
     .bind(&name.key)
     .fetch_optional(&mut *conn)
     .await?;
-    let born = born.and_then(|b| b.parse().ok()).unwrap_or(Hlc::ZERO);
+    let born = match born {
+        Some(b) => super::apply::stored_clock(&super::apply::shown(Entity::Asset, &name.key), &b)?,
+        None => Hlc::ZERO,
+    };
     let record = Record {
         name: name.clone(),
         row: RowState {

@@ -688,7 +688,9 @@ async fn known(
     .bind(id)
     .fetch_optional(&mut *conn)
     .await?;
-    let tomb: Option<Hlc> = tomb.and_then(|t| t.parse().ok());
+    let tomb = tomb
+        .map(|t| stored_clock(&shown(entity, id), &t))
+        .transpose()?;
     Ok(match (present, tomb) {
         (true, tomb) => Known::Present(tomb),
         (false, Some(tomb)) => Known::Tombstoned(tomb),
@@ -1329,25 +1331,44 @@ async fn read_clocks(
     let Some((packed, tomb)) = row else {
         return Ok(None);
     };
-    let parse = |s: &str| -> AppResult<Hlc> {
-        s.parse()
-            .map_err(|e| AppError::Invalid(format!("replica clocks for {key}: {e}")))
-    };
-    let slots = packed
-        .as_bytes()
-        .chunks(20)
-        .map(|c| parse(std::str::from_utf8(c).unwrap_or("")))
-        .collect::<AppResult<Vec<Hlc>>>()?;
+    let whose = shown(entity.entity, key);
+    let slots = unpack_clocks(&whose, &packed)?;
     let (born, fields) = slots
         .split_first()
-        .ok_or_else(|| AppError::Invalid(format!("replica clocks for {key} are empty")))?;
+        .ok_or_else(|| AppError::Invalid(format!("replica clocks for {whose} are empty")))?;
     let mut fields = fields.to_vec();
     fields.resize(entity.fields.len(), *born);
     Ok(Some((
         *born,
         fields,
-        tomb.as_deref().map(parse).transpose()?,
+        tomb.as_deref()
+            .map(|t| stored_clock(&whose, t))
+            .transpose()?,
     )))
+}
+
+/// A record named for an error or a log line. A tag's key is the tag itself, so only its kind
+/// shows.
+pub(crate) fn shown(entity: Entity, key: &str) -> String {
+    match entity {
+        Entity::Tag | Entity::PageTag => format!("a {} record", entity.prefix()),
+        _ => format!("{}:{key}", entity.prefix()),
+    }
+}
+
+pub(crate) fn stored_clock(whose: &str, text: &str) -> AppResult<Hlc> {
+    text.parse()
+        .map_err(|e| AppError::Invalid(format!("replica clocks for {whose}: {e}")))
+}
+
+/// A `replica_clocks` row's packed slots, every one read: one skipped would move each later
+/// clock onto the wrong field.
+pub(crate) fn unpack_clocks(whose: &str, packed: &str) -> AppResult<Vec<Hlc>> {
+    packed
+        .as_bytes()
+        .chunks(20)
+        .map(|c| stored_clock(whose, &String::from_utf8_lossy(c)))
+        .collect()
 }
 
 async fn base_clock(conn: &mut SqliteConnection) -> AppResult<Hlc> {
@@ -1355,7 +1376,7 @@ async fn base_clock(conn: &mut SqliteConnection) -> AppResult<Hlc> {
         sqlx::query_scalar("SELECT base_clock FROM replica_meta WHERE id = 1")
             .fetch_one(&mut *conn)
             .await?;
-    Ok(base.and_then(|b| b.parse().ok()).unwrap_or(Hlc::ZERO))
+    base.map_or(Ok(Hlc::ZERO), |b| stored_clock("the base", &b))
 }
 
 async fn write_clocks(

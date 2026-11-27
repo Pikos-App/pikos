@@ -190,15 +190,14 @@ pub(crate) async fn read(
             )
         }
     };
-    let slots: Vec<Hlc> = packed
-        .as_bytes()
-        .chunks(20)
-        .filter_map(|c| std::str::from_utf8(c).ok()?.parse().ok())
-        .collect();
+    let whose = super::apply::shown(entity.entity, key);
+    let slots = super::apply::unpack_clocks(&whose, &packed)?;
     let Some((&born, field_clocks)) = slots.split_first() else {
         return Ok(Read::Missing);
     };
-    let tomb: Option<Hlc> = tomb.and_then(|t| t.parse().ok());
+    let tomb = tomb
+        .map(|t| super::apply::stored_clock(&whose, &t))
+        .transpose()?;
     let clock_of = |i: usize| field_clocks.get(i).copied().unwrap_or(born);
 
     let fields: Vec<FieldState> = match &row {
