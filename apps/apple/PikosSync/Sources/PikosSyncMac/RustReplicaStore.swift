@@ -5,9 +5,11 @@
 
     /// The workspace as the Mac app's Rust serves it, one JSON call per operation.
     struct RustReplicaStore: ReplicaStore {
+        /// Names the operation, since one message such as "database is locked" could come from any.
         struct Failure: LocalizedError {
+            let op: String
             let message: String
-            var errorDescription: String? { message }
+            var errorDescription: String? { "\(message) (\(op))" }
         }
 
         func pendingRecords(limit: Int) async throws -> [RecordAddress] {
@@ -103,22 +105,33 @@
         private func call<Input: Encodable, Output: Decodable>(_ op: String, _ input: Input) throws
             -> Output
         {
-            let body = try JSONEncoder().encode(input)
+            let body: Data
+            do {
+                body = try JSONEncoder().encode(input)
+            } catch {
+                throw Failure(op: op, message: "the request didn't encode: \(error.localizedDescription)")
+            }
             var length = 0
             let pointer = body.withUnsafeBytes { bytes in
                 pikos_replica_call(
                     op, bytes.bindMemory(to: UInt8.self).baseAddress, body.count, &length)
             }
-            guard let pointer else { throw Failure(message: "\(op) returned nothing") }
+            guard let pointer else { throw Failure(op: op, message: "the workspace returned nothing") }
             defer { pikos_replica_free(pointer, length) }
 
-            let reply = try JSONDecoder().decode(
-                Reply<Output>.self, from: Data(bytes: pointer, count: length))
-            if let message = reply.err { throw Failure(message: message) }
-            guard let ok = reply.ok else {
-                return try JSONDecoder().decode(Output.self, from: Data("null".utf8))
+            do {
+                let reply = try JSONDecoder().decode(
+                    Reply<Output>.self, from: Data(bytes: pointer, count: length))
+                if let message = reply.err { throw Failure(op: op, message: message) }
+                guard let ok = reply.ok else {
+                    return try JSONDecoder().decode(Output.self, from: Data("null".utf8))
+                }
+                return ok
+            } catch let failure as Failure {
+                throw failure
+            } catch {
+                throw Failure(op: op, message: "the reply didn't read: \(error.localizedDescription)")
             }
-            return ok
         }
     }
 
