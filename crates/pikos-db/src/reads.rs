@@ -10,7 +10,7 @@ use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 
 use crate::error::AppResult;
 use crate::pages::{Page, PageSummary, PageSummaryRow, SUMMARY_COLUMNS, SYNC_DERIVED_SELECT};
-use crate::views::{utc_of, wall_of, WALL_FORMAT};
+use crate::views::{bound_of, utc_of, wall_of, WALL_FORMAT};
 
 fn midnight(day: NaiveDate) -> String {
     format!("{day}T00:00:00")
@@ -47,12 +47,12 @@ pub(crate) async fn open_starting(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND is_absolute = 1 \
          AND status <> 'done' AND abs_start_utc < ",
     );
-    absolute.push_bind(utc_of(&midnight(before), zone).unwrap_or_default());
+    absolute.push_bind(bound_of(&midnight(before), zone)?);
     if let Some(from) = from {
         floating.push(" AND order_start >= ");
         floating.push_bind(midnight(from));
         absolute.push(" AND abs_start_utc >= ");
-        absolute.push_bind(utc_of(&midnight(from), zone).unwrap_or_default());
+        absolute.push_bind(bound_of(&midnight(from), zone)?);
     }
     let floating: i64 = floating.build_query_scalar().fetch_one(pool).await?;
     let absolute: i64 = absolute.build_query_scalar().fetch_one(pool).await?;

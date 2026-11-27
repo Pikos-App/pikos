@@ -200,21 +200,22 @@ fn push_dates(
     absolute: bool,
     bounds: &DateBounds,
     zone: &str,
-) {
+) -> AppResult<()> {
     let edge = |day: chrono::NaiveDate| {
         let wall = format!("{day}T00:00:00");
         if absolute {
-            utc_of(&wall, zone).unwrap_or_default()
+            bound_of(&wall, zone)
         } else {
-            wall
+            Ok(wall)
         }
     };
     if let Some(from) = bounds.from {
         builder.push(format!(" AND {column} >= "));
-        builder.push_bind(edge(from));
+        builder.push_bind(edge(from)?);
     }
     builder.push(format!(" AND {column} < "));
-    builder.push_bind(edge(bounds.until));
+    builder.push_bind(edge(bounds.until)?);
+    Ok(())
 }
 
 const UTC_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
@@ -257,6 +258,12 @@ pub(crate) fn utc_of(wall: &str, zone: &str) -> Option<String> {
     let wall = NaiveDateTime::parse_from_str(wall, WALL_FORMAT).ok()?;
     let utc = pikos_recurrence::zoned::wall_clock_to_utc(zone, wall)?;
     Some(utc.format(UTC_FORMAT).to_string())
+}
+
+/// [`utc_of`] for a bound a query binds, refused rather than bound as `""`, which sorts before
+/// every instant and so quietly drops every synced page from the answer.
+pub(crate) fn bound_of(wall: &str, zone: &str) -> AppResult<String> {
+    utc_of(wall, zone).ok_or_else(|| AppError::Invalid(format!("no instant for {wall} in {zone}")))
 }
 
 #[derive(sqlx::FromRow)]
@@ -307,7 +314,7 @@ async fn read_stream(
             matches!(stream, Stream::Absolute),
             bounds,
             &key.zone,
-        );
+        )?;
     }
     if let Section::Scheduled(Some(tier)) | Section::Unscheduled(Some(tier)) = section {
         builder.push(" AND priority = ");
@@ -318,10 +325,8 @@ async fn read_stream(
         _ => None,
     };
     if let Some(midnight) = resume_at {
-        let utc = utc_of(&midnight, &key.zone)
-            .ok_or_else(|| AppError::Invalid(format!("no instant for {midnight}")))?;
         builder.push(" AND abs_start_utc >= ");
-        builder.push_bind(utc);
+        builder.push_bind(bound_of(&midnight, &key.zone)?);
     } else if let Some(cursor) = after {
         match (key_column, &cursor.key) {
             (Some((column, _)), Some(cursor_key)) => {
@@ -333,10 +338,7 @@ async fn read_stream(
                         builder.push_bind(bytes);
                     }
                     Stream::Absolute => {
-                        let utc = utc_of(cursor_key, &key.zone).ok_or_else(|| {
-                            AppError::Invalid(format!("no instant for {cursor_key}"))
-                        })?;
-                        builder.push_bind(utc);
+                        builder.push_bind(bound_of(cursor_key, &key.zone)?);
                     }
                     _ => {
                         builder.push_bind(cursor_key.clone());
