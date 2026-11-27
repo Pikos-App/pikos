@@ -117,7 +117,7 @@ appTest(
       await clearBody(app);
       await app.keyboard.type("/");
       await expect(menu).toBeVisible();
-      await menu.getByRole("option", { name: new RegExp(`^\\S+ ${title} `) }).click();
+      await menu.getByRole("option", { name: new RegExp(`^${title} `) }).click();
       await expect(menu).not.toBeVisible();
     }
 
@@ -160,7 +160,7 @@ appTest(
       await app.keyboard.type("A bullet");
       await app.keyboard.press("Enter");
       await app.keyboard.type("/");
-      await menu.getByRole("option", { name: /^\S+ Table / }).click();
+      await menu.getByRole("option", { name: /^Table / }).click();
       await expect(body.getByRole("table")).toBeVisible();
       await expect(body.getByRole("listitem")).toHaveCount(1);
       await expect(body.getByRole("listitem").getByRole("table")).toHaveCount(0);
@@ -169,7 +169,7 @@ appTest(
     await appTest.step("EDIT-03 Image is offered (its file picker is EDIT-15's)", async () => {
       await clearBody(app);
       await app.keyboard.type("/");
-      await expect(menu.getByRole("option", { name: /^\S+ Image / })).toBeVisible();
+      await expect(menu.getByRole("option", { name: /^Image / })).toBeVisible();
       await app.keyboard.press("Escape");
     });
 
