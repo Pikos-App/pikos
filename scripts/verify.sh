@@ -45,6 +45,8 @@ if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '(\.md|\.txt|LICENSE)
   exit $overall
 fi
 
+. scripts/lib/turbo-cache.sh
+
 # Auto-fix, skipped in CI where a clean checkout has no changed files.
 changed=()
 if [ -z "$CI" ]; then

@@ -1,5 +1,6 @@
 # The same turbo cache miss pre-commit documents.
 unset GIT_DIR
+. scripts/lib/turbo-cache.sh
 
 # A markdown-only push has nothing here that can fail: no test, clippy run or
 # e2e spec reads a committed .md. Without this, fixing a typo in a doc costs the
