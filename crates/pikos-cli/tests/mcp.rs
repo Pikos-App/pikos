@@ -1,9 +1,8 @@
 //! End-to-end test of `pikos mcp`: spawn the real binary, speak newline-delimited
 //! JSON-RPC at it over stdio, and check the round trip.
 //!
-//! Deliberately not a unit test of the handler — the point is that a client that
-//! knows nothing about this crate can initialize, discover the tools, and drive a
-//! temp workspace through them.
+//! Not a unit test of the handler: a client that knows nothing about this crate must be able to
+//! initialize, discover the tools, and drive a temp workspace through them.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -45,7 +44,7 @@ fn base_page(title: &str) -> NewPage {
     }
 }
 
-/// Create + migrate the workspace file and seed it, returning the page ids.
+/// Creates and migrates the workspace file, seeds it, and returns the page ids.
 async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     let pool = open_pool(db).await.unwrap();
     let mut ids = Vec::new();
@@ -63,7 +62,7 @@ fn bridge_js() -> Option<String> {
     p.exists().then(|| p.to_string_lossy().into_owned())
 }
 
-/// A live `pikos mcp` process, plus its pipes.
+/// A live `pikos mcp` process and its pipes.
 struct Server {
     child: Child,
     stdin: ChildStdin,
@@ -97,7 +96,7 @@ impl Server {
         self.stdin.flush().unwrap();
     }
 
-    /// Send a request and read the one frame that answers it.
+    /// Sends a request and reads the frame that answers it.
     fn request(&mut self, id: u64, method: &str, params: Value) -> Value {
         self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         let mut line = String::new();
@@ -109,7 +108,7 @@ impl Server {
         frame
     }
 
-    /// Call a tool and parse the JSON payload back out of its text content.
+    /// Calls a tool and parses the JSON payload out of its text content.
     fn call(&mut self, id: u64, name: &str, arguments: Value) -> Value {
         let frame = self.request(
             id,
@@ -257,7 +256,7 @@ async fn tools_drive_the_page_through_its_whole_life() {
         "done"
     );
 
-    // Trash and untrash — the only removal the protocol offers.
+    // Trash is the only removal the protocol offers.
     assert_eq!(
         server.call(10, "delete_page", json!({ "id": id }))["trashed"],
         true
@@ -350,7 +349,6 @@ async fn a_tool_error_is_reported_in_the_result_and_the_session_survives() {
     let unknown = server.call_expecting_error(3, "explode", json!({}));
     assert_eq!(unknown["error"]["kind"], "Usage");
 
-    // Still serving.
     assert_eq!(server.call(4, "list_pages", json!({}))[0]["title"], "Alive");
 
     server.shutdown();
@@ -498,8 +496,7 @@ async fn the_server_opens_no_listening_socket() {
     server.shutdown();
 }
 
-/// `dryRun` is the agent-preview mode: the parse comes back for approval and the
-/// workspace is untouched, so a model can show its work before committing it.
+/// `dryRun` returns the parse for approval and leaves the workspace untouched.
 #[tokio::test]
 async fn create_page_dry_run_returns_the_parse_and_writes_nothing() {
     let db = unique_db();

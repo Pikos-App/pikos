@@ -12,21 +12,16 @@ export type PageFilter = {
   scheduledAfter?: string | null;
   scheduledBefore?: string | null;
   /**
-   * When Some(true), restrict to rows where scheduled_start IS NOT NULL —
-   * used by the calendar to pull completed scheduled pages without also
-   * loading unscheduled completed pages.
+   * When Some(true), restrict to rows where scheduled_start IS NOT NULL, so the calendar
+   * can pull completed scheduled pages without the unscheduled ones.
    */
   hasSchedule?: boolean | null;
   /**
    * When Some(true), restrict to pages that are not finished — the SQL form
    * of `isOpen`.
    *
-   * Deliberately a negation rather than `status = 'not_started'`, which is
-   * what it happens to be equivalent to today. `pages.status` currently only
-   * ever holds `not_started` or `done` (the third value in the schema
-   * comment, `skipped`, belongs to `page_schedules`), but a list of open
-   * work should widen to a new status rather than silently drop every page
-   * carrying it, which an equality filter would do without any error.
+   * A negation rather than `status = 'not_started'`, so a new status widens the list of open
+   * work instead of silently dropping every page carrying it.
    */
   openOnly?: boolean | null;
 };

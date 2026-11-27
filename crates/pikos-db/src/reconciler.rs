@@ -1,14 +1,11 @@
-//! The shared reconciler: turns a provider-agnostic [`SyncDelta`] into page
-//! writes. Both providers co-own it, so it's the only regression surface —
-//! pinned by the synthetic corpus in `reconciler_tests.rs`, which runs before
-//! any real provider exists.
+//! The shared reconciler: turns a provider-agnostic [`SyncDelta`] into page writes. Both
+//! providers share it, so it is the regression surface, pinned by the synthetic corpus in
+//! `reconciler_tests.rs`.
 //!
-//! Covers the upsert path (three field layers — locked mirror, seeded
-//! description, user layer — plus per-instant timezone normalization) and the
-//! lifecycle path: a `SyncDelta` removal detaches an owned page or hard-deletes a
-//! bare mirror, and [`teardown_calendar`] applies the same own-vs-delete rule
-//! across a whole calendar when the user unsyncs it. The ownership decision
-//! always errs toward keeping.
+//! The upsert path has three field layers (locked mirror, seeded description, user layer) plus
+//! per-instant timezone normalization. The lifecycle path detaches an owned page or hard-deletes
+//! a bare mirror on removal, and [`teardown_calendar`] applies the same own-vs-delete rule
+//! across a calendar. Ownership always errs toward keeping.
 
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
@@ -23,32 +20,28 @@ use crate::sync_delta::{
 };
 use crate::{device_zone, now_iso};
 
-/// The compact form RFC 5545 spells an `UNTIL` instant in — the only place in
-/// this module that isn't a [`WallClock`].
+/// The compact form RFC 5545 spells an `UNTIL` instant in; the only place here that isn't a
+/// [`WallClock`].
 const UNTIL_FMT: &str = "%Y%m%dT%H%M%S";
 
-/// All-day recurring events have no meaningful zone, but
-/// `page_recurrence_rules.timezone` is NOT NULL. Stamp this when the event
-/// carries no zone, rather than relaxing the constraint.
+/// Stamped on an event with no zone, since all-day recurring events have none but
+/// `page_recurrence_rules.timezone` is NOT NULL.
 const SENTINEL_TZ: &str = "UTC";
 
-/// Pages severed per teardown transaction. Matches the sync engine's backfill
-/// batch and exists for the same reason: keep the write-lock hold short enough
-/// that a concurrent editor write can wait it out inside its retry budget.
-/// Measured ~0.1ms/page, so a batch holds for single-digit milliseconds.
+/// Pages severed per teardown transaction. Keeps the write-lock hold short enough that a
+/// concurrent editor write can wait it out inside its retry budget, as with the engine's
+/// backfill batch. About 0.1 ms per page.
 const TEARDOWN_BATCH: i64 = 200;
 
-/// How many times the page drain restarts from the top. The cursor only walks
-/// `page_sync.id` forward, but a sync pass still in flight when disable began
-/// commits rows with fresh uuids that sort randomly — roughly half land below a
-/// cursor that has already passed, and a link left active in a de-flagged folder
-/// is a permanently locked page. One restart catches those; the cap is a livelock
-/// backstop, since the caller clears `enabled` before tearing down and the poll
-/// loop selects on it, so no further pass can start.
+/// How many times the page drain restarts from the top. The cursor only walks `page_sync.id`
+/// forward, but a sync pass in flight when disable began commits rows with random-sorting
+/// uuids, about half below a cursor already passed, and a link left active in a de-flagged
+/// folder is a permanently locked page. One restart catches those; the cap is a livelock
+/// backstop, since the caller clears `enabled` first and the poll loop selects on it.
 const TEARDOWN_MAX_DRAINS: u32 = 4;
 
-/// The calendar a reconcile runs against. The engine resolves the system folder
-/// for the calendar and hands it in; the reconciler never decides folder policy.
+/// The calendar a reconcile runs against. The engine hands in the system folder; the
+/// reconciler never decides folder policy.
 pub struct ReconcileContext {
     pub account_id: String,
     pub calendar_id: String,
@@ -64,28 +57,25 @@ pub fn backfill_window_start() -> chrono::NaiveDate {
     chrono::Local::now().date_naive() - chrono::Days::new(crate::sync::BACKFILL_DAYS as u64)
 }
 
-/// What a reconcile surfaced for the engine to act on: orphan masters needing a
-/// targeted fetch, and `applied` — the count of upserts/removals that actually
-/// mutated state (an etag no-op or tombstoned skip is *not* counted). The engine
-/// derives its `changed` UI-reload signal from `applied` rather than from delta size.
+/// What a reconcile surfaced for the engine: orphan masters needing a targeted fetch, and
+/// `applied`, the count of upserts and removals that mutated state (an etag no-op or tombstoned
+/// skip isn't counted). The engine derives its `changed` signal from `applied`, not delta size.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ReconcileOutcome {
     pub missing_masters: Vec<MissingMaster>,
     pub applied: usize,
 }
 
-/// An occurrence delta whose series has no stored rule and no master in this
-/// batch. The engine resolves it with a single targeted `fetch_event` against
-/// `series_ref`, then re-runs — never a full-series re-fetch, never a synthesized
-/// standalone page.
+/// An occurrence delta whose series has no stored rule and no master in this batch. The engine
+/// resolves it with one targeted `fetch_event` against `series_ref`, then re-runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingMaster {
     pub ical_uid: String,
     pub series_ref: String,
 }
 
-/// Apply a delta's upserts to the store. One transaction, so a mid-delta failure
-/// rolls back whole and a retry re-applies cleanly (idempotent).
+/// Applies a delta's upserts in one transaction, so a failure rolls back whole and a retry
+/// re-applies cleanly.
 pub async fn reconcile(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
@@ -94,8 +84,8 @@ pub async fn reconcile(
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let mut outcome = ReconcileOutcome::default();
 
-    // Two-pass. Whole events/series first, so a master delivered in the same
-    // batch is in the store before any occurrence delta that references it.
+    // Whole events and series first, so a master in the same batch is stored before any
+    // occurrence delta that references it.
     let mut written = Vec::new();
     for item in &delta.upserts {
         if let UpsertItem::Event(ev) = item {
@@ -116,7 +106,6 @@ pub async fn reconcile(
         }
     }
 
-    // Whole-event removals last.
     for removal in &delta.removals {
         if apply_removal(&mut tx, ctx, removal).await? {
             outcome.applied += 1;
@@ -127,9 +116,9 @@ pub async fn reconcile(
     Ok(outcome)
 }
 
-/// Upsert a whole event or series: match by external_id, else re-link by
-/// `ical_uid` in-calendar, else create. No-ops on an unchanged etag. Returns
-/// the page it wrote — `None` on the tombstoned or etag-no-op skip.
+/// Upserts a whole event or series: match by external_id, else re-link by `ical_uid` in the
+/// calendar, else create. Returns the page written, `None` on a tombstoned or unchanged-etag
+/// skip.
 async fn apply_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -147,16 +136,14 @@ async fn apply_event(
     .fetch_optional(&mut **tx)
     .await?;
 
-    // User deleted this event locally — its link is tombstoned. Skip the upsert so
-    // the next sync can't resurrect it from trash; restoring it reactivates the row.
+    // A tombstoned link means the user deleted it; skip so sync can't resurrect it from trash.
     if matches!(&existing, Some((_, _, _, state, _)) if state == "tombstoned") {
         return Ok(None);
     }
 
-    // A detached page the user then trashed (sync severed first, then deleted): keep
-    // that copy severed in the trash — reactivating it would rewrite an invisible
-    // (`deleted_at`) row and re-lock it on restore. Drop the stale link so its
-    // `external_id` frees, then fall through to mirror the live event fresh.
+    // A detached page the user then trashed stays severed there: reactivating would rewrite an
+    // invisible row and re-lock it on restore. Drop the stale link to free its `external_id`,
+    // then mirror the live event fresh.
     if let Some((page_sync_id, page_id, _, _, true)) = &existing {
         sqlx::query("DELETE FROM page_sync WHERE id = ?")
             .bind(page_sync_id)
@@ -196,10 +183,9 @@ async fn apply_event(
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
     let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, state, _)) = existing {
-        // Unchanged etag → skip every write, so the token-reject full re-sync
-        // doesn't churn updated_at and refloat every synced page as "recent".
-        // Only when already active: a detached row (calendar re-enabled, same etag)
-        // must fall through to reactivate its sync_state, or live sync never resumes.
+        // An unchanged etag skips every write, so a full re-sync doesn't refloat every page as
+        // recent. Only when active: a detached row with the same etag must fall through to
+        // reactivate, or live sync never resumes.
         if state == "active" && ev.core.etag.is_some() && stored_etag == ev.core.etag {
             return Ok(None);
         }
@@ -217,7 +203,7 @@ async fn apply_event(
         .await?;
         (page_id, false)
     } else if let Some((page_sync_id, page_id)) = find_relink(tx, ctx, &ev.core.ical_uid).await? {
-        // Same UID, new/absent href → re-link this calendar's dormant page, no dup.
+        // Same UID, new or absent href: re-link this calendar's dormant page.
         sqlx::query(
             "UPDATE page_sync SET external_id = ?, etag = ?, sync_state = 'active',
              detached_by = NULL, mirror_location = ?, mirror_attendees = ?, last_synced_at = ?
@@ -258,8 +244,8 @@ async fn apply_event(
     Ok(Some(page_id))
 }
 
-/// A synced series as the split check reads it: the day it starts and, when its rule is
-/// bounded by a date, the day it ends, both in the rule's own wall clock.
+/// A synced series as the split check reads it: its start day and, when its rule is bounded by
+/// a date, its end day, in the rule's wall clock.
 struct SeriesSpan {
     page_id: String,
     starts: String,
@@ -276,9 +262,8 @@ impl SeriesSpan {
     }
 }
 
-/// The day an `UNTIL` bound falls on, as `YYYY-MM-DD`. The reconciler stores it as the
-/// rule's wall clock (`rewrite_until_to_wall_clock`), so its date is the last day the
-/// series can land on. A `COUNT` or an open rule has none.
+/// The day an `UNTIL` bound falls on, as `YYYY-MM-DD`: the last day the series can land on,
+/// since it is stored in the rule's wall clock. A `COUNT` or open rule has none.
 fn until_day(rrule: &str) -> Option<String> {
     let value = rrule
         .split(';')
@@ -294,22 +279,20 @@ fn until_day(rrule: &str) -> Option<String> {
     ))
 }
 
-/// Editing a repeating event "this and following" ends the series the day before and starts
-/// a new event for the rest, and neither provider links the two: Google gives the rest an id
-/// of its own, CalDAV a UID of its own. The dates the person already ticked or skipped from
-/// that day on stay keyed to the ended page, past its last day where nothing reads them, while
-/// the rest shows the same dates open.
+/// Editing a repeating event "this and following" ends the series the day before and starts a
+/// new event for the rest, and neither provider links the two (Google gives the rest an id,
+/// CalDAV a UID). Dates already ticked or skipped from that day on stay keyed to the ended
+/// page, where nothing reads them, while the rest shows them open.
 ///
-/// So once a batch's events are in, each series it wrote is checked from both sides. Ended
-/// with dates resolved past its end, it hands them to the series in its calendar under the
-/// same title that starts first after that end. Newly starting, it takes them from the series
-/// under its title that ended last before it starts. Both sides, after the whole batch,
-/// because the two halves can arrive in either order or in different syncs.
+/// So once a batch's events are in, each series it wrote is checked from both sides. One that
+/// ended, with dates resolved past its end, hands them to the same-titled series in its
+/// calendar that starts first after that end. One newly starting takes them from the
+/// same-titled series that ended last before it starts. After the whole batch, because the
+/// halves can arrive in either order or in different syncs.
 ///
-/// Only dates past the old end move, so a same-titled series that ended on its own has
-/// nothing to hand on. Only dates the rest has an occurrence on move, so one the edit put on
-/// another day stays with the page it was made on. A rest renamed in the same edit isn't
-/// recognised, and its dates stay behind as before.
+/// Only dates past the old end move, so a same-titled series that ended on its own hands on
+/// nothing, and only dates the rest has an occurrence on. A rest renamed in the same edit isn't
+/// recognised.
 async fn carry_split_series(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -401,8 +384,8 @@ async fn carry_past_end(
         to_page,
     )
     .await?;
-    // Dates left behind are the case worth finding in the log. A pass that sees both
-    // halves checks the pair twice, and the second finds nothing left to move.
+    // Log only moves: a pass seeing both halves checks the pair twice, and the second finds
+    // nothing.
     if ticked + skipped + ticks_left + skips_left > 0 {
         log::info!(
             "calendar_sync_split_carry from={from_page} to={to_page} after={ends} \
@@ -417,8 +400,8 @@ async fn carry_past_end(
     Ok(())
 }
 
-/// Moves each date `select` reads off `from_page` from `from_day` on that `to_page` has
-/// an occurrence on. Returns how many moved and how many stayed.
+/// Moves each date `select` reads off `from_page` from `from_day` on that `to_page` has an
+/// occurrence on. Returns how many moved and how many stayed.
 async fn move_occurring_dates(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     select: &str,
@@ -449,12 +432,11 @@ async fn move_occurring_dates(
 
 /// Whether a one-off event was over before `window`, the first day the sync reaches.
 ///
-/// Neither provider's incremental cursor is windowed, so a resumed one hands over every
-/// event changed upstream since it was stored, of any age, where a full enumerate asks
-/// only from the window on. After a re-authorisation two weeks on, Google sent a work
-/// calendar's one-offs from a year and more back, and each became an open page at its
-/// own date. Only a new page is refused. One already stored
-/// was mirrored while it was in reach, and still takes the change.
+/// Neither provider's incremental cursor is windowed, so a resumed one hands over every event
+/// changed upstream since it was stored, of any age, where a full enumerate asks only from the
+/// window on. Without this, a re-authorisation sent a work calendar's one-offs from a year back
+/// and each became an open page. Only a new page is refused; one already stored takes the
+/// change.
 fn one_off_ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
     if ev.recurrence.is_some() {
         return false;
@@ -468,11 +450,10 @@ fn one_off_ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> b
 /// on or after it, and no instance moved into it.
 ///
 /// Google's `events.list` with `singleEvents=false` returns a recurring master whole, so a
-/// series a "this and following" edit cut short a year ago still arrives, and stored it
-/// sits in the list at its last date as an open page nothing can tick. CalDAV's time-range
-/// query leaves such a series out, but neither provider's incremental cursor is windowed,
-/// so the check lives here, for every path. Only a bounded rule can end; one the engine
-/// can't read is kept.
+/// series a "this and following" edit cut short a year ago still arrives and would sit in the
+/// list as an open page nothing can tick. CalDAV's time-range query leaves it out, but neither
+/// incremental cursor is windowed, so the check lives here for every path. Only a bounded rule
+/// can end; one the engine can't read is kept.
 fn ended_before_window(ev: &EventUpsert, window: chrono::NaiveDate) -> bool {
     let Some(rec) = &ev.recurrence else {
         return false;
@@ -503,11 +484,10 @@ fn rule_ended(rrule: &str, start: &str, tz: &str, window: chrono::NaiveDate) -> 
     )
 }
 
-/// Remove this calendar's stored live series that ended before `ctx.window_start`, as an
-/// upstream deletion would: detached if owned, deleted if not. Runs on every pass, since
-/// an incremental cursor never re-sends a series that didn't change, so one stored before
-/// [`ended_before_window`] existed would otherwise stay. Its own retried transaction;
-/// returns how many it removed.
+/// Removes this calendar's stored live series that ended before `ctx.window_start`, as an
+/// upstream deletion would: detached if owned, deleted if not. Runs every pass, since an
+/// incremental cursor never re-sends an unchanged series. Its own retried transaction; returns
+/// how many it removed.
 pub async fn remove_ended_series(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
@@ -549,12 +529,9 @@ pub async fn remove_ended_series(
     .await
 }
 
-/// Move a reactivated page back into its calendar folder. A detached page is
-/// freely filable, so it may sit anywhere by the time the calendar reclaims it —
-/// and once re-linked it is locked again, which every other surface reads as
-/// "lives in its calendar folder". Deliberately does not touch `updated_at`: the
-/// page didn't change, its placement was overruled. No-op for a page already
-/// there, which is every ordinary poll.
+/// Moves a reactivated page back into its calendar folder: a detached page files anywhere, and
+/// once re-linked every other surface reads it as living in its calendar folder. Leaves
+/// `updated_at` alone, since the page didn't change.
 async fn reclaim_calendar_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -569,10 +546,9 @@ async fn reclaim_calendar_folder(
     Ok(())
 }
 
-/// Find a re-linkable page by `ical_uid`, scoped to this calendar (never across
-/// calendars — that would ping-pong the identity every poll). Trashed pages are
-/// excluded, for the same reason the external_id match site never writes a
-/// deleted page's link (see [`apply_event`]).
+/// Finds a re-linkable page by `ical_uid`, scoped to this calendar, since matching across
+/// calendars would ping-pong the identity every poll. Trashed pages are excluded, as at the
+/// `external_id` match in [`apply_event`].
 async fn find_relink(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -590,28 +566,22 @@ async fn find_relink(
     .await?)
 }
 
-/// Replace the page's mirror schedule wholesale. The schedule is fully
-/// reconciler-owned for a synced page, so a clean delete-and-reinsert is the
-/// simplest idempotent write — re-running yields the same rows. Fresh row ids
-/// are also what re-arms a reminder an upstream time edit moved: updating in
-/// place instead would need
+/// Replaces the page's mirror schedule wholesale. The schedule is fully reconciler-owned, so
+/// delete-and-reinsert is the simplest idempotent write. Fresh row ids also re-arm a reminder
+/// an upstream time edit moved; updating in place would need
 /// [`crate::notification_log::clear_reminder_log_tx`].
 ///
-/// A [`OccurrenceFidelity::MasterOnly`] bundle is the exception: it can't see the
-/// series' exdates and overrides (see the enum), so those are read back before the
-/// delete and re-applied under the new rule — union for exdates, incoming-wins by
-/// `original_date` for overrides, and only while the pattern still matches (see
-/// [`load_carried_occurrences`]).
+/// A [`OccurrenceFidelity::MasterOnly`] bundle is the exception: it can't see the series'
+/// exdates and overrides, so those are read back before the delete and re-applied under the
+/// new rule: union for exdates, incoming-wins by `original_date` for overrides, and only while
+/// the pattern still matches (see [`load_carried_occurrences`]).
 ///
-/// A recurring page's head is then recomputed to its oldest-open occurrence
-/// (completed/skip sets, keyed by `page_id`, survive the rule rewrite and may push
-/// it past the raw base) with the derivation owning terminal status both
-/// directions. Any rewrite of a page that *had* a rule first un-marks a stale
-/// terminal `done` the old series' recompute stamped: on a recurrence→single drop
-/// no rule survives to clear it (and re-delivery as a single means it's live), and
-/// on a recurrence→recurrence rewrite an engine-rejected new rule makes the
-/// recompute skip — leaving the page invisibly `done` — so it's cleared up front
-/// and a supported recompute re-marks it if the new series is still exhausted.
+/// A recurring page's head is then recomputed to its oldest-open occurrence (the completed and
+/// skip sets, keyed by `page_id`, survive the rewrite and may push it past the raw base), the
+/// derivation owning terminal status both directions. Any rewrite of a page that had a rule
+/// first un-marks a stale terminal `done`: a recurrence-to-single drop leaves no rule to clear
+/// it, and an engine-rejected new rule makes the recompute skip, leaving the page invisibly
+/// `done`. A supported recompute re-marks it if the new series is still exhausted.
 async fn write_schedule(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -625,8 +595,7 @@ async fn write_schedule(
             .await?;
 
     let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
-    // Only UNTIL still carries a zone — dtstart/EXDATE/original_date arrive
-    // already wall-clock from the provider. Keep the whole rule on one basis.
+    // Only UNTIL still carries a zone; dtstart, EXDATE and original_date arrive as wall-clock.
     let rrule = ev
         .recurrence
         .as_ref()
@@ -738,8 +707,8 @@ async fn write_schedule(
         .await?;
     }
 
-    // Base-occurrence floor; the recurring recompute below refines it, and a
-    // rewrite of a page that had a rule clears a stale terminal `done` here (see fn doc).
+    // Base-occurrence floor, refined by the recurring recompute below; also clears a stale
+    // terminal `done` (see the fn doc).
     let clear_terminal = had_rule;
     sqlx::query(
         "UPDATE pages SET scheduled_start = ?1, scheduled_end = ?2,
@@ -762,8 +731,8 @@ async fn write_schedule(
     Ok(())
 }
 
-/// A series' stored occurrence deltas, read back so a `MasterOnly` rewrite can
-/// carry them across. Empty when the page has no rule yet.
+/// A series' stored occurrence deltas, read back so a `MasterOnly` rewrite can carry them
+/// across. Empty when the page has no rule yet.
 #[derive(Default)]
 struct CarriedOccurrences {
     exdates: Vec<String>,
@@ -771,16 +740,14 @@ struct CarriedOccurrences {
     overrides: Vec<(String, Option<String>, Option<String>, String)>,
 }
 
-/// Carry forward only while the series' pattern is untouched. A changed RRULE or
-/// base start shifts every occurrence date, so exdates and overrides keyed to the
-/// old dates describe a pattern that no longer exists — carrying them would strand
-/// a ghost occurrence the user can't move or delete (the mirror schedule is locked)
-/// and can't stop from firing a reminder. Dropping them is correct rather than
-/// lossy: nothing here is user-authored, and the provider's own occurrence deltas
-/// plus the next full enumerate rebuild the live set.
+/// Carries forward only while the series' pattern is untouched. A changed RRULE or base start
+/// shifts every occurrence date, so exdates and overrides keyed to the old dates would strand
+/// a ghost occurrence the user can't move, delete or stop firing a reminder (the mirror
+/// schedule is locked). Dropping them loses nothing user-authored: the provider's occurrence
+/// deltas and the next full enumerate rebuild the set.
 ///
-/// `incoming_rrule` must already be UNTIL-rewritten, or a `UNTIL=…Z` rule reads as
-/// changed on every poll and never carries anything.
+/// `incoming_rrule` must already be UNTIL-rewritten, or a `UNTIL=…Z` rule reads as changed on
+/// every poll and never carries anything.
 async fn load_carried_occurrences(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -817,9 +784,8 @@ async fn load_carried_occurrences(
     })
 }
 
-/// Apply a lone occurrence change against the already-stored series. Returns a
-/// missing-master signal when no rule exists yet — never buffers, drops, or
-/// synthesizes a page.
+/// Applies a lone occurrence change against the stored series. Returns a missing-master signal
+/// when no rule exists yet; never buffers, drops or synthesizes a page.
 async fn apply_occurrence(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -843,9 +809,8 @@ async fn apply_occurrence(
             series_ref: occ.series_ref.clone(),
         }));
     };
-    // tombstoned: user trashed the series; detached: sync severed. Mutating its
-    // EXDATEs/overrides would resurrect a schedule the user no longer syncs.
-    // Mirrors apply_removal's active-only guard.
+    // Mutating a tombstoned or detached series' EXDATEs and overrides would resurrect a
+    // schedule the user no longer syncs; the same active-only guard as `apply_removal`.
     if state != "active" {
         return Ok(OccurrenceResult::Skipped);
     }
@@ -860,8 +825,7 @@ async fn apply_occurrence(
             .await?;
         }
         OccurrenceKind::Modify(schedule) => {
-            // One override per original_date — replace any prior one, and an instance
-            // back at its own slot needs none.
+            // One override per `original_date`; an instance back at its own slot needs none.
             sqlx::query("DELETE FROM page_schedules WHERE rule_id = ? AND original_date = ?")
                 .bind(&rule_id)
                 .bind(&occ.original_date)
@@ -893,24 +857,20 @@ async fn apply_occurrence(
             }
         }
     }
-    // Either change can cover or uncover the head's date.
     crate::recurrence_derive::recompute_recurring_schedule(tx, &page_id).await?;
     Ok(OccurrenceResult::Applied)
 }
 
-/// What applying one occurrence delta resolved to: it wrote (Cancel/Modify), it
-/// skipped a non-active series, or its master isn't stored yet.
+/// What applying one occurrence delta resolved to: it wrote, it skipped a non-active series,
+/// or its master isn't stored yet.
 enum OccurrenceResult {
     Applied,
     Skipped,
     Missing(MissingMaster),
 }
 
-// ─── Lifecycle: removals + teardown ─────────────────────────────────────────────
-
-/// A whole event gone upstream → detach if the page is Pikos-owned, else hard
-/// delete the bare mirror. Tombstoned (locally deleted) and already-detached rows
-/// are left untouched, so re-running a removal converges.
+/// A whole event gone upstream: detach if the page is Pikos-owned, else hard-delete the bare
+/// mirror. Tombstoned and detached rows are left alone, so re-running converges.
 async fn apply_removal(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -928,7 +888,6 @@ async fn apply_removal(
     let Some((page_sync_id, page_id, state)) = row else {
         return Ok(false);
     };
-    // tombstoned: user already trashed it; detached: already severed. Idempotent.
     if state != "active" {
         return Ok(false);
     }
@@ -960,14 +919,12 @@ impl Severed {
     }
 }
 
-/// The own-vs-delete decision, shared by an explicit removal, teardown, and the
-/// full-enumerate sweep: an owned page detaches (keeps its dormant identity for a
-/// later resync re-link); a bare mirror hard-deletes.
 /// The reason a series that ended before the window was refused or removed, as logged.
 const ENDED: &str = "series_ended_before_window";
 
-/// `why` names the cause in the log, so a page that left a calendar can be traced to
-/// it. Ids only, never a title.
+/// The own-vs-delete decision, shared by an explicit removal, teardown and the full-enumerate
+/// sweep: an owned page detaches, keeping its dormant identity for a later re-link; a bare
+/// mirror hard-deletes. `why` names the cause in the log, ids only, never a title.
 async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
@@ -988,17 +945,14 @@ async fn detach_or_delete(
     Ok(())
 }
 
-/// After a full authoritative enumerate, remove stored active pages the provider
-/// no longer returns — the deletion signal an incremental cursor would carry as a
-/// [`Removal`] but a backfill (initial, stale-token recovery, or a server with no
-/// `sync-collection`) cannot. `present_ids` is every `external_id` the enumerate
-/// returned; `window_start` is its query-window date. A page absent from the set
-/// is a genuine upstream deletion **unless** it's merely pre-window (all its
-/// occurrences precede `window_start`, so a time-bounded query legitimately omits
-/// it) — [`is_pre_window`] spares those. Genuine removals run the normal
-/// detach-if-owned / hard-delete lifecycle. Idempotent, and its own read-then-write
-/// tx (wrap in `retry_on_busy`). Returns how many pages it removed — the only
-/// applied count on a sweep-only pass (no upserts, no explicit removals).
+/// After a full authoritative enumerate, removes stored active pages the provider no longer
+/// returns: the deletion signal an incremental cursor carries as a [`Removal`] but a backfill
+/// (initial, stale-token recovery, or a server with no `sync-collection`) can't. `present_ids`
+/// is every `external_id` the enumerate returned and `window_start` its query-window date. An
+/// absent page is a genuine deletion unless it's pre-window, which a time-bounded query
+/// legitimately omits ([`is_pre_window`] spares those). Removals run the detach-if-owned or
+/// hard-delete lifecycle. Its own read-then-write tx (wrap in `retry_on_busy`). Returns how many
+/// pages it removed, the only applied count on a sweep-only pass.
 pub async fn sweep_absent(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
@@ -1007,8 +961,8 @@ pub async fn sweep_absent(
 ) -> AppResult<usize> {
     let mut tx = pool.begin().await?;
 
-    // One SELECT joins each active link's rule + head schedule, so the pre-window
-    // check is a pure comparison per row instead of 1–2 queries inside the tx.
+    // One SELECT joins each link's rule and head schedule, so the pre-window check is a pure
+    // comparison per row.
     let rows = sqlx::query_as::<
         _,
         (
@@ -1063,17 +1017,14 @@ pub async fn sweep_absent(
 /// Whether a page's occurrences all precede `window_start`, so the sweep spares it.
 /// Day-granularity, and deliberately biased toward keeping:
 ///
-/// - **One day of slack** (`<=`, not `<`): storage is source-zone wall-clock while
-///   the server's time-range bound is a UTC instant, so an ahead-of-UTC event whose
-///   UTC instant falls just before the window (≤ ~14h) is server-excluded yet its
-///   local wall-clock date lands on the window day. Sparing that day keeps a live
-///   event from being swept; behind-UTC zones already fail safe.
-/// - **Recurring is bounded only by a readable `UNTIL`** (via [`extract_until`],
-///   FREQ-agnostic so an out-of-envelope rule still reads its bound). No `UNTIL`
-///   (infinite or `COUNT`) is assumed in-window. A `COUNT`-bounded series that truly
-///   ended pre-window is the one accepted false negative — expanding COUNT to catch
-///   it isn't worth the cost for a soft sweep guard. Rare, and worst case detaches an
-///   owned page (re-links on the next real change) or drops a stale past mirror.
+/// - **One day of slack** (`<=`, not `<`): storage is source-zone wall-clock while the server's
+///   bound is a UTC instant, so an ahead-of-UTC event just before the window (up to about 14h)
+///   is server-excluded yet its wall-clock date lands on the window day. Sparing that day keeps
+///   a live event from being swept; behind-UTC zones already fail safe.
+/// - **Recurring is bounded only by a readable `UNTIL`** (via [`extract_until`], FREQ-agnostic
+///   so an out-of-envelope rule still reads its bound). No `UNTIL` is assumed in-window. A
+///   `COUNT`-bounded series that ended pre-window is the one accepted false negative; the worst
+///   case detaches an owned page (re-links on the next change) or drops a stale past mirror.
 fn is_pre_window(
     rrule: Option<&str>,
     start: Option<&str>,
@@ -1086,31 +1037,26 @@ fn is_pre_window(
             None => false,
         };
     }
-    // End (inclusive) is the latest instant when present, else the start; no stored
-    // schedule can't be proven pre-window, so don't spare it.
+    // No stored schedule can't be proven pre-window, so it isn't spared.
     match end.or(start) {
         Some(instant) => date_key(instant).as_str() <= window_key,
         None => false,
     }
 }
 
-/// First 8 digits of any date / date-time string → `YYYYMMDD`, so day-granularity
-/// comparison works regardless of format (`2026-06-24`, `2026-06-24T09:00:00`,
-/// `20260624T090000`). Lexical order over the fixed-width result is date order.
+/// The first 8 digits of any date or date-time string as `YYYYMMDD`, so day comparison works
+/// across formats (`2026-06-24`, `2026-06-24T09:00:00`, `20260624T090000`).
 fn date_key(s: &str) -> String {
     s.chars().filter(char::is_ascii_digit).take(8).collect()
 }
 
-/// Tear down a calendar's live sync (the user unsynced or disconnected it): the
-/// same own-vs-delete rule as an upstream removal (see [`detach_or_delete`]),
-/// applied across the whole calendar. Tombstoned links are cleared so a fresh
-/// resync legitimately brings those events back (the page stays in trash). The
-/// folder survives — de-flagged to a regular folder — whenever a live page
-/// remains, and is removed only when nothing owned survived. Idempotent, and
-/// resumable: a rerun after a failed drain picks up whatever is left.
+/// Tears down a calendar's live sync (unsynced or disconnected): the own-vs-delete rule of an
+/// upstream removal (see [`detach_or_delete`]) across the whole calendar. Tombstoned links are
+/// cleared so a fresh resync brings those events back (the page stays in trash). The folder
+/// survives, de-flagged to a regular folder, while a live page remains. Resumable: a rerun
+/// after a failed drain picks up what is left.
 ///
-/// The caller must clear `sync_calendar.enabled` first — see
-/// [`TEARDOWN_MAX_DRAINS`] for what a still-live poll does to the cursor.
+/// The caller must clear `sync_calendar.enabled` first; see [`TEARDOWN_MAX_DRAINS`].
 pub async fn teardown_calendar(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -1134,8 +1080,8 @@ pub async fn teardown_calendar(
     crate::tx::retry_on_busy(|| teardown_folder(pool, folder_id)).await
 }
 
-/// True while any of the calendar's links is still un-severed. `detached` is the
-/// terminal state teardown leaves behind, so it doesn't count.
+/// True while any of the calendar's links is un-severed; `detached` is teardown's terminal
+/// state.
 async fn live_link_remains(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -1151,9 +1097,9 @@ async fn live_link_remains(
     .await?)
 }
 
-/// Sever one batch of the calendar's pages, resuming after `cursor`. Returns the
-/// new cursor, or `None` once none are left. Paginates by `page_sync.id` because a
-/// detached row stays behind: a plain `LIMIT` would re-read it forever.
+/// Severs one batch of the calendar's pages, resuming after `cursor`. Returns the new cursor,
+/// or `None` once none are left. Paginates by `page_sync.id` because a detached row stays
+/// behind and a plain `LIMIT` would re-read it forever.
 async fn teardown_page_batch(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -1181,8 +1127,7 @@ async fn teardown_page_batch(
 
     for (page_sync_id, page_id, state) in rows {
         match state.as_str() {
-            // Drop the dormant tombstone so a fresh resync recreates the event;
-            // the soft-deleted page stays in trash, recoverable.
+            // The soft-deleted page stays in the trash; a fresh resync recreates the event.
             "tombstoned" => {
                 sqlx::query("DELETE FROM page_sync WHERE id = ?")
                     .bind(&page_sync_id)
@@ -1190,7 +1135,7 @@ async fn teardown_page_batch(
                     .await?;
                 set_mirror_search_text(&mut tx, &page_id, None).await?;
             }
-            // Already severed by a prior upstream removal — keep its dormant identity.
+            // Already severed by an upstream removal: keep its dormant identity.
             "detached" => {}
             // Asked for by the user, page by page through a whole calendar: unlogged.
             _ => detach_or_delete(&mut tx, &page_sync_id, &page_id, Severed::TurnOff, None).await?,
@@ -1201,7 +1146,7 @@ async fn teardown_page_batch(
     Ok(Some(next_cursor))
 }
 
-/// Delete the calendar's folder, or de-flag it when pages survived there.
+/// Deletes the calendar's folder, or de-flags it when pages survived there.
 async fn teardown_folder(pool: &sqlx::SqlitePool, folder_id: &str) -> AppResult<()> {
     let mut tx = pool.begin().await?;
 
@@ -1242,16 +1187,12 @@ async fn is_owned(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, page_id: &str) -
     Ok(owned)
 }
 
-/// Sever the live sync link, keeping the page, its last-known schedule, and its
-/// dormant identity (`ical_uid` + provider/calendar hint) for a later resync
-/// re-link. Recomputes a recurring head (no-op otherwise): once detached the page
-/// unlocks and the frontend's completed-base head suppression stops applying, so a
-/// series whose base is a completed occurrence would double-render beside its done
-/// clone until the next on-load heal — the recompute moves the head to oldest-open
-/// now. The `sync_state` flip is on `page_sync`, so a non-recurring detach leaves
-/// `pages.updated_at` untouched (the recompute no-ops). A recurring detach does
-/// bump it via the recompute's head write — correct, since unlocking the page is a
-/// real state change — so it refloats as "recently edited".
+/// Severs the live sync link, keeping the page, its last-known schedule and its dormant
+/// identity (`ical_uid` plus provider and calendar hint) for a later re-link. Recomputes a
+/// recurring head: once detached the frontend's completed-base head suppression stops
+/// applying, so a series whose base is a completed occurrence would double-render beside its
+/// done clone until the next on-load heal. A non-recurring detach leaves `pages.updated_at`
+/// alone; a recurring one bumps it through the head write, since unlocking is a real change.
 async fn detach_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
@@ -1268,22 +1209,18 @@ async fn detach_sync(
     Ok(())
 }
 
-/// Spend the source-zone stamp instead of dropping it: rewrite every stored
-/// wall-clock into the device's zone and clear the stamp, so a page that was
-/// rendered at its absolute instant keeps that instant when it starts floating.
-/// Without this a detached 3pm Berlin event becomes 3pm wherever the user is —
-/// the block moves and the reminder (which falls back to the naive device-local
-/// path once the page is no longer active-synced) fires at the wrong time.
+/// Spends the source-zone stamp instead of dropping it: rewrites every stored wall-clock into
+/// the device's zone and clears the stamp, so a page rendered at its absolute instant keeps it
+/// when it floats. Otherwise a detached 3pm Berlin event becomes 3pm wherever the user is, and
+/// its reminder fires at the wrong time.
 ///
-/// **Refused when a recurring series' base start changes date.** Every occurrence
-/// date derives from that base, and those dates key `completed_set`, `skip_set`,
-/// `rrule_exdates` and each override's `original_date`, while the rule's BYDAY
-/// names the base's weekday — shifting it means rewriting five things in step, and
-/// a partial rewrite silently moves the series to a different day of the week.
-/// Such a series keeps its raw wall-clock. It takes a non-local calendar *and* a
-/// start within the zone offset of midnight to reach.
+/// Refused when a recurring series' base start changes date. Every occurrence date derives from
+/// the base and keys `completed_set`, `skip_set`, `rrule_exdates` and each override's
+/// `original_date`, while BYDAY names the base's weekday; a partial rewrite silently moves the
+/// series to a different weekday. Such a series keeps its raw wall-clock, and takes a non-local
+/// calendar and a start within the zone offset of midnight to reach.
 ///
-/// All-day rows carry no zone (a date has none) and are left alone throughout.
+/// All-day rows carry no zone and are left alone.
 async fn float_wall_clock(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1341,10 +1278,8 @@ async fn float_wall_clock(
         .await?;
     }
 
-    // Override rows included: a moved instance renders and fires on its own row,
-    // so leaving it source-zoned would strand it an offset away from the series it
-    // belongs to. Each row converts from **its own** stamp — a provider can move an
-    // instance into a different zone from the master's.
+    // Override rows too: a moved instance renders and fires on its own row. Each converts from
+    // its own stamp, since a provider can move an instance into another zone than the master's.
     for (schedule_id, start, end, tz) in &schedules {
         let Some(row_source) = tz.as_ref().and_then(|tz| tz.parse::<Tz>().ok()) else {
             continue;
@@ -1366,8 +1301,8 @@ async fn float_wall_clock(
         .await?;
     }
 
-    // A recurring page's denorm is rewritten by the recompute that follows; a
-    // one-off's is a plain copy of the row just converted, so convert it in step.
+    // A recurring page's denorm is rewritten by the recompute that follows; a one-off's is a
+    // copy of the converted row.
     if rule.is_none() {
         let denorm: Option<(Option<String>, Option<String>)> =
             sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?")
@@ -1399,20 +1334,16 @@ async fn float_wall_clock(
     Ok(())
 }
 
-/// `2026-03-15T15:00:00` in `source` → the same instant as device-local
-/// wall-clock, DST-correct per instant. `None` for a date-only value (all-day
-/// floats already) or anything unparseable, and for a wall-clock that doesn't
-/// exist in the source zone (spring-forward gap) — the caller keeps the original
-/// rather than inventing a time.
+/// `2026-03-15T15:00:00` in `source` as the same instant in device-local wall-clock, DST-correct
+/// per instant. `None` for a date-only value, anything unparseable, or a wall-clock in the
+/// source zone's spring-forward gap; the caller keeps the original rather than inventing a time.
 pub(crate) fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> Option<String> {
     let wall = WallClock::parse(wall_clock).filter(|w| !w.is_all_day())?;
     Some(WallClock::timed(convert_instant(wall.as_datetime(), source, device)?).format())
 }
 
-/// Shift a source-zone `UNTIL` token to device-local so the series' bound floats
-/// with the occurrences it bounds. The reconciler already rewrote any UTC `UNTIL`
-/// to source-zone wall-clock on ingest, so there is no `Z` left to handle; a
-/// date-only bound needs no shift.
+/// Shifts a source-zone `UNTIL` token to device-local so the bound floats with its occurrences.
+/// Ingest already rewrote any UTC `UNTIL`, so no `Z` is left; a date-only bound needs no shift.
 fn shift_until_to_device(rrule: &str, source: Tz, device: Tz) -> String {
     rewrite_until_with(rrule, |value| {
         let naive = NaiveDateTime::parse_from_str(value, UNTIL_FMT).ok()?;
@@ -1424,10 +1355,9 @@ fn shift_until_to_device(rrule: &str, source: Tz, device: Tz) -> String {
     })
 }
 
-/// Re-express one wall-clock in another zone. The fall-back/gap reading is
-/// [`zoned::wall_clock_instant`]'s, shared with
-/// [`crate::notification_log::synced_fire_instant`]: a fall-back-ambiguous hour
-/// resolves to its first pass rather than dropping the value entirely.
+/// Re-expresses one wall-clock in another zone. The fall-back and gap reading is
+/// [`zoned::wall_clock_instant`]'s, shared with [`crate::notification_log::synced_fire_instant`]:
+/// an ambiguous hour resolves to its first pass.
 fn convert_instant(naive: NaiveDateTime, source: Tz, device: Tz) -> Option<NaiveDateTime> {
     Some(zoned::wall_clock_at(
         device,
@@ -1435,9 +1365,8 @@ fn convert_instant(naive: NaiveDateTime, source: Tz, device: Tz) -> Option<Naive
     ))
 }
 
-/// Destroy a non-owned synced page. The FK cascade removes its `page_sync` link,
-/// schedules, rules, reminders, and FTS row — nothing of the user's is lost
-/// because ownership was already checked.
+/// Destroys a non-owned synced page. The FK cascade removes its `page_sync` link, schedules,
+/// rules, reminders and FTS row; ownership was already checked.
 async fn hard_delete_page(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1448,8 +1377,6 @@ async fn hard_delete_page(
         .await?;
     Ok(())
 }
-
-// ─── Row writers ──────────────────────────────────────────────────────────────
 
 async fn insert_synced_page(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -1514,7 +1441,7 @@ async fn insert_page_sync(
     Ok(())
 }
 
-/// Calendar-owned read-only metadata → mirror columns. Empty attendees store NULL
+/// Writes calendar-owned read-only metadata to the mirror columns. Empty attendees store NULL,
 /// so "none" and "never synced" read alike.
 fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
     let attendees = if core.attendees.is_empty() {
@@ -1525,19 +1452,16 @@ fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
     (core.location.clone(), attendees)
 }
 
-/// Every searchable piece of mirror metadata as one blob, for the
-/// `pages.mirror_search_text` denorm the FTS index reads — see
-/// `011_mirror_search_text.sql` for why the index takes one column and not one
-/// per field. **A new searchable field is added here and nowhere else**, with two
-/// copies of this shape to keep in step: the mock's `mirrorSearchText` twin, and
-/// that migration's frozen SQL backfill. The blob is also read back verbatim as a
-/// search result's excerpt (`build_mirror_excerpt`, search.rs), so a field added
-/// here is shown to the user and not merely matched on.
+/// Every searchable piece of mirror metadata as one blob, for the `pages.mirror_search_text`
+/// denorm the FTS index reads (see `011_mirror_search_text.sql` for why one column). A new
+/// searchable field is added here and nowhere else, with two copies to keep in step: the
+/// mock's `mirrorSearchText` twin and that migration's frozen SQL backfill. The blob is also
+/// a search result's excerpt (`build_mirror_excerpt`, search.rs), so a field added here is
+/// shown to the user, not merely matched on.
 ///
-/// Takes the **stored** column shapes rather than an [`EventCore`] so a caller
-/// with rows and no provider payload — the dev seeder, a future re-projection —
-/// cannot derive a value the columns don't support. Returns None when there is
-/// nothing to index, so the denorm reads like the two columns it projects.
+/// Takes the stored column shapes rather than an [`EventCore`], so a caller with rows and no
+/// provider payload can't derive a value the columns don't support. Returns None when there is
+/// nothing to index.
 pub fn mirror_search_text(location: Option<&str>, attendees_json: Option<&str>) -> Option<String> {
     let attendees: Vec<String> = attendees_json
         .and_then(|j| serde_json::from_str(j).ok())
@@ -1552,9 +1476,8 @@ pub fn mirror_search_text(location: Option<&str>, attendees_json: Option<&str>) 
     Some(parts.join("\n"))
 }
 
-/// Keep the search denorm level with the `page_sync` mirror columns written in
-/// the same transaction. Deliberately does not touch `updated_at`: sync owns this
-/// value, so refreshing it is not a page edit.
+/// Keeps the search denorm level with the `page_sync` mirror columns written in the same
+/// transaction. Leaves `updated_at` alone: sync owns this value, so it isn't a page edit.
 async fn set_mirror_search_text(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1583,8 +1506,8 @@ async fn update_page_title(
     Ok(())
 }
 
-/// A series' own occurrence shape: where its base starts and ends, and the zone it
-/// keeps, against which a provider's per-instance copy is judged.
+/// A series' own occurrence shape (base start, end and zone), against which a provider's
+/// per-instance copy is judged.
 struct Occurrence<'a> {
     start: &'a str,
     end: Option<&'a str>,
@@ -1592,12 +1515,11 @@ struct Occurrence<'a> {
 }
 
 impl Occurrence<'_> {
-    /// Whether an override puts its occurrence exactly where the rule already does: same
-    /// start, same length, same zone. Google sends an instance as its own resource
-    /// whenever anything about it differs (attendees, a call link, a description), and
-    /// none of that is stored on an override row. Stored, such a copy reads as a moved
-    /// occurrence: it is excluded from the head and drawn as its own block, which on a
-    /// series with nothing else open left the head on the copy's date, drawn twice.
+    /// Whether an override puts its occurrence exactly where the rule already does: same start,
+    /// length and zone. Google sends an instance as its own resource whenever anything about it
+    /// differs (attendees, a call link, a description), none of which an override row stores.
+    /// Stored, such a copy reads as a moved occurrence, excluded from the head and drawn as its
+    /// own block, so a series with nothing else open drew the copy's date twice.
     fn unmoved(
         &self,
         original_date: &str,
@@ -1611,8 +1533,7 @@ impl Occurrence<'_> {
     }
 }
 
-/// An occurrence's length: whole days for an all-day one, seconds for a timed one,
-/// `None` when it has no end.
+/// An occurrence's length: whole days if all-day, seconds if timed, `None` with no end.
 fn span(start: &str, end: Option<&str>) -> Option<i64> {
     let start = WallClock::parse(start)?;
     let end = WallClock::parse(end?)?;
@@ -1653,25 +1574,21 @@ async fn insert_schedule_row(
     Ok(())
 }
 
-// ─── Seeded description (description → body, conflict-aware) ─────────────────────
-
-/// Version of the `content_text` projection. Persisted with each
-/// `seeded_description_hash` so a projection change re-seeds pristine bodies
-/// instead of reading the whole synced corpus as "user edited".
+/// Version of the `content_text` projection, persisted with each `seeded_description_hash` so a
+/// projection change re-seeds pristine bodies instead of reading the whole synced corpus as
+/// user-edited.
 ///
-/// Bump when [`crate::pool::build_description_doc`] or the projection starts producing
-/// different output for a document the editor can hold — not on every edit to them, since a
-/// bump discards a precise signal for the coarse `user_modified` fallback on every synced page
-/// that [`rebuild_seeded_bodies`] can't restamp. The projection is two implementations, not
-/// one: the hash below is compared against `pages.content_text`, which the editor writes
-/// through TypeScript `extractText`. Both answer to `tests/fixtures/content-text-projection.json`.
+/// Bump when [`crate::pool::build_description_doc`] or the projection produces different output
+/// for a document the editor can hold, not on every edit to them: a bump swaps a precise signal
+/// for the coarse `user_modified` fallback on every page [`rebuild_seeded_bodies`] can't
+/// restamp. The projection is two implementations, since the hash is compared against
+/// `pages.content_text`, which the editor writes through TypeScript `extractText`. Both answer
+/// to `tests/fixtures/content-text-projection.json`.
 const CONTENT_TEXT_PROJECTION_VERSION: i64 = 2;
 
-/// Seed the external description into the body, conflict-aware: (over)write only
-/// while the body is pristine, else park the withheld text in
-/// `pending_description`. Pristineness is the `content_text` hash, falling back to
-/// `user_modified` when the stored projection version is stale (the old hash can't
-/// be compared).
+/// Seeds the external description into the body, overwriting only while the body is pristine
+/// and otherwise parking the text in `pending_description`. Pristineness is the `content_text`
+/// hash, falling back to `user_modified` when the stored projection version is stale.
 async fn apply_seeded_description(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1680,7 +1597,7 @@ async fn apply_seeded_description(
     now: &str,
 ) -> AppResult<()> {
     let Some(desc) = description.map(str::trim).filter(|d| !d.is_empty()) else {
-        // No upstream description — never blank out a body the user may own.
+        // Never blank out a body the user may own.
         return Ok(());
     };
     let (content_json, projected_text) = project_description(desc);
@@ -1694,7 +1611,6 @@ async fn apply_seeded_description(
     let (content_text, stored_hash, stored_version, user_modified) =
         fetch_seed_state(tx, page_id).await?;
 
-    // Already matches upstream: clear any parked notice and re-stamp the hash.
     if projected_text == content_text {
         sqlx::query(
             "UPDATE page_sync SET pending_description = NULL, seeded_description_hash = ?,
@@ -1710,7 +1626,7 @@ async fn apply_seeded_description(
 
     let body_pristine = match (stored_hash.as_deref(), stored_version) {
         (Some(h), Some(v)) if v == CONTENT_TEXT_PROJECTION_VERSION => fnv_hex(&content_text) == h,
-        // Stale projection version → old hash incomparable; trust the ownership flag.
+        // The old hash is incomparable; trust the ownership flag.
         (Some(_), _) => !user_modified,
         (None, _) => content_text.is_empty() && !user_modified,
     };
@@ -1728,12 +1644,11 @@ async fn apply_seeded_description(
     Ok(())
 }
 
-/// Rebuild each body still as seeded, its text hashing to the stored seed, the way a seed is built
-/// now: web addresses linked and "- " lines a bullet list. Any other body is the person's. The hash
-/// is restamped at the current projection version, so the next description change still sees the
-/// body as untouched, and `updated_at` stays put. The write is captured like any edit: a detached
-/// page's body syncs and nothing else carries this change to another device, while a calendar's own
-/// page is out of sync scope and is never sent.
+/// Rebuilds each body still as seeded (its text hashing to the stored seed) the way a seed is
+/// built: web addresses linked and "- " lines a bullet list. Any other body is the person's.
+/// The hash is restamped at the current projection version, so the next description change
+/// still sees the body as untouched, and `updated_at` stays put. The write is captured like any
+/// edit: a detached page's body syncs, and nothing else carries this change to another device.
 pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let body = crate::page_chunks::body_sql("p.id");
     // sql-ok: body_sql is built from a compile-time constant
@@ -1787,7 +1702,7 @@ pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<
     Ok(())
 }
 
-/// Read the body + seed bookkeeping needed to classify a description change.
+/// Reads the body and seed bookkeeping needed to classify a description change.
 async fn fetch_seed_state(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1804,8 +1719,7 @@ async fn fetch_seed_state(
     Ok(row)
 }
 
-/// Write the seed into the body and record its hash + version, clearing any
-/// parked notice.
+/// Writes the seed into the body, records its hash and version, and clears any parked notice.
 async fn write_seeded_body(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1833,32 +1747,29 @@ async fn write_seeded_body(
     Ok(())
 }
 
-/// Plain-text description → (Tiptap doc JSON, its `content_text` projection).
-/// Projects through the *same* extractor FTS uses so a pristine body hashes
-/// identically whether the editor or reconciler last wrote it — which is why the
-/// hash is over `content_text`, not the ProseMirror JSON.
+/// A plain-text description as (Tiptap doc JSON, its `content_text` projection). Projects
+/// through the extractor FTS uses, so a pristine body hashes identically whoever wrote it last;
+/// hence the hash is over `content_text`, not the JSON.
 fn project_description(text: &str) -> (String, String) {
     let doc = crate::pool::build_description_doc(text);
     let projected = crate::pool::extract_text_from_tiptap(&doc);
     (doc, projected)
 }
 
-/// Rewrite a UTC `UNTIL=…Z` token inside a raw RRULE to source-zone wall-clock,
-/// leaving every other field intact. Expansion matches occurrences by wall-clock
-/// string, so a UTC UNTIL clips the final occurrence(s) on the wrong day for
-/// viewers outside the source zone. Floating/date-only UNTIL is already
-/// wall-clock and passes through. Edited in place through [`rewrite_until_with`],
-/// since a parse round-trip would drop BYSETPOS/BYMONTHDAY.
+/// Rewrites a UTC `UNTIL=…Z` token inside a raw RRULE to source-zone wall-clock, leaving every
+/// other field intact. Expansion matches occurrences by wall-clock string, so a UTC UNTIL
+/// clips the final occurrences on the wrong day for viewers outside the source zone. Edited in
+/// place through [`rewrite_until_with`], since a parse round-trip would drop BYSETPOS and
+/// BYMONTHDAY.
 fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
     let Ok(zone) = tz.parse::<Tz>() else {
-        return rrule.to_string(); // unknown zone: leave raw rather than panic
+        return rrule.to_string();
     };
     rewrite_until_with(rrule, |value| until_utc_to_wall_clock(value, zone))
 }
 
-/// `20260315T100000Z` in `zone` → `20260315T060000` wall-clock, DST-correct per
-/// instant. `None` for anything that isn't a UTC date-time (floating/date-only/
-/// unparseable) — already wall-clock, so the caller leaves it as-is.
+/// `20260315T100000Z` in `zone` as `20260315T060000` wall-clock, DST-correct per instant.
+/// `None` for anything that isn't a UTC date-time, which is already wall-clock.
 fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
     let stamp = value.strip_suffix('Z')?;
     let naive = NaiveDateTime::parse_from_str(stamp, UNTIL_FMT).ok()?;
@@ -1868,13 +1779,10 @@ fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
 
 /// The storage form of a provider [`ExclusiveEnd`], and the only bridge to it.
 ///
-/// Applying the decrement twice shortens every multi-day all-day span by another
-/// day — invisible until it's wrong everywhere — and stored ends really do
-/// re-enter here, since a `MasterOnly` rewrite re-inserts the override rows it
-/// carried forward. Hence the private field: a stored value can only be rebuilt
-/// through [`InclusiveEnd::from_stored`], which cannot decrement, and the
-/// provider form has no conversion of its own. A double application is a missing
-/// method, not a review catch.
+/// Applying the decrement twice shortens every multi-day all-day span by another day, and
+/// stored ends do re-enter here, since a `MasterOnly` rewrite re-inserts the overrides it
+/// carried forward. Hence the private field: a stored value can only be rebuilt through
+/// [`InclusiveEnd::from_stored`], which can't decrement.
 mod allday_end {
     use chrono::Days;
     use pikos_recurrence::WallClock;
@@ -1885,9 +1793,9 @@ mod allday_end {
     pub(super) struct InclusiveEnd(Option<String>);
 
     impl InclusiveEnd {
-        /// Only date-only ends carry the exclusivity convention; timed ends and
-        /// `None` pass through untouched. The length gate pins zero-padding,
-        /// which [`WallClock::parse`] leaves to its caller.
+        /// Only date-only ends carry the exclusivity convention; timed ends and `None` pass
+        /// through. The length gate pins zero-padding, which [`WallClock::parse`] leaves to its
+        /// caller.
         pub(super) fn from_provider(end: &ExclusiveEnd) -> Self {
             let Some(end) = end.as_deref() else {
                 return Self(None);
@@ -1902,7 +1810,7 @@ mod allday_end {
             Self(Some(end.to_string()))
         }
 
-        /// A value read back out of `page_schedules` — already inclusive.
+        /// A value read back out of `page_schedules`, already inclusive.
         pub(super) fn from_stored(end: Option<String>) -> Self {
             Self(end)
         }

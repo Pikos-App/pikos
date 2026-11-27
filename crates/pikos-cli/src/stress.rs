@@ -1,14 +1,11 @@
 //! Seed a throwaway workspace and time the operations that decide whether Pikos feels instant.
 //!
-//! The point is a number anybody can reproduce on their own hardware, so this seeds through the
-//! same writer the app uses rather than inserting rows directly. Raw SQL would be far quicker and
-//! would measure a workspace the app could never have produced: FTS rows, tag denormalisation and
-//! schedule bookkeeping all come from the writer, and a benchmark over data that skipped them is
-//! measuring the wrong thing. Seeding is therefore slow on purpose.
+//! Seeding goes through the writer the app uses, not raw SQL: FTS rows, tag denormalisation and
+//! schedule bookkeeping all come from the writer, and a benchmark over data that skipped them
+//! would measure a workspace the app could never produce. Seeding is slow on purpose.
 //!
-//! Every entry point here refuses to touch the real workspace. Seeding a quarter of a million
-//! pages into somebody's actual notes is the worst thing this binary could do, so `--db` is
-//! required and a path matching the default workspace is rejected.
+//! Every entry point refuses to touch the real workspace: `--db` is required and a path
+//! matching the default workspace is rejected.
 
 use std::path::Path;
 use std::time::Instant;
@@ -94,9 +91,7 @@ const EDIT_MARKER: &str = "zzbencheditzz";
 const RARE_WORD: &str = "zephyr";
 const RARE_PAGES: usize = 50;
 
-/// A small deterministic generator, so two runs on the same inputs produce the same workspace and
-/// two people comparing numbers are comparing the same shape of data. Not cryptographic and not
-/// trying to be.
+/// A small deterministic generator, so two runs on the same inputs produce the same workspace.
 struct Rng(u64);
 
 impl Rng {
@@ -325,8 +320,7 @@ pub async fn seed(
             }
         }
 
-        // Seeding a quarter of a million pages is minutes of work, and a silent process that
-        // long reads as a hang.
+        // A silent process for minutes reads as a hang.
         if !json && i > 0 && i % 5_000 == 0 {
             eprintln!(
                 "  {i} / {pages} pages, {:.0}s elapsed",
@@ -355,8 +349,7 @@ pub async fn seed(
 
     // A workspace has statistics from its first launch on, so the seed ends with them.
     pikos_db::gather_statistics(&pool).await.map_err(classify)?;
-    // Closing the last connection checkpoints the write-ahead log into the file and removes it, so
-    // the seeded file is complete on its own and can be copied as a template.
+    // Closing the last connection checkpoints the WAL away, so the file is complete on its own.
     pool.close().await;
     let elapsed = started.elapsed();
     if json {
@@ -374,8 +367,7 @@ pub async fn seed(
     Ok(())
 }
 
-/// One timed operation, reported with the corpus size beside it because a duration without a size
-/// is the adjective this whole exercise exists to replace.
+/// One timed operation, reported with the corpus size beside it.
 struct Timing {
     name: &'static str,
     /// Every measured run, in milliseconds, sorted.
@@ -410,8 +402,7 @@ where
             samples: vec![],
         });
     }
-    // Once to warm the page cache, then the measured runs, so the number is steady-state rather
-    // than whatever the filesystem happened to be doing.
+    // One warm-up run first, so the number is steady-state.
     let _ = f().await?;
     let mut samples = Vec::with_capacity(runs as usize);
     let began = Instant::now();
@@ -510,7 +501,7 @@ pub async fn bench(
     let _ = ONLY.set(only.to_vec());
 
     let open_start = Instant::now();
-    // Checkpointing the way the app does, so the bench times the database the app actually runs.
+    // Checkpoint as the app does, so the bench times the database the app runs.
     let pool = open_pool_checkpointing(&path, Checkpoints::Background(CheckpointHooks::NONE))
         .await
         .map_err(classify)?;

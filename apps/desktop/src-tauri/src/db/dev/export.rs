@@ -1,14 +1,8 @@
 //! The desktop half of the exports: where a file goes.
 //!
-//! Everything about *what* is exported — the ownership predicate, the CSV
-//! columns, the Markdown frontmatter, the whole `.ics` — moved to
-//! `pikos_db::export` when the phone needed it too. What stayed is the part
-//! that is genuinely a desktop question: a path under `~/Downloads` and a
-//! timestamped name.
-//!
-//! The JSON snapshot below has no command and no caller. It stays because it is
-//! the shape the export → re-import round-trip tests assert against, and the
-//! place to start from if a JSON export is ever offered again.
+//! What is exported (the ownership predicate, CSV columns, Markdown frontmatter, the `.ics`)
+//! lives in `pikos_db::export`, shared with the phone. This file holds only a path under
+//! `~/Downloads` and a timestamped name.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -26,10 +20,8 @@ pub(crate) use pikos_db::export::write_markdown_export;
 /// (excluding soft-deleted), schedules, recurrence rules and focus sessions;
 /// page content is carried as both ProseMirror JSON and plain text.
 ///
-/// No command wraps this — the JSON snapshot is not offered in the UI. It is
-/// the shape the export → re-import round-trip tests assert against, and the
-/// one place to start from if a JSON export is ever exposed again, which is
-/// why it survives the removal of its command rather than being deleted with it.
+/// No command wraps this: the JSON snapshot isn't offered in the UI. It stays as the shape the
+/// export and re-import round-trip tests assert against.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn build_export_json_impl(
     pool: &sqlx::SqlitePool,
@@ -122,9 +114,7 @@ fn home_dir() -> AppResult<String> {
 }
 
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
-/// Each page becomes a .md file with YAML frontmatter (title, status, priority,
-/// tags, scheduled dates). Folder structure is preserved as subdirectories.
-/// Images are copied into an assets/ subdirectory with references rewritten.
+/// Folders become subdirectories and images are copied into `assets/`. Returns the directory.
 #[tauri::command]
 pub async fn export_markdown<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -181,8 +171,7 @@ pub async fn export_page_markdown<R: tauri::Runtime>(
     Ok(dest)
 }
 
-/// One page written into `dir`, split from [`export_page_markdown`] so it runs
-/// against a temp directory.
+/// One page written into `dir`.
 ///
 /// A page with no images is a lone `<title>.md`, the file a chat app takes. One
 /// with images needs them beside it, so it becomes a `<title>/` directory holding
@@ -236,8 +225,7 @@ fn unused_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
 }
 
 /// Export all pages as a CSV file to ~/Downloads/.
-/// Columns match what the CSV importer expects so the output can be re-imported.
-/// Rich text content is exported as plain text (content_text).
+/// The columns are the ones the CSV importer reads, and rich text goes out as plain text.
 #[tauri::command]
 pub async fn export_csv(
     state: tauri::State<'_, DbState>,
@@ -258,8 +246,7 @@ pub async fn export_csv(
     Ok(dest)
 }
 
-/// The CSV export written into `dir`, split from [`export_csv`] so it runs against a
-/// temp directory. Returns the file and how many pages it holds.
+/// The CSV export written into `dir`. Returns the file and how many pages it holds.
 pub(crate) async fn write_csv_export(
     pool: &sqlx::SqlitePool,
     dir: &Path,
@@ -272,9 +259,7 @@ pub(crate) async fn write_csv_export(
     Ok((dest, row_count))
 }
 
-/// Export every scheduled page as one `.ics` file in ~/Downloads. Same
-/// destination shape and same return value as the CSV export, so the settings
-/// panel treats all three exports identically.
+/// Export every scheduled page as one `.ics` file in ~/Downloads. Returns the file's path.
 #[tauri::command]
 pub async fn export_ics(
     state: tauri::State<'_, DbState>,

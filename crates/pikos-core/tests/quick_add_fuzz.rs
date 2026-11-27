@@ -11,9 +11,6 @@
 //!
 //! Point `PIKOS_FUZZ_CORPUS` at a larger generated file to search wider by hand:
 //!
-//! Point `PIKOS_FUZZ_CORPUS` at a larger generated file to search wider by
-//! hand:
-//!
 //! ```text
 //! FUZZ_CASES=20000 FUZZ_OUT=/tmp/f.json pnpm --filter @pikos/core gen:fuzz
 //! PIKOS_FUZZ_CORPUS=/tmp/f.json cargo test -p pikos-core --test quick_add_fuzz

@@ -9,16 +9,14 @@ use chrono::Datelike;
 
 use crate::error::AppResult;
 
-// A doc node requires at least one block child (ProseMirror `block+`); an empty
-// content array crashes the editor on open. Match the app's EMPTY_TIPTAP_DOC.
+// A ProseMirror doc needs at least one block child (`block+`); an empty content array crashes the editor.
 const EMPTY_DOC: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
 const MOCK_ACCOUNT_NAME: &str = "Mock Calendar (dev)";
 /// What an all-day series' rule row carries — see the reconciler's `SENTINEL_TZ`.
 const ZONELESS_RULE_TZ: &str = "UTC";
 
-/// Read-only mirror layer for a seeded synced page. `pending_description` is what
-/// drives the "calendar description changed" notice; all fields default to empty
-/// so most seed rows stay bare mirrors.
+/// Read-only mirror layer for a seeded synced page. `pending_description` drives the
+/// "calendar description changed" notice.
 #[derive(Default)]
 struct SyncedMirror<'a> {
     location: Option<&'a str>,
@@ -27,16 +25,12 @@ struct SyncedMirror<'a> {
     body: Option<&'a str>, // Tiptap JSON; the user's own notes on the event
 }
 
-/// What a seeded row's stored zone must be, given the source zone the event came
-/// with. Detaching **spends** the stamp (`float_wall_clock`): every wall-clock is
-/// rewritten into the device zone, `page_schedules.timezone` goes NULL and the
-/// rule keeps the device zone. Seeding the source zone onto a detached row instead
-/// describes a state the product cannot reach — and off that zone, every later
-/// conversion of the row shifts it by the offset. Seed times are already
-/// device-local, so applying the outcome is just this pair of stamps.
+/// What a seeded row's stored zone must be, given the source zone the event came with.
+/// Detaching spends the stamp (`float_wall_clock`): `page_schedules.timezone` goes NULL and the
+/// rule keeps the device zone. Seeding the source zone onto a detached row describes a state
+/// the product can't reach, and every later conversion of the row would shift by the offset.
 ///
-/// An all-day series never gets that far: date-only has nothing to convert, so
-/// `float_wall_clock` returns before touching anything and the rule's zone-less
+/// An all-day series is exempt: date-only has nothing to convert, so the rule's zone-less
 /// sentinel stands.
 fn schedule_row_zone<'a>(source: Option<&'a str>, sync_state: &str) -> Option<&'a str> {
     match sync_state {
@@ -70,10 +64,8 @@ async fn insert_synced_page(
     now: &str,
 ) -> AppResult<()> {
     let page_id = uuid::Uuid::new_v4().to_string();
-    // The body's own plain text, projected the way every real writer projects it
-    // (`create_page_impl`, and the reconciler when it applies a description). Seeding
-    // an empty projection beside a non-empty body leaves the user's notes on a mirror
-    // unfindable — search reads `content_text`, not the body.
+    // Project the body to plain text as real writers do: search reads `content_text`, so an
+    // empty one beside a non-empty body leaves the notes unfindable.
     let body = mirror.body.unwrap_or(EMPTY_DOC);
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
@@ -111,8 +103,8 @@ async fn insert_synced_page(
     .await?;
 
     let ext = uuid::Uuid::new_v4().to_string();
-    // A parked description means the user edited the body, so mark the page owned —
-    // that's the only state in which the reconciler withholds an upstream change.
+    // The reconciler withholds an upstream change only from an owned page, so a parked
+    // description needs the page marked owned.
     let user_modified = mirror.pending_description.is_some();
     sqlx::query(
         "INSERT INTO page_sync (id, page_id, account_id, provider, calendar_id, external_id,
@@ -146,9 +138,8 @@ struct MovedInstance<'a> {
     end: &'a str,
 }
 
-/// The occurrence deltas and lifecycle state of a seeded recurring series —
-/// everything past the bare "weekly from here". Defaults to a live series with no
-/// exceptions, which is what most seed rows want.
+/// The occurrence deltas and lifecycle state of a seeded recurring series. Defaults to a live
+/// series with no exceptions.
 struct SyncedSeries<'a> {
     sync_state: &'a str,
     /// Cancelled occurrences, in the same basis as [`MovedInstance::original`].
@@ -187,11 +178,8 @@ async fn insert_synced_recurring(
     now: &str,
 ) -> AppResult<()> {
     let page_id = uuid::Uuid::new_v4().to_string();
-    // The head is the *derived* current occurrence, so it has to be what
-    // `recompute_recurring_schedule` would write — and the engine gives an all-day
-    // occurrence no end at all (`timed_duration` returns None for a date-only
-    // anchor). Stamping the base end here describes a row the first recompute
-    // clears, and the mock, which derives its head, never had one.
+    // The head must match what `recompute_recurring_schedule` writes, and an all-day
+    // occurrence gets no end (`timed_duration` is None for a date-only anchor).
     let head_end = base_start.contains('T').then_some(base_end);
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, content_text, status, priority, tags,
@@ -285,7 +273,6 @@ pub async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult
 
     let mut tx = pool.begin().await?;
 
-    // Idempotent: drop a prior mock account (cascades its calendars + page_sync).
     sqlx::query("DELETE FROM sync_account WHERE display_name = ?")
         .bind(MOCK_ACCOUNT_NAME)
         .execute(&mut *tx)
@@ -348,9 +335,7 @@ pub async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult
     // "Team standup" carries the full read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
     //
-    // Times and shapes mirror the TS seed (`apps/desktop/seeds/syncedCalendar.ts`), which
-    // places each event in a lane the realistic seed leaves free and records what
-    // each shape is here to make reachable — see the note there.
+    // Times and shapes mirror the TS seed (`apps/desktop/seeds/syncedCalendar.ts`).
     let standup_body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}"#;
     insert_synced_page(
         &mut tx,
@@ -438,10 +423,8 @@ pub async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult
         &now,
     )
     .await?;
-    // A live series carrying both occurrence deltas a provider can send: a
-    // cancelled instance (timed EXDATE) and one moved weeks out. Both stored as
-    // full wall-clock, which is what exercises the day-keyed exclusion — a
-    // date-only fixture passes whether or not the render layer day-keys.
+    // Both deltas a provider can send: a cancelled instance (timed EXDATE) and one moved weeks
+    // out. Full wall-clock, because a date-only fixture passes whether or not render day-keys.
     insert_synced_recurring(
         &mut tx,
         personal,
@@ -547,9 +530,8 @@ pub async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult
         &now,
     )
     .await?;
-    // A detached series carrying a provider-moved instance: its occurrences stay
-    // in-series as override rows rather than cloning out, so the moved block is
-    // unlocked and a re-link can reclaim the slot. Times mirror the TS seed.
+    // Occurrences stay in-series as override rows, so the moved block is unlocked and a
+    // re-link can reclaim the slot.
     insert_synced_recurring(
         &mut tx,
         work,

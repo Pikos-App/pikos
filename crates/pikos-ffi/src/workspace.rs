@@ -1,24 +1,16 @@
 //! The database, as Swift sees it.
 //!
-//! A thin async wrapper over `pikos-db`, which is the single writer behind the
-//! desktop app and the CLI already. Nothing here reimplements storage logic —
-//! that would be a second writer, and a second writer is how two clients end up
+//! A thin async wrapper over `pikos-db`, the single writer behind the desktop app and the CLI.
+//! Nothing here reimplements storage logic: a second writer is how two clients end up
 //! disagreeing about what a page is.
 //!
-//! ## Where the file lives is the caller's business
+//! [`Workspace::open`] takes a path, because where the file lives is the caller's business. On
+//! iOS it is inside the App Group container so widget extensions can read the same database,
+//! but that identifier is a provisioning concern and putting it here would bake a build
+//! setting into a Rust crate.
 //!
-//! [`Workspace::open`] takes a path. On iOS it will be inside the App Group
-//! container so widget extensions can read the same database, but that
-//! container's identifier is a provisioning concern, not a data-layer one, and
-//! putting it here would bake a build setting into a Rust crate.
-//!
-//! ## One writer
-//!
-//! The plan's rule is one writer in the app process, extensions read-only, WAL
-//! mode. [`ReadOnlyWorkspace`] exists so that rule is enforced by the type a
-//! widget can get hold of, rather than by everyone remembering it. WAL comes
-//! from `pikos_db::open_pool`, which the desktop app has used since the
-//! beginning.
+//! One writer in the app process, extensions read-only, WAL mode: [`ReadOnlyWorkspace`]
+//! enforces that by type, and WAL comes from `pikos_db::open_pool`.
 
 use std::sync::Arc;
 
@@ -32,9 +24,6 @@ use crate::{CalendarEntry, Occurrence, RecurringCompletion};
 use pikos_db::{
     AppError, NewPage as DbNewPage, PageFilter as DbPageFilter, PageUpdate as DbPageUpdate,
 };
-
-// ─── Errors ──────────────────────────────────────────────────────────────────
-
 /// What can go wrong, in terms Swift can act on.
 ///
 /// Deliberately coarse. Swift's realistic responses are "tell the user",
@@ -121,13 +110,11 @@ impl WorkspaceError {
 impl From<AppError> for WorkspaceError {
     fn from(error: AppError) -> Self {
         match error {
-            // The data layer's conflicts carry a sentence written for a user —
-            // "Pages cannot be moved into an external calendar folder" — so it
-            // is passed through rather than wrapped in a failure message.
+            // The data layer's conflicts carry a sentence written for a user, so it passes
+            // through rather than being wrapped in a failure message.
             AppError::Conflict(message) => WorkspaceError::Refused { message },
-            // Sync is the only caller that can produce one of these, and it is
-            // the difference between "your calendar server is unreachable" and
-            // "your notes are damaged".
+            // Only sync produces one, and it separates "your calendar server is unreachable"
+            // from "your notes are damaged".
             AppError::Network(message) => WorkspaceError::Network { message },
             other => WorkspaceError::Database {
                 message: other.to_string(),
@@ -135,9 +122,6 @@ impl From<AppError> for WorkspaceError {
         }
     }
 }
-
-// ─── Records ─────────────────────────────────────────────────────────────────
-
 /// A page without its content, for list and calendar screens.
 ///
 /// Content is excluded on purpose: a list of several hundred pages would
@@ -352,24 +336,17 @@ pub enum CompletedScope {
     /// Everything ever completed in one folder.
     Folder { id: String },
 }
-
-// ─── External calendars ──────────────────────────────────────────────────────
 //
-// What reaches the phone, and what deliberately does not.
+// CalDAV account management and a manual sync are plain async functions over the pool and the
+// OS keychain, so they port unchanged. Two things structurally don't:
 //
-// CalDAV account management and a manual sync are plain async functions over
-// the pool and the OS keychain, so they port unchanged. Two things do not, and
-// both are structural rather than unfinished:
+//   - Google. The grant waits on a loopback TCP listener inside the app process, and leaving
+//     for the browser starts iOS suspending that process. It needs
+//     `ASWebAuthenticationSession`; the PKCE half is transport-agnostic.
+//   - Background polling. `run_sync_loop` is an in-process timer, which iOS suspends within
+//     seconds of backgrounding.
 //
-//   - **Google.** The grant waits on a loopback TCP listener inside the app
-//     process. Leaving for the browser starts iOS suspending that process, so
-//     the wait outlives the app. It needs `ASWebAuthenticationSession`; the
-//     PKCE half is transport-agnostic and ports as-is when somebody builds it.
-//   - **Background polling.** `run_sync_loop` is an in-process timer, which
-//     iOS suspends within seconds of backgrounding. Every sync here is one the
-//     user asked for, by hand, with the app open.
-//
-// So this surface is honest about being manual.
+// So every sync here is one the user asked for, by hand, with the app open.
 
 /// One connected calendar account.
 #[derive(Debug, uniffi::Record)]
@@ -477,9 +454,6 @@ impl From<pikos_calendar_sync::CalendarSyncResult> for CalendarSyncResult {
         }
     }
 }
-
-// ─── Repeats ─────────────────────────────────────────────────────────────────
-
 /// How often a page repeats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RepeatFreq {
@@ -747,8 +721,8 @@ pub struct PageQuery {
 impl From<PageQuery> for DbPageFilter {
     fn from(q: PageQuery) -> Self {
         DbPageFilter {
-            // Back to the tri-state the data layer expects: absent for any,
-            // JSON null for the inbox, a string for a specific folder.
+            // The data layer's tri-state: absent for any, JSON null for the inbox, a string for
+            // a folder.
             folder_id: match q.folder {
                 None | Some(FolderScope::Any) => None,
                 Some(FolderScope::Inbox) => Some(serde_json::Value::Null),
@@ -899,9 +873,8 @@ async fn create_quick_add_page(
     schedule: bool,
 ) -> Result<Page, WorkspaceError> {
     let priority = quick_add_priority(&input.priority);
-    // The body typed after "//", written as the page's document so opening
-    // the page shows the note already typed out. `create_page` derives the
-    // searchable text from the document, so only the document is passed.
+    // The body typed after "//", written as the page's document. `create_page` derives the
+    // searchable text from it.
     let content = input.content.as_deref().map(pikos_db::build_tiptap_doc);
     let page = workspace
         .create_page(NewPage {
@@ -919,16 +892,14 @@ async fn create_quick_add_page(
         })
         .await?;
 
-    // Reminder leads are rows of their own, written once the page exists.
-    // Already resolved by the parser against the schedule's shape, so what
-    // arrives here is exactly what the desktop would write for the same line.
+    // Reminder leads are rows of their own, written once the page exists. The parser has
+    // resolved them against the schedule's shape, as the desktop does.
     for minutes_before in input.reminder_minutes.iter().flatten() {
         pikos_db::create_page_reminder(&workspace.pool, &page.id, *minutes_before).await?;
     }
 
-    // Priority is not a `NewPage` field, so it takes a second write. Only
-    // when the line actually said something about it — "unchanged" on a
-    // brand-new page means the default, which is already what it has.
+    // Priority is not a `NewPage` field, so it takes a second write, only when the line said
+    // something: "unchanged" on a new page already is the default.
     let Some(priority) = priority else {
         return Ok(page);
     };
@@ -959,13 +930,10 @@ fn quick_add_priority(
         Some(P::High) => 2,
         Some(P::Medium) => 3,
         Some(P::Low) => 4,
-        // `!0` — an explicit clear, which on a new page is already the default.
+        // `!0` is an explicit clear, already the default on a new page.
         None => 0,
     })
 }
-
-// ─── Workspace ───────────────────────────────────────────────────────────────
-
 /// A read-write handle on a Pikos workspace.
 ///
 /// Exactly one of these should exist per process. SQLite in WAL mode tolerates
@@ -1069,12 +1037,10 @@ impl Workspace {
             &self.pool,
             Some(pikos_db::PageFilter {
                 scheduled_after: Some(today.clone()),
-                // The window's last day plus a time at the end of it. The
-                // column holds `YYYY-MM-DD` for an all-day row and
-                // `YYYY-MM-DDTHH:MM:SS` for a timed one, and the comparison is
-                // lexicographic — so a bare date as the upper bound would
-                // admit the last day's all-day rows and silently drop every
-                // timed row on it, `"2026-09-19T14:00:00" > "2026-09-19"`.
+                // The last day plus a time at its end: the column holds `YYYY-MM-DD` for all-day
+                // and `YYYY-MM-DDTHH:MM:SS` for timed, compared lexicographically, so a bare
+                // date bound would drop every timed row on the last day
+                // (`"2026-09-19T14:00:00" > "2026-09-19"`).
                 scheduled_before: Some(format!("{end}T23:59:59")),
                 open_only: Some(true),
                 ..Default::default()
@@ -1281,9 +1247,8 @@ impl Workspace {
         offset: u32,
     ) -> Result<CompletedPages, WorkspaceError> {
         let (folder_id, completed_since) = match scope {
-            // `today_local()` rather than a date from the caller: this is the
-            // same function `list_today` uses to decide what is due, so the two
-            // halves of the screen cannot disagree about which day it is.
+            // `today_local()`, as `list_today` uses, so the two halves of the screen agree on the
+            // day.
             CompletedScope::Today => (None, Some(pikos_db::today_local())),
             CompletedScope::Inbox => (Some(serde_json::Value::Null), None),
             CompletedScope::Folder { id } => (Some(serde_json::Value::String(id)), None),
@@ -1300,19 +1265,15 @@ impl Workspace {
         .await?;
         let completed = CompletedPages {
             pages: response.pages.into_iter().map(Into::into).collect(),
-            // The count comes from SQLite as a signed COUNT(*); it cannot be
-            // negative, and saturating rather than casting means a number too
-            // large to represent shows as "very many" instead of wrapping to
-            // near zero and claiming there is nothing more to load.
+            // COUNT(*) is signed but never negative; saturating rather than casting keeps an
+            // oversized count from wrapping to near zero and claiming nothing more to load.
             total: u32::try_from(response.total).unwrap_or(u32::MAX),
         };
         Ok(self.reads.noted(completed, |c| c.pages.len()))
     }
 
     pub async fn get_page(&self, id: String) -> Result<Page, WorkspaceError> {
-        // Distinguished from a genuine failure: a widget or a deep link can
-        // easily hold an id that has since been deleted, and that is not an
-        // error worth surfacing as one.
+        // Not a failure: a widget or deep link can hold an id deleted since.
         match pikos_db::get_page(&self.pool, &id).await? {
             Some(page) => Ok(self.reads.noted(page.into(), |_| 1)),
             None => Err(WorkspaceError::NotFound {
@@ -1465,8 +1426,7 @@ impl Workspace {
                 self.complete_recurring_occurrence(page_id, None).await?;
                 return Ok(());
             }
-            // A series with nothing completed has no occurrence to reopen; the
-            // head itself is what is ticked, so it flips like any other page.
+            // With nothing completed, the head itself is what is ticked.
             if self
                 .uncomplete_latest_recurring_occurrence(page_id.clone())
                 .await?
@@ -1476,20 +1436,13 @@ impl Workspace {
         }
 
         let status = if done { "done" } else { "not_started" };
-        // `completed_at` is stamped here, not left to the column, because
-        // nothing else on this path sets it: `update_page_impl` writes it only
-        // when a caller supplies it. A page ticked without one is done with no
-        // record of when, which reads as an ordering quirk and is worse than
-        // that — the Completed section for a date view selects on
-        // `date(completed_at)`, so such a page is finished and invisible in
-        // every view that would show it, on this device and on the desktop
-        // reading the same file.
+        // Stamped here because `update_page_impl` writes `completed_at` only when a caller
+        // supplies it, and the Completed section selects on `date(completed_at)`: a page ticked
+        // without one is finished and invisible in every view, on the desktop too.
         //
-        // Local wall clock rather than the UTC `now_iso()` used for
-        // `created_at`/`updated_at`, matching the convention `pikos-db` states
-        // above `complete_recurring_page_once`: the Completed view compares the
-        // first ten characters against the local day, and a UTC stamp hides a
-        // just-ticked page whenever UTC's date is not the local one.
+        // Local wall clock, not UTC `now_iso()`: the view compares the first ten characters
+        // against the local day, and a UTC stamp hides a just-ticked page whenever the dates
+        // differ.
         let completed_at = if done {
             serde_json::Value::String(pikos_db::now_local_iso())
         } else {
@@ -1569,18 +1522,16 @@ impl Workspace {
         let Some(page) = pikos_db::get_page(&self.pool, &page_id).await? else {
             return Ok(false);
         };
-        // `schedule_locked` is the one that does work here: a calendar owns that
-        // page's schedule, so walking its head back is not ours to do. The
-        // `is_recurring` half is belt-and-braces — a page with no rule has no
-        // completions map either, so the check below would refuse it anyway.
+        // `schedule_locked` does the work: a calendar owns that schedule, so walking its head
+        // back isn't ours to do. `is_recurring` is belt and braces, since the check below
+        // refuses a page with no completions map anyway.
         if !page.is_recurring || page.schedule_locked {
             return Ok(false);
         }
         let Some(completed) = page.completed_occurrences else {
             return Ok(false);
         };
-        // The newest by date. Dates are zero-padded ISO, so the lexical maximum
-        // is the calendar maximum.
+        // Zero-padded ISO dates, so the lexical maximum is the calendar maximum.
         let Some(newest) = completed.keys().max().cloned() else {
             return Ok(false);
         };
@@ -1686,10 +1637,9 @@ impl Workspace {
             },
         )
         .await?;
-        // The result carries the rule's merged exclusions, for a caller holding
-        // rules in memory to update its copy. Nothing here holds one: the phone
-        // re-reads the visible range after every write, so passing them on would
-        // be a second source of truth for the caller to keep in step.
+        // The result's merged exclusions are for a caller holding rules in memory. The phone
+        // re-reads the visible range after every write, so passing them on would be a second
+        // source of truth.
         Ok(())
     }
 
@@ -1740,13 +1690,11 @@ impl Workspace {
         if today_start <= head_day {
             return Ok(Vec::new());
         }
-        // A millisecond before the head's own midnight, because the window is
-        // exclusive at both ends and the head is itself part of the backlog
-        // whenever the gesture pointed somewhere else.
+        // A millisecond before the head's midnight: the window is exclusive at both ends and the
+        // head is itself part of the backlog when the gesture pointed elsewhere.
         let from = head_day - chrono::Duration::milliseconds(1);
 
-        // Everything already out of the series, day-keyed: a synced timed exdate
-        // is stored as a full wall clock while occurrences match on the day.
+        // Day-keyed: a synced timed exdate is a full wall clock, occurrences match on the day.
         let mut excluded: Vec<String> = rule
             .rrule_exdates
             .iter()
@@ -1866,8 +1814,8 @@ impl Workspace {
                 .await?;
             completed += 1;
 
-            // A completion that left the head where it was would loop forever
-            // against a rule the engine cannot advance.
+            // A completion that left the head in place would loop forever on a rule the engine
+            // can't advance.
             let moved = pikos_db::get_page(&self.pool, &page_id)
                 .await?
                 .and_then(|p| p.scheduled_start)
@@ -1979,9 +1927,8 @@ impl Workspace {
                 Ok(pages)
             }
             QuickAddParse::Recurring { input, rrule } => {
-                // The rule owns the page's date, so the page is created without
-                // one: a non-rule schedule row would linger at the original
-                // anchor and fight the rule for the head.
+                // The rule owns the date: a non-rule schedule row would linger at the anchor and
+                // fight it for the head.
                 let anchor = input
                     .scheduled_start
                     .clone()
@@ -1993,8 +1940,7 @@ impl Workspace {
                     .set_recurrence(page.id.clone(), rrule, anchor, scheduled_end, timezone)
                     .await
                 {
-                    // A page with no rule is not what was asked for, and it
-                    // would look like an ordinary one-off. Take it back.
+                    // A page with no rule would pass as an ordinary one-off. Take it back.
                     let _ = self.trash_page(page.id.clone()).await;
                     return Err(error);
                 }
@@ -2002,24 +1948,18 @@ impl Workspace {
             }
         }
     }
-
-    // ─── Repeats ─────────────────────────────────────────────────────────
-
     /// What a page repeats as, and whether this editor may change it.
     pub async fn page_repeat(&self, page_id: String) -> Result<PageRepeat, WorkspaceError> {
         let Some(rule) = pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await? else {
             return Ok(PageRepeat::Never);
         };
-        // A label for anything, including the rules the picker cannot hold: a
-        // reader who is not allowed to change a repeat should still be told
-        // what it is.
+        // Labels any rule, including ones the picker can't hold, so a reader who can't change a
+        // repeat is still told what it is.
         let label =
             pikos_recurrence::rrule_to_label(&rule.rrule).unwrap_or_else(|| "Repeats".to_string());
 
-        // Two separate reasons to lock, and both have to be checked. The guard
-        // covers what the picker cannot express; the sync lock covers what is
-        // not ours to express at all. `schedule_locked` is derived by the
-        // summary query, so reading it costs the page fetch and nothing more.
+        // Two reasons to lock, both checked: the guard covers what the picker can't express,
+        // the sync lock what isn't ours to express. `schedule_locked` comes with the summary.
         let locked = pikos_db::get_page(&self.pool, &page_id)
             .await?
             .is_some_and(|page| page.schedule_locked);
@@ -2051,9 +1991,7 @@ impl Workspace {
     pub async fn set_page_repeat(
         &self,
         page_id: String,
-        // Named `pattern` rather than `repeat`: `repeat` is a Swift keyword, and
-        // a generated argument label that has to be back-quoted at every call
-        // site is a papercut for nothing.
+        // `pattern`, not `repeat`, which is a Swift keyword needing back-quotes at every call.
         pattern: Repeat,
     ) -> Result<(), WorkspaceError> {
         let page = pikos_db::get_page(&self.pool, &page_id)
@@ -2116,10 +2054,8 @@ impl Workspace {
             }),
             interval: pattern.interval,
             byweekday: match (pattern.freq, pattern.month_week) {
-                // Bare weekdays mean nothing on a monthly or yearly repeat, and
-                // the engine rejects a rule that carries them there. Dropped
-                // rather than passed through, so switching a weekly repeat to
-                // monthly does not produce a rule that fails to enumerate.
+                // The engine rejects bare weekdays on a monthly or yearly rule, so they are dropped
+                // and a weekly-to-monthly switch can't produce a rule that fails to enumerate.
                 (RepeatFreq::Weekly, _) if !pattern.weekdays.is_empty() => {
                     Some(pattern.weekdays.iter().map(|d| *d as u8).collect())
                 }
@@ -2158,9 +2094,8 @@ impl Workspace {
                     options.wkst = stored.wkst;
                 }
                 let rrule = pikos_recurrence::build_rrule(&options);
-                // The anchor moves with the rule: a weekly repeat switched to
-                // Wednesdays has to sit on a Wednesday, or the derivation drags
-                // the head back on the next recompute.
+                // The anchor moves with the rule, or the derivation drags the head back on the
+                // next recompute.
                 let (start, end) = pikos_recurrence::snap_schedule_to_rule(
                     &rrule,
                     &anchor,
@@ -2288,10 +2223,8 @@ impl Workspace {
             None => (scheduled_start, scheduled_end, None),
         };
 
-        // Clear first, then write. Not one transaction — each of these is its
-        // own, as they are on the desktop — but the order is the safe one: a
-        // failure between them leaves the page with no date, which the user can
-        // see and redo, rather than with two.
+        // Clear first, then write. Each is its own transaction, as on the desktop, but this
+        // order is safe: a failure between leaves the page with no date, not two.
         self.clear_page_schedule(page_id.clone()).await?;
         self.schedule_page(
             page_id.clone(),
@@ -2299,8 +2232,8 @@ impl Workspace {
             scheduled_end.clone(),
         )
         .await?;
-        // The rule update recomputes the head, which is what settles a date the snap
-        // could not see was skipped or completed.
+        // The rule update recomputes the head, settling a date the snap couldn't see was
+        // skipped or completed.
         if let Some(rule) = rule {
             pikos_db::update_recurrence_rule_impl(
                 &self.pool,
@@ -2386,8 +2319,7 @@ impl Workspace {
         )
         .await?;
 
-        // The same predicate Today's own overdue section is built from, so the
-        // button cannot act on a different set than the one above it.
+        // Today's overdue predicate, so the button acts on the set shown above it.
         let overdue: Vec<&pikos_db::PageSummary> = open
             .iter()
             .filter(|p| {
@@ -2412,10 +2344,8 @@ impl Workspace {
 
         let mut moved = Vec::with_capacity(plan.moves.len());
         for m in &plan.moves {
-            // Serially, not concurrently. Each write reads the page's schedule
-            // rows back, and a burst of concurrent readers is the WAL
-            // contention the desktop's bulk status toggle had to serialise
-            // away.
+            // Serial: each write reads the schedule rows back, and concurrent readers are the
+            // WAL contention the desktop's bulk toggle serialises away.
             match self
                 .set_page_schedule(m.page_id.clone(), m.start.clone(), m.end.clone())
                 .await
@@ -2425,8 +2355,7 @@ impl Workspace {
                     previous_start: m.previous_start.clone(),
                     previous_end: m.previous_end.clone(),
                 }),
-                // Keep going: one page that has become unwritable since the
-                // plan was made must not strand the other forty.
+                // One page unwritable since the plan was made must not strand the rest.
                 Err(_) => continue,
             }
         }
@@ -2574,11 +2503,8 @@ impl Workspace {
         pikos_db::restore_page_impl(&self.pool, &id).await?;
         Ok(())
     }
-
-    // ─── External calendars ──────────────────────────────────────────────
     //
-    // Manual by construction. See the note above `SyncAccount` for what iOS
-    // structurally cannot do here and why.
+    // Manual by construction; see the note above `SyncAccount`.
 
     /// Every connected account with its calendars, dormant ones included.
     ///
@@ -2839,11 +2765,8 @@ impl Workspace {
         match pikos_core::finish_session((end - start).num_seconds()) {
             pikos_core::FocusOutcome::TooShort { label } => Ok(FocusOutcome::TooShort { label }),
             pikos_core::FocusOutcome::Recorded { duration_s, label } => {
-                // Checked here rather than left to the data layer, which says so
-                // as a generic failure. A page that has since been deleted is
-                // routine on a phone — a widget, a deep link, a list one refresh
-                // behind — and "the workspace could not be read" is the wrong
-                // sentence for it.
+                // The data layer would report a generic failure, and "the workspace could not be
+                // read" is wrong for a page deleted since a widget, deep link or stale list.
                 if pikos_db::get_page(&self.pool, &page_id).await?.is_none() {
                     return Err(WorkspaceError::NotFound {
                         entity: "page".into(),
@@ -3011,9 +2934,8 @@ impl Workspace {
             &self.pool,
             id,
             pikos_db::FolderUpdate {
-                // The tri-state the data layer takes: absent leaves the column
-                // alone, null clears it, a string sets it. Collapsing the last
-                // two would make "no colour" unreachable.
+                // Tri-state: absent leaves the column, null clears it, a string sets it.
+                // Collapsing the last two would make "no colour" unreachable.
                 color: Some(match color {
                     Some(value) => serde_json::Value::String(value),
                     None => serde_json::Value::Null,
@@ -3126,13 +3048,9 @@ async fn search_in(
     include_completed: bool,
     limit: u32,
 ) -> Result<SearchResults, WorkspaceError> {
-    // Two ways in, decided by the query itself. A plain one is full-text
-    // search. One carrying an operator — `tag:`, `folder:`, `is:`,
-    // `priority:`, `due:` — becomes a structured query with full-text
-    // search applied to whatever words are left over, which is not
-    // something FTS5 can express: "every open page tagged work due this
-    // week" is a question about columns, and the words are the part it
-    // happens to also have.
+    // A plain query is full-text search. One carrying an operator (`tag:`, `folder:`, `is:`,
+    // `priority:`, `due:`) becomes a structured query with full-text search on the leftover
+    // words, which FTS5 can't express since the operators are questions about columns.
     let (_, now) = pikos_db::now_local_parts();
     let parsed = pikos_core::parse_search_query(&query, now);
     let asked_for_completed = parsed.status == Some(pikos_core::SearchStatus::Done);
@@ -3158,10 +3076,8 @@ async fn search_in(
         let completed = usize::try_from(response.completed_count).unwrap_or(0);
         (response.results, completed)
     };
-    // The data layer has no limit parameter — it returns its own capped set
-    // — so the cap is applied here rather than pushed down. Worth knowing if
-    // a caller passes a large limit expecting more results: it will not get
-    // them, and the fix belongs in search_pages_impl.
+    // The data layer returns its own capped set, so the cap is applied here. A larger limit
+    // won't get more results; that fix belongs in `search_pages_impl`.
     Ok(SearchResults {
         hits: results
             .into_iter()
@@ -3264,9 +3180,6 @@ impl ReadOnlyWorkspace {
         Ok(folders.into_iter().map(folder_of).collect())
     }
 }
-
-// ─── Calendar ────────────────────────────────────────────────────────────────
-
 /// Shared by both handles. A free function rather than a trait: it needs the
 /// pool and nothing else, and two one-line forwarding methods are cheaper to
 /// read than a trait with two implementors.
@@ -3278,9 +3191,9 @@ async fn calendar_range_impl(
     let drawn = pikos_db::list_pages_overlapping_impl(pool, start, end).await?;
     let rules = pikos_db::list_recurrence_rules_impl(pool).await?;
 
-    // Everything the range query returned is drawn. Rule heads gathered below
-    // are *inputs to the expansion*, not blocks — a weekly standup anchored in
-    // March must project onto June without also drawing itself there in March.
+    // Everything the range query returned is drawn. The rule heads gathered below are inputs
+    // to the expansion, not blocks: a standup anchored in March must not draw itself there when
+    // projecting onto June.
     let mut heads: Vec<pikos_db::PageSummary> = Vec::new();
     for rule in &rules {
         let known = drawn
@@ -3290,16 +3203,14 @@ async fn calendar_range_impl(
         if known {
             continue;
         }
-        // Sequential `get_page` rather than one `WHERE id IN (…)`: rule counts
-        // are in the tens, and a variadic IN builder is more code than it saves.
+        // Sequential `get_page`: rule counts are in the tens, and a variadic IN costs more code.
         if let Some(page) = pikos_db::get_page(pool, &rule.page_id).await? {
             heads.push(page_summary_of(page));
         }
     }
 
-    // Gathered by rule, never by date range. An override moved out of the
-    // visible week still has to suppress the slot it came from, and a range
-    // query keyed on where it moved *to* misses it — leaving a ghost behind.
+    // By rule, never by date range: an override moved out of the visible week must still
+    // suppress its original slot, which a range query on where it moved to misses.
     let rule_ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
     let overrides = pikos_db::list_page_schedules_for_rules_impl(pool, &rule_ids).await?;
 
@@ -3341,10 +3252,7 @@ async fn calendar_range_impl(
         })
         .collect();
 
-    // The expansion window runs to the day *after* the last visible one, since
-    // the engine takes a half-open interval and `end` here is the last day
-    // shown. Without the extra day, the final column of a week would never show
-    // a recurring occurrence.
+    // One day past the last visible, since the engine takes a half-open interval.
     let (Some(_), Some(to)) = (parse_local_iso(start), parse_local_iso(end).map(next_day)) else {
         return Err(WorkspaceError::InvalidInput {
             message: format!("calendar range needs two YYYY-MM-DD dates, got {start} and {end}"),
@@ -3473,13 +3381,12 @@ async fn filtered_search(
         let folders = pikos_db::list_folders_impl(pool).await?;
         match pikos_db::fuzzy_match_folder(name, &folders) {
             Some(folder) => filter.folder_id = Some(serde_json::Value::String(folder.id.clone())),
-            // No folder row backs the inbox — it is the pages with no folder at
-            // all.
+            // No folder row backs the inbox: it is the pages with no folder.
             None if name.eq_ignore_ascii_case("inbox") => {
                 filter.folder_id = Some(serde_json::Value::Null)
             }
-            // A name nothing matches narrows to nothing. Returning the
-            // unfiltered set would quietly answer a different question.
+            // A name nothing matches narrows to nothing; the unfiltered set answers another
+            // question.
             None => return Ok(Vec::new()),
         }
     }
@@ -3493,9 +3400,8 @@ async fn filtered_search(
     }
     filter.scheduled_after = parsed.due_from.clone();
     filter.scheduled_before = parsed.due_to.clone();
-    // A date bound only means anything for a scheduled page, and asking for a
-    // schedule outright is what stops unscheduled rows surviving the NULL
-    // comparison.
+    // A date bound needs a scheduled page; requiring one stops unscheduled rows surviving the
+    // NULL comparison.
     if parsed.scheduled || parsed.due_from.is_some() || parsed.due_to.is_some() {
         filter.has_schedule = Some(true);
     }
@@ -3556,11 +3462,8 @@ fn summary_as_hit(page: pikos_db::PageSummary) -> pikos_db::SearchResult {
         tags: page.tags,
         is_recurring: page.is_recurring,
         schedule_locked: page.schedule_locked,
-        // The subtitle twice, because the two fields mean different things and
-        // a summary only carries one of them: `subtitle` is the page's own, and
-        // `content_preview` is the first of its body a result list shows. There
-        // is no body excerpt to give here, so the nearest true thing is the
-        // subtitle it already has.
+        // The subtitle fills both fields: a summary carries only one, and with no body excerpt
+        // to give, the subtitle is the nearest true thing for `content_preview`.
         content_preview: page.subtitle.clone().unwrap_or_default(),
         subtitle: page.subtitle,
     }

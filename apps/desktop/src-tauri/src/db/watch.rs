@@ -15,26 +15,21 @@ use tauri::{AppHandle, Emitter};
 const EXTERNAL_CHANGE_EVENT: &str = "workspace:external-change";
 const DEBOUNCE: Duration = Duration::from_millis(250);
 
-/// The background sync loop writes through the same workspace file this watcher
-/// observes — even a no-change poll stamps `sync_calendar.last_synced_at` — so
-/// without a gate every poll would emit an external-change and reload the frontend.
-/// The sync driver brackets each pass with [`suppress_begin`]/[`suppress_end`] (it
-/// emits its own signal when a pass actually changed page data). A pass of any
-/// length is covered for its full duration, plus a short trailing window for writes
-/// flushing just after. Inside the bracket the change counter tells another
-/// process's write from the pass's own, so a CLI write landing mid-pass still emits.
+/// The background sync loop writes the file this watcher observes, even on a no-change poll
+/// (it stamps `sync_calendar.last_synced_at`), so without a gate every poll would reload the
+/// frontend. The driver brackets each pass with [`suppress_begin`]/[`suppress_end`] and emits
+/// its own signal when a pass changed page data. Inside the bracket the change counter tells
+/// another process's write from the pass's own, so a CLI write mid-pass still emits.
 static SUPPRESS_DEPTH: AtomicU32 = AtomicU32::new(0);
-/// Trailing debounce deadline armed by [`suppress_end`]; covers writes still
-/// flushing just after the bracket closes.
+/// Trailing debounce deadline armed by [`suppress_end`], for writes flushing after the bracket closes.
 static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
-/// Open the suppression bracket (pass start). Balanced by [`suppress_end`].
+/// Opens the suppression bracket. Balanced by [`suppress_end`].
 pub fn suppress_begin() {
     SUPPRESS_DEPTH.fetch_add(1, Ordering::Relaxed);
 }
 
-/// Close the bracket (pass end), arming a short trailing window first so no echo
-/// leaks in the gap before the depth drops.
+/// Closes the bracket, arming the trailing window first so no echo leaks before the depth drops.
 pub fn suppress_end(tail: Duration) {
     SUPPRESS_UNTIL_MS.store(now_ms() + tail.as_millis() as u64, Ordering::Relaxed);
     SUPPRESS_DEPTH.fetch_sub(1, Ordering::Relaxed);
@@ -136,9 +131,7 @@ fn watch(db_path: &str, pool: &SqlitePool, mut emit: impl FnMut()) -> notify::Re
     Ok(())
 }
 
-/// Event-classification + debounce pump. Extracted so tests can drive it with
-/// a real notify watcher (or synthetic events) and an arbitrary emit closure,
-/// without needing a Tauri AppHandle.
+/// Event classification and debounce, taking an emit closure so tests need no `AppHandle`.
 fn pump<F: FnMut()>(
     rx: &Receiver<notify::Result<Event>>,
     prefix: &str,
@@ -209,8 +202,7 @@ mod tests {
         })
     }
 
-    /// Drive the pump on a worker thread; return the join handle + a count of
-    /// emits via the supplied Arc<Mutex<u32>>.
+    /// Drives the pump on a worker thread and counts emits in the supplied counter.
     fn spawn_pump(
         rx: Receiver<notify::Result<Event>>,
         prefix: String,
@@ -452,7 +444,6 @@ mod tests {
         let (h, count) = spawn_pump(rx, "default.sqlite".into(), Duration::from_millis(50));
 
         let db = PathBuf::from("/tmp/whatever/default.sqlite");
-        // Burst of 5 modify events on the db file.
         for _ in 0..5 {
             tx.send(synthetic(
                 EventKind::Modify(notify::event::ModifyKind::Any),
@@ -460,7 +451,6 @@ mod tests {
             ))
             .unwrap();
         }
-        // Wait past the debounce window so the pump emits.
         thread::sleep(Duration::from_millis(200));
         drain(tx);
         h.join().unwrap();
@@ -490,16 +480,13 @@ mod tests {
         assert_eq!(*count.lock().unwrap(), 0);
     }
 
-    /// End-to-end against a real notify watcher: write to the workspace file
-    /// and confirm an emit happens; touch an unrelated file and confirm no
-    /// extra emit. This is the closest auto-verifiable proxy for the GUI
-    /// live-refresh smoke test (which requires a Tauri AppHandle).
+    /// End to end against a real notify watcher: a write to the workspace file emits, and an
+    /// unrelated file does not.
     #[test]
     fn real_notify_watcher_fires_on_db_writes_only() {
         let dir = tempdir_for("e2e");
         let db = dir.join("default.sqlite");
         let other = dir.join("readme.txt");
-        // Seed both files.
         fs::write(&db, b"seed").unwrap();
         fs::write(&other, b"seed").unwrap();
 
@@ -511,7 +498,6 @@ mod tests {
 
         let (h, count) = spawn_pump(rx, "default.sqlite".into(), Duration::from_millis(150));
 
-        // Let the watcher settle, then touch the db file.
         thread::sleep(Duration::from_millis(50));
         fs::write(&db, b"changed").unwrap();
         thread::sleep(Duration::from_millis(400));
@@ -521,7 +507,6 @@ mod tests {
             "expected at least one emit after touching the db file (got {after_db})",
         );
 
-        // Touch unrelated file; emit count must not move.
         fs::write(&other, b"changed").unwrap();
         thread::sleep(Duration::from_millis(400));
         let after_other = *count.lock().unwrap();

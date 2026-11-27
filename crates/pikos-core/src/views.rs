@@ -3,20 +3,14 @@
 //! Port of the membership, ordering and grouping halves of
 //! `packages/core/src/pages/pageFilters.ts` and `packages/core/src/pages/upcoming.ts`.
 //!
-//! These two views are not lists with a filter on them; their order is derived
-//! from the schedule and rendered as sections, which is why a user-chosen sort
-//! has nothing to act on in either. What is ported here is exactly the part that
-//! decides membership and order. What is *not* ported is the day label — the
-//! TypeScript builds "Today" / "Tomorrow" / "Thu, Aug 27" with
-//! `toLocaleDateString`, and a Rust copy of that would be a second locale
-//! implementation that disagrees with the platform's. Each section carries its
-//! `YYYY-MM-DD` instead and the shell writes the label in the reader's own
-//! locale.
+//! Their order is derived from the schedule and rendered as sections, so a user-chosen sort
+//! has nothing to act on. Only membership and order are ported. The day label is not: a Rust
+//! copy of the TypeScript `toLocaleDateString` would be a second locale implementation that
+//! disagrees with the platform's, so each section carries its `YYYY-MM-DD` and the shell
+//! writes the label.
 //!
-//! Everything takes "today" and "now" as parameters rather than reading the
-//! clock. Both are boundaries a test has to be able to stand on: "overdue"
-//! depends on the day and the order within a section on the minute, and a suite
-//! that reads the machine clock passes all day and fails at 23:59.
+//! Everything takes "today" and "now" as parameters rather than reading the clock, so a test
+//! can stand on either boundary.
 
 use crate::dates::{format_date_only, is_all_day_iso, parse_local_iso};
 use chrono::{Duration, NaiveDateTime};
@@ -27,11 +21,9 @@ pub const UPCOMING_WINDOW_DAYS: i64 = 7;
 /// The day part of a schedule string, for both `YYYY-MM-DD` and
 /// `YYYY-MM-DDTHH:MM:SS`.
 ///
-/// A slice rather than a parse: these comparisons are lexicographic on purpose.
-/// `YYYY-MM-DD` sorts and compares correctly as text, so a day-window check
-/// needs no calendar arithmetic and cannot be wrong about a date it could not
-/// parse. Returns the whole string when it is shorter than a date, so a
-/// malformed value fails a window test rather than panicking on a slice.
+/// A slice, not a parse: `YYYY-MM-DD` compares correctly as text, so a window check needs no
+/// calendar arithmetic. Returns the whole string when it is shorter than a date, so a malformed
+/// value fails a window test rather than panicking.
 pub fn day_key(iso: &str) -> &str {
     if iso.len() >= 10 && iso.is_char_boundary(10) {
         &iso[..10]
@@ -42,9 +34,7 @@ pub fn day_key(iso: &str) -> &str {
 
 /// The last day Upcoming reaches, inclusive.
 ///
-/// Built by adding days to a date rather than by adding 6 × 86,400 seconds: a
-/// DST boundary inside the window is a day that is not 24 hours long, and the
-/// seconds form would land the window's end on the wrong date across one.
+/// Built by adding days to a date, not 6 × 86,400 seconds: a DST day isn't 24 hours long.
 pub fn upcoming_window_end(today: &str) -> Option<String> {
     let start = parse_local_iso(today)?;
     Some(format_date_only(
@@ -54,9 +44,8 @@ pub fn upcoming_window_end(today: &str) -> Option<String> {
 
 /// Whether a page belongs to Today by its schedule alone.
 ///
-/// Today and earlier — the view is "what is due", and something that slipped is
-/// still due. Says nothing about completion; a caller composes this with
-/// [`crate::page::is_open`].
+/// Today and earlier, since something that slipped is still due. Says nothing about
+/// completion; compose with [`crate::page::is_open`].
 pub fn belongs_to_today(scheduled_start: Option<&str>, today: &str) -> bool {
     match scheduled_start {
         Some(start) => day_key(start) <= today,
@@ -66,16 +55,10 @@ pub fn belongs_to_today(scheduled_start: Option<&str>, today: &str) -> bool {
 
 /// Whether a page belongs to Upcoming by its schedule alone.
 ///
-/// The window opens at today, not tomorrow: the view answers "what is coming",
-/// and one that starts tomorrow leaves the reader wondering where today went.
-/// It does not reach back past today — chasing what already slipped is the
-/// Today view's job, and an Upcoming list that also carried the backlog would
-/// be the same list twice.
+/// The window opens at today and doesn't reach back: the overdue backlog is Today's job.
 ///
-/// So a page dated today is in *both* views, deliberately. They are asking two
-/// different questions of it: Today asks what is due, Upcoming asks what the
-/// week holds, and today is the first day of the week ahead. Only the overdue
-/// backlog is exclusive to Today.
+/// A page dated today is in both views on purpose: Today asks what is due, Upcoming asks what
+/// the week holds, and today is its first day.
 pub fn belongs_to_upcoming(scheduled_start: Option<&str>, today: &str) -> bool {
     let Some(start) = scheduled_start else {
         return false;
@@ -89,24 +72,17 @@ pub fn belongs_to_upcoming(scheduled_start: Option<&str>, today: &str) -> bool {
 
 /// Whether a page was scheduled on an earlier day than `today`.
 ///
-/// Days, never the passing moment, so a page set for 9am is still under Today
-/// at 2pm and reads as late only through its own red time. Grouping on the
-/// moment moved a page to Overdue the minute its time passed, which by the
-/// afternoon filled the section with the day's own plan and left it saying
-/// nothing about what needs rescheduling.
+/// Days, never the passing moment: a page set for 9am stays under Today at 2pm. Grouping on
+/// the moment would fill Overdue with the day's own plan.
 pub fn is_overdue(scheduled_start: &str, today: &str) -> bool {
     day_key(scheduled_start) < today
 }
 
 /// Where a page sorts within a date-grouped section, soonest first.
 ///
-/// An all-day page sorts at the last instant of its day, after that day's
-/// timed pages and before the next day's midnight, on every day including
-/// today.
+/// An all-day page sorts at the last instant of its day, after that day's timed pages.
 ///
-/// An unparseable value sorts at `now`, which keeps it visible in the middle of
-/// the list rather than pinning it to the top or the bottom, where it would
-/// look deliberate.
+/// An unparseable value sorts at `now`, mid-list, where it won't look deliberate.
 pub fn schedule_sort_key(scheduled_start: &str, now: &NaiveDateTime) -> NaiveDateTime {
     let Some(start) = parse_local_iso(scheduled_start) else {
         return *now;
@@ -139,15 +115,10 @@ pub struct UpcomingDay<T> {
 
 /// Split Today's pages into overdue and due-today, each in schedule order.
 ///
-/// Generic over the row type with a borrowing accessor rather than taking a
-/// concrete page struct: this crate sits below the one that defines a page, and
-/// a shape declared here for the grouping to consume would be a second page
-/// type to keep in step. The caller passes what it already has.
+/// Generic over the row type because this crate sits below the one that defines a page.
 ///
-/// The sort is stable, which is load-bearing rather than incidental: two pages
-/// sharing a scheduled time keep the order they arrived in, and that order is
-/// the caller's `sort_order`. An unstable sort would shuffle same-time rows on
-/// every redraw.
+/// The sort is stable on purpose: pages sharing a scheduled time keep the caller's
+/// `sort_order`, and an unstable sort would shuffle them on every redraw.
 pub fn group_today<T>(
     pages: Vec<T>,
     today: &str,
@@ -173,13 +144,10 @@ pub fn group_today<T>(
 /// Group Upcoming's pages by scheduled day, ascending, each day in schedule
 /// order.
 ///
-/// Only days holding something get a section. An empty day header says nothing
-/// the next populated one does not already say, and in a long list it is a row
-/// of furniture between the reader and what they came for.
+/// Only days holding something get a section.
 ///
-/// A page with no schedule cannot be placed on a day and is dropped.
-/// [`belongs_to_upcoming`] already excludes those, so this is the second of two
-/// locks on the same door rather than the only one.
+/// A page with no schedule can't be placed on a day and is dropped; [`belongs_to_upcoming`]
+/// already excludes those.
 pub fn group_upcoming<T>(
     pages: Vec<T>,
     now: &NaiveDateTime,

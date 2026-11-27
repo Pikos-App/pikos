@@ -69,11 +69,8 @@ pub async fn save_asset(app: tauri::AppHandle, source_path: String) -> AppResult
     save_asset_into_dir(&app_data.join(ASSET_DIR), &source_path).await
 }
 
-/// The filesystem core of [`save_asset`], split out from the `AppHandle` /
-/// `app_data_dir()` plumbing so the validate→copy→relative-name behaviour is
-/// testable against a temp directory without a Tauri runtime. Validates the
-/// source exists and is an allowed image type, then copies it to
-/// `<assets_dir>/<uuid>.<ext>` and returns its stored path.
+/// [`save_asset`] against any directory, so it runs without a Tauri runtime. Fails unless the
+/// source exists and is an allowed image type.
 async fn save_asset_into_dir(assets_dir: &Path, source_path: &str) -> AppResult<String> {
     let source = Path::new(source_path);
 
@@ -112,8 +109,7 @@ pub async fn save_asset_bytes(
     save_bytes_into_dir(&app_data.join(ASSET_DIR), data, &ext).await
 }
 
-/// The filesystem core of [`save_asset_bytes`], split out for the same reason as
-/// [`save_asset_into_dir`].
+/// [`save_asset_bytes`] against any directory.
 async fn save_bytes_into_dir(assets_dir: &Path, data: Vec<u8>, ext: &str) -> AppResult<String> {
     let ext = validate_image_ext(ext)?;
     std::fs::create_dir_all(assets_dir)?;

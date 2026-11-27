@@ -1,8 +1,6 @@
-//! Tauri-free pool opener + workspace bootstrap. Lifted from the desktop app's
-//! db/mod.rs, minus the app-only bits (notification-log prune, path
-//! canonicalisation, DbState/Tauri). Opens with the same pragmas the app uses so
-//! concurrent access is safe, runs the sqlx migrations, backfills content_text,
-//! and rebuilds the FTS index when its definition or the derived text changes.
+//! Tauri-free pool opener and workspace bootstrap. Opens with the pragmas the app uses so
+//! concurrent access is safe, runs the sqlx migrations, backfills `content_text`, and rebuilds
+//! the FTS index when its definition or the derived text changes.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,8 +13,7 @@ use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::error::{AppError, AppResult};
 
-/// The embedded migration set, shared by `open_pool` (to run them) and the
-/// pre-migration backup check (to read the highest known version).
+/// The embedded migration set, run by `open_pool` and read by the pre-migration backup check.
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 /// Bump when what the app derives from a page's text changes: how `content_text` is derived, or
@@ -25,45 +22,38 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 /// rebuilds when its definition changes.
 const DERIVED_TEXT_VERSION: i64 = 4;
 
-/// How many pre-migration snapshots to retain. Older ones are pruned so they
-/// don't accumulate; recovery only ever needs the most recent few.
+/// How many pre-migration snapshots to retain; recovery only needs the most recent few.
 const MAX_MIGRATION_BACKUPS: usize = 3;
 
-/// UTC, millisecond precision, trailing Z — the canonical timestamp format for
-/// created_at / updated_at across the workspace.
+/// UTC, millisecond precision, trailing Z: the format for `created_at` and `updated_at`.
 pub fn now_iso() -> String {
     crate::fresh::now()
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string()
 }
 
-/// Local wall-clock, no timezone suffix — the storage format for user-facing
-/// instants that are date-compared against the local day (`scheduled_start`,
-/// `completed_at`). Mirrors the frontend's `nowLocalISO()`
-/// (`yyyy-MM-dd'T'HH:mm:ss`). Using `now_iso()` (UTC) here instead would make a
-/// `completed_at.slice(0,10) === localToday()` comparison fail whenever the UTC
-/// date differs from the local date (i.e. for much of every day off-UTC).
+/// Local wall-clock, no timezone suffix: the format for user-facing instants date-compared
+/// against the local day (`scheduled_start`, `completed_at`). Mirrors the frontend's
+/// `nowLocalISO()`. UTC here would fail that comparison whenever the UTC date differs from the
+/// local one, which is much of every day off-UTC.
 pub fn now_local_iso() -> String {
     WallClock::timed(local_now()).format()
 }
 
-/// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
-/// against. Local for the same reason as [`now_local_iso`].
+/// Today's local date, `YYYY-MM-DD`, the key occurrence dates are compared against. Local for
+/// the same reason as [`now_local_iso`].
 pub fn today_local() -> String {
     WallClock::all_day(local_now().date()).format()
 }
 
 /// Today's local date and the local moment, from a single reading of the clock.
 ///
-/// Two calls to the clock are two different answers, and the date views need
-/// them to agree: the partition asks "has this slipped, as of now" and the sort
-/// asks "where does this sit relative to now". Taken a microsecond apart across
-/// a second boundary, a page can satisfy neither — it is sorted as though it
-/// were still ahead and filed as though it had passed. One reading cannot
-/// disagree with itself.
+/// The date views need the partition ("has this slipped, as of now") and the sort ("where does
+/// this sit relative to now") to agree. Two clock readings a microsecond apart across a second
+/// boundary can sort a page as still ahead and file it as passed.
 ///
-/// The date half is formatted exactly as [`today_local`] formats it, so the
-/// list's membership query and its grouping cannot land on different days.
+/// The date half is formatted as [`today_local`] formats it, so the membership query and the
+/// grouping can't land on different days.
 pub fn now_local_parts() -> (String, chrono::NaiveDateTime) {
     let now = local_now();
     (WallClock::all_day(now.date()).format(), now)
@@ -75,16 +65,13 @@ fn local_now() -> chrono::NaiveDateTime {
         .naive_local()
 }
 
-/// The device's IANA zone, resolved once per process — the lookup reads OS config
-/// and one caller runs inside the detach transaction, where a per-value lookup
-/// would widen the write lock under a racing editor write. An OS zone chrono-tz
-/// can't parse falls back to UTC rather than being stored raw: an unparseable
-/// stamp is unusable by every layer that later reads it.
+/// The device's IANA zone, resolved once per process: the lookup reads OS config, and one
+/// caller runs inside the detach transaction, where a per-value lookup would widen the write
+/// lock. An OS zone chrono-tz can't parse falls back to UTC, since an unparseable stamp is
+/// unusable by every layer that reads it.
 ///
-/// This crate's own tests pin UTC (the corpus convention), so no conversion
-/// assertion depends on the machine that ran it. `cfg(test)` does **not** reach a
-/// dependent crate's tests — those see the real zone, and must derive any
-/// expectation from this function rather than a literal.
+/// This crate's tests pin UTC. `cfg(test)` doesn't reach a dependent crate's tests, which see
+/// the real zone and must derive expectations from this function.
 pub fn device_zone() -> chrono_tz::Tz {
     #[cfg(test)]
     {
@@ -103,8 +90,7 @@ pub fn device_zone() -> chrono_tz::Tz {
     }
 }
 
-/// Highest migration version this binary carries (down-migrations ignored;
-/// there are none today, but filter defensively).
+/// Highest migration version this binary carries, down-migrations ignored.
 pub(crate) fn embedded_migration_max() -> i64 {
     MIGRATOR
         .iter()
@@ -118,12 +104,9 @@ pub(crate) fn embedded_migration_max() -> i64 {
 /// the highest applied to the workspace at `path` (`None` when the file has no
 /// `_sqlx_migrations` table yet).
 ///
-/// [`open_pool`] migrates on connect, so a binary that does not own the workspace
-/// — the CLI shares one file with the installed desktop app — silently upgrades
-/// the schema and leaves the app unable to open it, since the migrator fails
-/// closed on the version it has never heard of. Such a caller compares these two
-/// first and refuses rather than migrate. Opens without `create_if_missing` and
-/// without running the migrator, so it never writes.
+/// [`open_pool`] migrates on connect, so a binary that doesn't own the workspace (the CLI
+/// shares one file with the desktop app) would upgrade the schema and leave the app unable to
+/// open it. Such a caller compares these two first and refuses. Never writes.
 pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
@@ -155,11 +138,10 @@ pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
 
 /// Close `pool` and return only once no connection to its file is left open.
 ///
-/// `SqlitePool::close` can return with one still open. A connection being handed back while it
-/// runs, as one of [`open_pool`]'s background tasks does, can join the idle queue after `close` last
-/// emptied it, and it then stays open for as long as anything holds the pool. Code that replaces or
-/// deletes the file next, a restore or a wipe, would race it, so it closes with this instead. Under
-/// load the backup tests caught it: the restore found the old file still locked.
+/// `SqlitePool::close` can return with one still open: a connection handed back while it runs,
+/// as one of [`open_pool`]'s background tasks does, can join the idle queue after `close` last
+/// emptied it and stay open while anything holds the pool. Code that replaces or deletes the
+/// file next, a restore or a wipe, closes with this instead.
 pub async fn close_pool(pool: &SqlitePool) {
     pool.close().await;
     while pool.size() > 0 {
@@ -168,9 +150,8 @@ pub async fn close_pool(pool: &SqlitePool) {
     }
 }
 
-/// Open (or create) the SQLite workspace at `path`, apply migrations, and run
-/// first-launch housekeeping. WAL + busy_timeout make concurrent access with
-/// the desktop app safe.
+/// Opens or creates the SQLite workspace at `path`, applies migrations, and runs first-launch
+/// housekeeping.
 pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     open_pool_checkpointing(path, Checkpoints::Inline).await
 }
@@ -285,11 +266,11 @@ pub(crate) const MIGRATED_PAST_MARK: &str = "pikos: migrated past this build";
 
 /// Refuse every write on `conn` once a newer Pikos has migrated the workspace past this build.
 ///
-/// The open refuses a newer file, but a process that opened it first, a long-lived MCP server or
-/// the app, would go on writing with the old schema in mind. So each connection checks when the
-/// pool hands it out, and on a newer file installs a temp trigger on every table that aborts the
-/// write. Temp triggers belong to this connection alone, cost nothing until a newer build has
-/// migrated, and reach writers that issue raw SQL, which a check in each writer would not.
+/// The open refuses a newer file, but a process that opened it first, a long-lived MCP server
+/// or the app, would keep writing with the old schema. So each connection checks when the pool
+/// hands it out, and on a newer file installs a temp trigger on every table that aborts the
+/// write. Temp triggers are per connection, cost nothing until a newer build has migrated, and
+/// reach raw-SQL writers, which a check in each writer wouldn't.
 ///
 /// A write already waiting on the migration's lock when it commits gets through: the check runs
 /// before the statement, not inside it.
@@ -331,19 +312,16 @@ async fn refuse_writes_once_migrated_past(conn: &mut SqliteConnection) -> Result
     Ok(())
 }
 
-/// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the
-/// workspace is damaged and names how; `None` means the file is structurally
-/// fine and whatever went wrong upstream is the real error.
+/// `PRAGMA quick_check` on the file, if it can be read at all. `Some` means the workspace is
+/// damaged and names how; `None` means the file is fine and the upstream error is the real one.
 ///
-/// Every way `open_pool` can fail arrives as a sqlx error whose `Display` is a
-/// SQL fragment, and the two causes underneath want opposite answers: a damaged
-/// file is recoverable from the backups directory and never by retrying, while
-/// anything else is a bug to report. Only the file can tell them apart, which is
-/// why this runs on the failure path rather than the open path.
+/// Every way `open_pool` can fail arrives as a sqlx error whose `Display` is a SQL fragment,
+/// and the two causes want opposite answers: a damaged file is recoverable from the backups
+/// directory, anything else is a bug to report. Only the file tells them apart, so this runs
+/// on the failure path.
 ///
-/// Deliberately `quick_check` and not `integrity_check`: the full check walks
-/// every index on what may be a large workspace, and this runs at a moment when
-/// the user is already staring at a window that will not open.
+/// `quick_check` rather than `integrity_check`, which walks every index of a possibly large
+/// workspace while the user stares at a window that won't open.
 async fn integrity_failure(path: &str) -> Option<String> {
     if !std::path::Path::new(path).exists() {
         return None;
@@ -367,8 +345,7 @@ async fn integrity_failure(path: &str) -> Option<String> {
     match result {
         Ok(row) if row == "ok" => None,
         Ok(row) => Some(row),
-        // The check itself could not run, which on a readable file means the
-        // header or the page structure is unreadable.
+        // On a readable file, the check failing to run means an unreadable header or page structure.
         Err(e) => Some(e.to_string()),
     }
 }
@@ -451,9 +428,8 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         )
         .await?;
 
-    // Snapshot the workspace before applying any pending migrations.
-    // Migrations are forward-only and some are lossy, so a bad release can only
-    // be recovered by restoring the pre-migration file.
+    // Migrations are forward-only and some are lossy, so only the pre-migration file recovers a
+    // bad release.
     maybe_backup_before_migrations(&pool, path).await?;
 
     MIGRATOR
@@ -497,19 +473,13 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
     Ok(pool)
 }
 
-/// Snapshot the DB file before applying pending migrations, so a misbehaving
-/// release can be recovered by restoring the file. No-ops on the cases where a
-/// snapshot would be pointless: a brand-new workspace (no `_sqlx_migrations`
-/// table yet), an already-up-to-date workspace (no pending migrations), or an
-/// empty workspace (no pages or folders to lose).
-///
-/// Lives in the shared `open_pool` so the CLI gets the same protection — it
-/// mutates the same file. Downgrade safety is handled separately: the sqlx
-/// migrator fails closed if the workspace is newer than the binary.
+/// Snapshots the DB file before pending migrations. No-ops where a snapshot would be
+/// pointless: a brand-new workspace, an up-to-date one, or an empty one. Shared by `open_pool`
+/// so the CLI, which mutates the same file, gets the same protection.
 async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppResult<()> {
     let known_max = embedded_migration_max();
 
-    // No `_sqlx_migrations` table => this file was just created. Nothing to back up.
+    // No migrations table: the file was just created.
     let migrations_table_exists: bool = sqlx::query_scalar::<_, i64>(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')",
     )
@@ -520,7 +490,6 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
         return Ok(());
     }
 
-    // Up to date => no pending migrations => no risk worth snapshotting.
     let applied_max: i64 =
         sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
             .fetch_one(pool)
@@ -530,7 +499,6 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
         return Ok(());
     }
 
-    // Empty workspace => nothing to lose.
     let has_data: bool = sqlx::query_scalar::<_, i64>(
         "SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM folders)",
     )
@@ -544,10 +512,8 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
     backup_for_migration(pool, path, applied_max, known_max).await
 }
 
-/// VACUUM INTO a timestamped snapshot under `<db parent>/backups/`, then prune
-/// to the newest [`MAX_MIGRATION_BACKUPS`]. VACUUM INTO yields a consistent
-/// single-file copy even with the WAL open, avoiding the torn-copy risk of a raw
-/// `fs::copy` on a live database.
+/// `VACUUM INTO` a timestamped snapshot under `<db parent>/backups/`, then prune to the newest
+/// [`MAX_MIGRATION_BACKUPS`]. Unlike a raw `fs::copy`, it is consistent with the WAL open.
 async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64) -> AppResult<()> {
     let backup_dir = Path::new(path)
         .parent()
@@ -555,8 +521,7 @@ async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64)
         .join("backups");
     std::fs::create_dir_all(&backup_dir)?;
 
-    // Timestamp first in the name (filesystem-safe, no colons) so a lexical sort
-    // is chronological for pruning. Millisecond precision avoids collisions.
+    // Timestamp first, with no colons, so a lexical sort is chronological for pruning.
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
     let dest = backup_dir.join(format!("pre-migration-{ts}-v{from}-to-v{to}.sqlite"));
 
@@ -569,8 +534,7 @@ async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64)
     Ok(())
 }
 
-/// Delete all but the newest `keep` `pre-migration-*.sqlite` files in `dir`.
-/// Best-effort: a failed read/remove is logged via the caller, never fatal — a
+/// Deletes all but the newest `keep` `pre-migration-*.sqlite` files in `dir`. Best-effort: a
 /// stale extra backup is harmless.
 fn prune_migration_backups(dir: &Path, keep: usize) {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -587,13 +551,12 @@ fn prune_migration_backups(dir: &Path, keep: usize) {
     if snaps.len() <= keep {
         return;
     }
-    snaps.sort(); // timestamp-first names => ascending == oldest-first
+    snaps.sort();
     for old in &snaps[..snaps.len() - keep] {
         let _ = std::fs::remove_file(old);
     }
 }
 
-/// Re-extract plain text from Tiptap JSON for any rows missing content_text.
 /// Table statistics for the query planner, gathered when a table has none or has changed a lot
 /// since, from a sample bounded by `ANALYSIS_LIMIT` rows per index. Without them the planner
 /// guesses every table is the same size and joined 3,500 recurrence rules to half a million
@@ -615,6 +578,7 @@ pub async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
 /// half a million pages.
 const ANALYSIS_LIMIT: u32 = 400;
 
+/// Re-extracts plain text from the body of any page missing `content_text`.
 async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
     let body = crate::page_chunks::body_sql("pages.id");
     // The terms of `idx_pages_untexted`, so the planner reads that index.
@@ -665,11 +629,10 @@ async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
 /// Plain text → a Tiptap JSON document, one paragraph per line, each web address a link — the
 /// doc the editor produces for pasted text.
 ///
-/// Paired with [`extract_text_from_tiptap`], and here rather than at either
-/// caller because the round trip has to hold: the reconciler hashes a seeded
-/// description through the extractor to decide whether the body is still
-/// pristine, so a builder that drifted from the projection would classify every
-/// synced page as user-edited. Links are marks, so they leave the text alone.
+/// Paired with [`extract_text_from_tiptap`] because the round trip has to hold: the reconciler
+/// hashes a seeded description through the extractor to decide whether the body is still
+/// pristine, so a drifting builder would classify every synced page as user-edited. Links are
+/// marks, so they leave the text alone.
 pub fn build_tiptap_doc(text: &str) -> String {
     serde_json::json!({ "type": "doc", "content": text_paragraphs(text) }).to_string()
 }
@@ -863,8 +826,8 @@ fn addresses(text: &str) -> Vec<(usize, usize)> {
     found
 }
 
-/// Recursively extract plain text from a Tiptap JSON document. Mirrors the
-/// TypeScript `extractText()` so FTS content_text stays in sync.
+/// Extracts plain text from a Tiptap JSON document, mirroring the TypeScript `extractText()` so
+/// `content_text` stays in sync.
 pub fn extract_text_from_tiptap(content: &str) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
@@ -920,8 +883,8 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
     }
 }
 
-/// In-memory pool with migrations applied, for tests. Single connection so every
-/// query hits the same `:memory:` DB; foreign keys on to match production.
+/// In-memory pool with migrations applied, for tests. One connection, so every query hits the
+/// same `:memory:` database.
 #[cfg(any(test, feature = "test-support"))]
 pub async fn test_pool() -> SqlitePool {
     test_pool_on(crate::sql_functions::Clock::System).await
@@ -946,14 +909,10 @@ pub async fn test_pool_on(clock: crate::sql_functions::Clock) -> SqlitePool {
     pool
 }
 
-/// A real on-disk WAL pool (max 5 connections, production pragmas) for
-/// concurrency tests. The `:memory:`, single-connection [`test_pool`] cannot
-/// exhibit multi-writer contention — there is no second connection and no WAL —
-/// so it can never reproduce the `SQLITE_BUSY_SNAPSHOT` (517) that a real pool
-/// hits when two writers race. The temp DB file (+ `-wal`/`-shm` sidecars) is
-/// deleted when the returned guard drops. Test-only (not exported via the
-/// `test-support` feature) — only pikos-db's own concurrency tests need a real
-/// multi-connection pool.
+/// A real on-disk WAL pool (up to 5 connections, production pragmas) for concurrency tests.
+/// The single-connection [`test_pool`] has no second writer and no WAL, so it can't reproduce
+/// the `SQLITE_BUSY_SNAPSHOT` two racing writers hit. The temp file and its sidecars are deleted
+/// when the returned guard drops. Not exported via `test-support`.
 #[cfg(test)]
 pub struct TempWalDb {
     pub pool: SqlitePool,
@@ -979,7 +938,6 @@ impl Drop for TempWalDb {
 #[cfg(test)]
 pub async fn wal_test_pool() -> TempWalDb {
     use std::sync::atomic::{AtomicU64, Ordering};
-    // Unique per test within a process; no rand/clock needed.
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let path =
@@ -1079,15 +1037,13 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
     Ok(())
 }
 
-/// A connection date old enough that the synced head-floor never binds, so a
-/// fixture using any plausible occurrence date keeps testing what it meant to.
-/// Tests that exercise the floor itself pass their own date.
+/// A connection date old enough that the synced head-floor never binds. Tests of the floor pass
+/// their own.
 #[cfg(any(test, feature = "test-support"))]
 pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00.000Z";
 
-/// Links an existing test page to a synced calendar (a `page_sync` row), creating
-/// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
-/// detached | tombstoned.
+/// Links an existing test page to a synced calendar (a `page_sync` row), creating a shared
+/// throwaway `sync_account` on first use. `sync_state` is active, detached or tombstoned.
 #[cfg(any(test, feature = "test-support"))]
 pub async fn insert_test_page_sync(
     pool: &SqlitePool,
@@ -1097,10 +1053,9 @@ pub async fn insert_test_page_sync(
     insert_test_page_sync_connected_at(pool, page_id, sync_state, TEST_CONNECTED_LONG_AGO).await
 }
 
-/// [`insert_test_page_sync`] with an explicit `page_sync.created_at` — the anchor
-/// the head-floor derives from, i.e. when this calendar was connected. Pass the
-/// [`now_iso`] form the reconciler writes (UTC, trailing `Z`): the floor parses it
-/// as an instant, so a local wall-clock string here yields no floor at all.
+/// [`insert_test_page_sync`] with an explicit `page_sync.created_at`, the anchor the head-floor
+/// derives from. Pass the [`now_iso`] form the reconciler writes: the floor parses it as an
+/// instant, so a local wall-clock string yields no floor.
 #[cfg(any(test, feature = "test-support"))]
 pub async fn insert_test_page_sync_connected_at(
     pool: &SqlitePool,

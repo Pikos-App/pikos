@@ -1,6 +1,5 @@
-//! Tests for the sync orchestration that needs no network — `disconnect_account`,
-//! `resync_account`, `refresh_account` — driven by scripted providers.
-//! `connect_caldav` is a live discovery seam, exercised manually.
+//! Tests for the sync orchestration that needs no network (`disconnect_account`,
+//! `resync_account`, `refresh_account`), driven by scripted providers.
 
 use std::cell::RefCell;
 
@@ -18,8 +17,6 @@ use pikos_db::test_pool;
 use super::*;
 use crate::keychain::{CredentialStore, Keychain};
 use crate::test_support::{memory_keychain, page_count, refusing_keychain, MemoryStore};
-
-// ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
 struct OneShot {
     token: String,
@@ -54,13 +51,11 @@ impl CalendarProvider for OneShot {
     }
 }
 
-// ─── tests ──────────────────────────────────────────────────────────────────────
-
 /// A credential that cannot be stored leaves no account behind.
 ///
-/// The row has to be written before the credential, because the keychain key is the account id.
-/// An account left active with an empty keychain polls for ever and says "reconnect needed" on
-/// every pass, which is what a Linux session with no Secret Service daemon produced.
+/// The row is written before the credential because the keychain key is the account id. An
+/// account left active with an empty keychain polls for ever and says "reconnect needed", as a
+/// Linux session with no Secret Service daemon does.
 #[tokio::test]
 async fn a_failed_credential_store_takes_its_new_account_back_out() {
     let pool = test_pool().await;
@@ -193,9 +188,9 @@ async fn account_count(pool: &sqlx::SqlitePool) -> i64 {
 
 /// A CalDAV account connected before the typed URL was reduced is still the same account.
 ///
-/// Every `0.4.0-beta` account is this shape: its identity carries the URL as typed, with no
-/// trailing slash, and a fresh connect now builds one. Reconnecting had to find the dormant
-/// row and revive it, or the server arrives twice and the first copy's pages stay detached.
+/// An account stored before the URL was reduced carries it as typed, with no trailing slash,
+/// and a fresh connect builds one. Reconnecting must find the dormant row and revive it, or
+/// the server arrives twice and the first copy's pages stay detached.
 #[tokio::test]
 async fn a_pre_reduction_identity_reconnects_to_its_own_account() {
     const STORED: &str = "me@example.com · https://caldav.fastmail.com";
@@ -239,8 +234,7 @@ async fn an_unmatched_identity_is_left_as_it_was_typed() {
     assert_eq!(account_count(&pool).await, 1);
 }
 
-/// Two people on one server stay two accounts — the fallback keys on the whole identity,
-/// so a shared host cannot collapse them.
+/// Two people on one server stay two accounts: the fallback keys on the whole identity.
 #[tokio::test]
 async fn one_server_two_users_stays_two_accounts() {
     let pool = test_pool().await;
@@ -267,11 +261,10 @@ async fn one_server_two_users_stays_two_accounts() {
 
 /// A password never reaches the database file.
 ///
-/// The claim the privacy page makes, and what a `strings` sweep over a real workspace is looking
-/// for in the pre-release pass. Asserted against the bytes on disk rather than against a query,
-/// because a credential can arrive there by a column nobody meant to add or by an error string
-/// parked in a row. The WAL counts: it holds pages the main file has not been given yet, and a
-/// sweep that read only `pikos.sqlite` would call a fresh write clean.
+/// The claim the privacy page makes. Asserted against the bytes on disk rather than a query,
+/// because a credential can arrive by a column nobody meant to add or an error string parked
+/// in a row. The WAL counts: it holds pages the main file lacks, so a sweep of `pikos.sqlite`
+/// alone would call a fresh write clean.
 #[tokio::test]
 async fn a_caldav_password_never_lands_in_the_database_file() {
     const PASSWORD: &str = "correct-horse-battery-staple";
@@ -306,8 +299,7 @@ async fn a_caldav_password_never_lands_in_the_database_file() {
         "precondition: the keychain is where it went"
     );
 
-    // Swept with the pool still open. Closing it checkpoints the WAL and unlinks both sidecars,
-    // so a sweep that ran only after the close read the main file and called that the whole proof.
+    // Sweep with the pool open: closing it checkpoints the WAL and unlinks both sidecars.
     let wal = dir.join("pikos.sqlite-wal");
     assert!(
         std::fs::metadata(&wal)
@@ -505,10 +497,8 @@ async fn same_named_calendars_on_two_accounts_keep_their_own_folders_through_a_d
     assert_eq!(status.len(), 1, "the other account stays connected");
 }
 
-// Revoking a Google grant is a network call that can fail — unreachable, already
-// revoked, or (here) no OAuth client in a test build. The account must still go
-// dormant and lose its credential, or a user who can't reach Google could never
-// disconnect.
+// Revoking a Google grant can fail (unreachable, already revoked, no OAuth client in a test
+// build). The account must still go dormant and lose its credential.
 // qa: SYNC-10:4
 #[tokio::test]
 async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
@@ -538,9 +528,8 @@ async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     assert!(backing.get(&acc.id).is_err());
 }
 
-// The wipe deletes the DB, and the account ids in it are the keychain keys — a
-// credential missed here can never be found again, only used. Dormant accounts are
-// swept too: their credential is usually already gone, but this is the last pass.
+// The wipe deletes the DB, and its account ids are the keychain keys, so a credential missed
+// here can never be found again, only used. Dormant accounts are swept too.
 // qa: TRASH-08:3
 #[tokio::test]
 async fn releasing_credentials_clears_every_account_including_dormant_ones() {
@@ -563,8 +552,7 @@ async fn releasing_credentials_clears_every_account_including_dormant_ones() {
         backing.set(&acc.id, "secret-blob").unwrap();
     }
 
-    // The Google revoke fails here (no OAuth client in a test build) and must not
-    // stop the sweep — the same best-effort contract disconnect_account has.
+    // The Google revoke fails here (no OAuth client) and must not stop the sweep.
     release_all_credentials(&pool, Keychain::with_store(Box::new(backing.clone())))
         .await
         .unwrap();
@@ -596,9 +584,8 @@ async fn releasing_credentials_clears_one_whose_account_row_is_gone() {
     );
 }
 
-// A reset deletes every account row, so it has the same one-last-chance property as
-// the wipe: a dormant account never reaches the panel's disconnect path, and once its
-// row is gone nothing holds the id its blob is keyed to.
+// A reset deletes every account row, and a dormant account never reaches the panel's
+// disconnect path, so this is the last chance to release its credential.
 #[tokio::test]
 async fn disconnecting_all_accounts_sweeps_dormant_credentials_too() {
     let pool = test_pool().await;
@@ -645,10 +632,8 @@ async fn disconnecting_all_accounts_sweeps_dormant_credentials_too() {
     );
 }
 
-/// Scripted provider that answers a sync from the cursor it was handed, the way a
-/// real one does — enough to create then re-link a mirror page across a
-/// disconnect/reconnect, and to tell a cursor-less re-enumerate from an
-/// incremental poll. Single-task by construction, so the interior `RefCell` never
+/// Scripted provider that answers a sync from the cursor it was handed, so a test can tell a
+/// cursor-less re-enumerate from an incremental poll. Single-task, so the `RefCell` never
 /// crosses threads.
 struct Scripted {
     full: SyncDelta,
@@ -737,8 +722,8 @@ fn one_event_delta(href: &str, uid: &str, title: &str, token: &str) -> SyncDelta
     }
 }
 
-/// A cursor-less CalDAV backfill: `full_enumerate` set, and its upserts marked the
-/// complete set from `window_start` — the only shape that arms the deletion sweep.
+/// A cursor-less CalDAV backfill: `full_enumerate` set and its upserts marked the complete set
+/// from `window_start`, the only shape that arms the deletion sweep.
 fn backfill(upserts: Vec<UpsertItem>, window_start: &str, token: &str) -> SyncDelta {
     SyncDelta {
         upserts,
@@ -797,8 +782,8 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .unwrap();
     assert_eq!(state, "detached", "owned page keeps its dormant identity");
 
-    // Reconnect = connect_caldav's reuse branch (minus the live discovery): match the
-    // dormant row, reactivate, re-enable the calendar, resync the same UID (new href).
+    // connect_caldav's reuse branch minus discovery: match the dormant row, reactivate,
+    // re-enable the calendar, resync the same UID under a new href.
     let dormant = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
         .await
         .unwrap()
@@ -828,19 +813,16 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
     assert_eq!(page.content, edited, "user body preserved across reconnect");
 }
 
-// Reconnecting an account that's still active (never disconnected) must refresh
-// its row, not insert a second one — a duplicate account gives every event a second
-// folder and page (dedup is per-account). Scope: `claim_account`'s identity match
-// and the row counts around it. What the upsert *preserves* (enabled, colour, the
-// cursor) is out of reach here — nothing below would notice a clobber; that is
+// Reconnecting a still-active account must refresh its row, not insert a second one: a
+// duplicate gives every event a second folder and page (dedup is per-account). This covers
+// `claim_account`'s identity match; what the upsert preserves is
 // `re_discovery_leaves_enabled_and_the_cursor_alone` in `pikos-db`.
 // qa: SYNC-03:3
 #[tokio::test]
 async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let pool = test_pool().await;
 
-    // Establishes a live account: account + calendar, enabled (materializes a
-    // folder), one sync so a mirror page exists.
+    // A live account: enabled calendar (materializes a folder) and one sync, so a mirror exists.
     let acc = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
         .unwrap()
@@ -942,8 +924,8 @@ async fn a_synced_event_gets_no_pikos_reminder_of_its_own() {
 
 // ─── refresh (full re-read) ─────────────────────────────────────────────────────
 
-/// One account with one enabled calendar, already backfilled — the state a refresh
-/// starts from. Returns the account id and the sync_calendar row id.
+/// One account with one enabled calendar, already backfilled. Returns the account id and the
+/// sync_calendar row id.
 async fn synced_account(pool: &sqlx::SqlitePool) -> (String, String) {
     let acc = insert_sync_account_impl(pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
@@ -963,19 +945,16 @@ async fn synced_account(pool: &sqlx::SqlitePool) -> (String, String) {
     (acc.id, cal.id)
 }
 
-/// A refresh re-reads everything, so it has to cost nothing for the events that
-/// didn't change. If the reconciler's etag no-op failed to hold across the
-/// re-delivery, every refresh would restamp the whole calendar and float it to the
-/// top of any recently-edited view (invariant 5) — which would make the action
-/// itself the reason not to use it.
+/// A refresh must cost nothing for unchanged events. If the reconciler's etag no-op failed
+/// across the re-delivery, every refresh would restamp the whole calendar and float it to the
+/// top of any recently-edited view (invariant 5).
 // qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
     let pool = test_pool().await;
     let (account_id, cal_row_id) = synced_account(&pool).await;
 
-    // A sentinel makes the churn assertion sharp: any write at all moves it, even
-    // one landing in the same millisecond the refresh would have stamped.
+    // A sentinel catches any write, even one in the same millisecond the refresh would stamp.
     sqlx::query("UPDATE pages SET updated_at = '2000-01-01T00:00:00.000Z'")
         .execute(&pool)
         .await
@@ -1013,21 +992,17 @@ async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
     assert_eq!(ctag, None, "no ctag offered by this provider");
 }
 
-/// The hole C65 exists to close: an upstream deletion that never reached an
-/// incremental delta — nothing was polling when it happened — leaves a mirror the
-/// cursor will never revisit. Only a cursor-less enumerate is authoritative enough
-/// to sweep it, and until this action the sole way to force one was the
-/// disable→enable toggle, which tears down the pages it is meant to repair.
+/// An upstream deletion that never reached an incremental delta (nothing was polling) leaves a
+/// mirror the cursor never revisits. Only a cursor-less enumerate is authoritative enough to
+/// sweep it.
 // qa: SYNC-09:5
 #[tokio::test]
 async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
     let pool = test_pool().await;
     let (account_id, _) = synced_account(&pool).await;
 
-    // Upstream the event is gone: a cursor-less enumerate returns nothing and says
-    // so authoritatively, while a poll from the stored cursor carries no removal —
-    // the deletion happened behind it. One provider, so the only thing separating
-    // the two calls below is whether the cursor survived.
+    // Upstream the event is gone: a cursor-less enumerate says so authoritatively, while a
+    // poll from the stored cursor carries no removal. One provider, so only the cursor differs.
     let provider = Scripted::per_cursor(
         backfill(vec![], "2026-06-01", "tok-3"),
         SyncDelta {
@@ -1115,9 +1090,8 @@ async fn a_restored_mirror_catches_up_on_an_edit_made_while_it_was_in_the_trash(
 
 #[tokio::test]
 async fn connect_caldav_persists_nothing_when_discovery_fails() {
-    // connect_caldav validates by discovering first, so a failure must leave no
-    // half-built account or keychain entry. A malformed URL fails at the parse step
-    // (no network), exercising that ordering without a live server.
+    // A failed discovery must leave no half-built account or keychain entry; a malformed URL
+    // fails at the parse step, so no server is needed.
     let pool = test_pool().await;
     let keychain = Keychain::with_store(Box::new(MemoryStore::default()));
 
@@ -1157,8 +1131,8 @@ async fn reconnect_caldav_keeps_the_working_credential_when_the_new_password_fai
     set_reconnect_needed_impl(&pool, &account.id, true)
         .await
         .unwrap();
-    // A malformed stored URL fails discovery at the parse step, no network — and
-    // proves the server/username come from the blob, since the caller passes neither.
+    // A malformed stored URL fails at the parse step, and shows the server and username come
+    // from the blob, since the caller passes neither.
     let stored = CaldavCredentials {
         base_url: "not a valid url".into(),
         username: "you".into(),
@@ -1231,11 +1205,10 @@ impl CalendarProvider for Unreachable {
     }
 }
 
-/// Offline is not a verdict on the credential, so a pass that never reached the
-/// server must leave the flag exactly as it found it. Both directions are wrong and
-/// both currently pass: clearing it drops the badge and silently strands an account
-/// whose password really is dead, and setting it demands a re-authorization the
-/// user never needed — after which the account drops out of the poll loop entirely.
+/// Offline says nothing about the credential, so a pass that never reached the server must
+/// leave the flag as it found it. Clearing it strands an account whose password is dead;
+/// setting it demands a re-authorization the user never needed and drops the account from the
+/// poll loop.
 #[tokio::test]
 async fn an_offline_pass_leaves_the_reconnect_flag_where_it_was() {
     for already_flagged in [false, true] {
@@ -1302,10 +1275,8 @@ impl CalendarProvider for FailsFirst {
     }
 }
 
-/// One calendar failing is not the account failing: a pass reports per calendar and
-/// keeps going, so a single broken collection can't stop the others from syncing.
-/// The status strings are the panel's vocabulary — it renders the badge off them —
-/// so they are contract, not debug text.
+/// One calendar failing doesn't fail the account: a pass reports per calendar and keeps going.
+/// The status strings are the panel's vocabulary, so they are contract.
 #[tokio::test]
 async fn one_failing_calendar_does_not_stop_the_pass() {
     let pool = test_pool().await;
