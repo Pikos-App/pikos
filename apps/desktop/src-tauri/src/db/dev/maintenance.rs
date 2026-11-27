@@ -82,7 +82,16 @@ pub async fn wipe_app_data(
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("app_data_dir: {e}")))?;
     if app_data.exists() {
-        std::fs::remove_dir_all(&app_data)?;
+        // A removal that stops part way can't be undone, and the pool is already gone, so the
+        // log is the only record of how far it got.
+        std::fs::remove_dir_all(&app_data).map_err(|e| {
+            let err = AppError::io_at("deleting the app's data folder", &app_data, e);
+            log::error!(
+                "wipe_app_data: deleting the data folder failed: {}",
+                err.log_summary()
+            );
+            err
+        })?;
     }
 
     // Best-effort: tauri-plugin-log may still hold the log file open, which fails the
@@ -136,7 +145,8 @@ pub async fn backup_db_before_import(
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?;
     let backup_dir = app_data.join("backups");
-    std::fs::create_dir_all(&backup_dir)?;
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| AppError::io_at("creating the backups folder", &backup_dir, e))?;
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
     let dest = backup_dir

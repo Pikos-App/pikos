@@ -36,15 +36,16 @@ fn ext_from_path(path: &Path) -> String {
         .to_lowercase()
 }
 
-async fn spawn_blocking_io<F, T>(f: F) -> AppResult<T>
+async fn spawn_blocking_io<F, T, E>(f: F) -> AppResult<T>
 where
-    F: FnOnce() -> std::io::Result<T> + Send + 'static,
+    F: FnOnce() -> Result<T, E> + Send + 'static,
     T: Send + 'static,
+    E: Into<AppError> + Send + 'static,
 {
     tokio::task::spawn_blocking(f)
         .await
         .map_err(|e| AppError::Internal(format!("blocking task panicked: {e}")))?
-        .map_err(AppError::from)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -54,7 +55,8 @@ pub async fn init_assets_dir(app: tauri::AppHandle) -> AppResult<String> {
         .app_data_dir()
         .map_err(|e| AppError::Internal(format!("Failed to get app data dir: {e}")))?;
     let assets_dir = app_data.join(ASSET_DIR);
-    std::fs::create_dir_all(&assets_dir)?;
+    std::fs::create_dir_all(&assets_dir)
+        .map_err(|e| AppError::io_at("creating the images folder", &assets_dir, e))?;
     Ok(assets_dir.to_string_lossy().to_string())
 }
 
@@ -82,14 +84,21 @@ async fn save_asset_into_dir(assets_dir: &Path, source_path: &str) -> AppResult<
 
     let ext = validate_image_ext(&ext_from_path(source))?;
 
-    std::fs::create_dir_all(assets_dir)?;
+    std::fs::create_dir_all(assets_dir)
+        .map_err(|e| AppError::io_at("creating the images folder", assets_dir, e))?;
 
     let id = uuid::Uuid::new_v4().to_string();
     let filename = format!("{id}.{ext}");
     let dest = assets_dir.join(&filename);
 
+    // Named by where it was going: the source is the person's own file.
     let source = source.to_path_buf();
-    spawn_blocking_io(move || std::fs::copy(&source, &dest).map(|_| ())).await?;
+    spawn_blocking_io(move || {
+        std::fs::copy(&source, &dest)
+            .map(|_| ())
+            .map_err(|e| AppError::io_at("copying the chosen image to", &dest, e))
+    })
+    .await?;
 
     Ok(format!("{ASSET_DIR}/{filename}"))
 }
@@ -112,11 +121,16 @@ pub async fn save_asset_bytes(
 /// [`save_asset_bytes`] against any directory.
 async fn save_bytes_into_dir(assets_dir: &Path, data: Vec<u8>, ext: &str) -> AppResult<String> {
     let ext = validate_image_ext(ext)?;
-    std::fs::create_dir_all(assets_dir)?;
+    std::fs::create_dir_all(assets_dir)
+        .map_err(|e| AppError::io_at("creating the images folder", assets_dir, e))?;
 
     let filename = format!("{}.{ext}", uuid::Uuid::new_v4());
     let dest = assets_dir.join(&filename);
-    spawn_blocking_io(move || std::fs::write(&dest, &data)).await?;
+    spawn_blocking_io(move || {
+        std::fs::write(&dest, &data)
+            .map_err(|e| AppError::io_at("writing the pasted image to", &dest, e))
+    })
+    .await?;
 
     Ok(format!("{ASSET_DIR}/{filename}"))
 }
@@ -150,7 +164,10 @@ pub(crate) fn collect_after_launch(
         match collect_unreferenced(&pool, &workspace_path, &assets_dir, SystemTime::now()).await {
             Ok(0) => {}
             Ok(removed) => log::info!("assets: removed {removed} image(s) no page refers to"),
-            Err(e) => log::warn!("assets: collecting unreferenced images failed: {e}"),
+            Err(e) => log::warn!(
+                "assets: collecting unreferenced images failed: {}",
+                e.log_summary()
+            ),
         }
     });
 }
