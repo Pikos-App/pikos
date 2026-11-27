@@ -43,7 +43,11 @@ async fn exclusion_union(
     rule_id: &str,
     legacy_exdates_json: &str,
 ) -> AppResult<Vec<String>> {
-    let mut union: Vec<String> = serde_json::from_str(legacy_exdates_json).unwrap_or_default();
+    let mut union =
+        crate::schedules::stored_exdates(rule_id, legacy_exdates_json).unwrap_or_else(|e| {
+            warn_once(rule_id, "exdates", || format!("{e}; read as none"));
+            Vec::new()
+        });
     let rows: Vec<String> = sqlx::query_scalar(
         "SELECT occurrence_date FROM completed_set WHERE page_id = ?1
          UNION
@@ -61,6 +65,7 @@ async fn exclusion_union(
 }
 
 fn derive_oldest_open(
+    page_id: &str,
     rule: &RuleRow,
     exclusions: &[String],
     floor: Option<&str>,
@@ -72,7 +77,12 @@ fn derive_oldest_open(
         exclusions,
         floor,
     )
-    .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
+    .map_err(|e| {
+        AppError::Internal(format!(
+            "recurrence derivation failed for rule {} on page {page_id}: {e}",
+            rule.id
+        ))
+    })
 }
 
 /// Upper bound for expanding a whole series, reached only on one already found exhausted,
@@ -87,16 +97,23 @@ fn last_open_occurrence(
     rule: &RuleRow,
     exclusions: &[String],
 ) -> Option<pikos_recurrence::Occurrence> {
-    pikos_recurrence::occurrences_in_window(
+    match pikos_recurrence::occurrences_in_window(
         &rule.rrule,
         &rule.base_start,
         rule.base_end.as_deref(),
         &rule.base_start,
         SERIES_END,
         exclusions,
-    )
-    .ok()?
-    .pop()
+    ) {
+        Ok(mut occurrences) => occurrences.pop(),
+        Err(e) => {
+            log::warn!(
+                "rule {}: its last occurrence can't be found ({e}), the head stays",
+                rule.id
+            );
+            None
+        }
+    }
 }
 
 /// Lower bound on a synced series' head: the day the page was first synced. Without it the
@@ -276,7 +293,7 @@ pub async fn oldest_open_for_page(
     };
     let excl = exclusion_union(&mut conn, page_id, &rule.id, &rule.rrule_exdates).await?;
     let floor = synced_head_floor(&mut conn, page_id).await?;
-    derive_oldest_open(&rule, &excl, floor.as_deref())
+    derive_oldest_open(page_id, &rule, &excl, floor.as_deref())
 }
 
 #[derive(sqlx::FromRow)]
@@ -422,7 +439,12 @@ pub async fn occurrences_with_reminders_firing_in(
                     window.start_utc().with_timezone(&tz).naive_local(),
                     window.end_utc().with_timezone(&tz).naive_local(),
                 ),
-                Err(_) => continue,
+                Err(e) => {
+                    warn_once(&s.rule_id, "zone", || {
+                        format!("reminder enumeration skipping series {}: {e}", s.rule_id)
+                    });
+                    continue;
+                }
             }
         } else {
             (window.start_local(), window.end_local())
@@ -503,18 +525,25 @@ fn enumerate_window(
     )
 }
 
-/// Rule ids already warned about, so a rejected series logs once per process, not every tick.
+/// Rule ids already warned about, by what was wrong, so a damaged series logs once per process,
+/// not every tick.
 static WARNED_RULES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
-fn warn_unsupported_series_once(rule_id: &str, err: &pikos_recurrence::RecurrenceError) {
+fn warn_once(rule_id: &str, what: &str, message: impl FnOnce() -> String) {
     let first = WARNED_RULES
         .lock()
-        .map(|mut seen| seen.insert(rule_id.to_string()))
+        .map(|mut seen| seen.insert(format!("{rule_id}/{what}")))
         .unwrap_or(true);
     if first {
-        log::warn!("reminder enumeration skipping series {rule_id}: unsupported rule ({err})");
+        log::warn!("{}", message());
     }
+}
+
+fn warn_unsupported_series_once(rule_id: &str, err: &pikos_recurrence::RecurrenceError) {
+    warn_once(rule_id, "unsupported", || {
+        format!("reminder enumeration skipping series {rule_id}: unsupported rule ({err})")
+    });
 }
 
 /// A reminder lead for a series: its minutes, and whether it came from an explicit
