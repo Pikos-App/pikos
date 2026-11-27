@@ -12,12 +12,14 @@ import { getLocalTimezone } from "@pikos/core";
 import { evict, PageStore, summaryBytes, toPageSummary, ViewCache, viewName } from "@pikos/core";
 import { differenceInMilliseconds, startOfTomorrow } from "date-fns";
 
-import { createLogger } from "@/shared/logger";
+import { createLogger, throttled } from "@/shared/logger";
 
 import type { ViewCacheConfig } from "./config";
 import { WriteMirror } from "./writeMirror";
 
 const log = createLogger("viewCache");
+// Every write and doorbell refetches, so a read that keeps failing would log on each one.
+const quiet = throttled(log);
 
 /** Fields no list orders, groups, filters or counts by, and the body a save was typed over, which
  *  is a condition on the write rather than a field: a write of only these refetches its row. */
@@ -141,7 +143,8 @@ export class ViewCacheController {
     let state: ChangeState;
     try {
       state = await this.adapter.changeState();
-    } catch {
+    } catch (e) {
+      quiet.warn("reading the change counter failed; refetching everything", e);
       state = { epoch: "", ownChanges: 0, seq: -1 };
     }
     if (this.counter && state.epoch === this.counter.epoch && state.seq === this.counter.seq) {
@@ -161,8 +164,9 @@ export class ViewCacheController {
   private async refetchRow(id: string): Promise<void> {
     try {
       this.confirm(await this.adapter.getPages([id]));
-    } catch {
+    } catch (e) {
       // The row stays as held; the next refresh brings it.
+      quiet.warn("refetching a written row failed", e);
     }
   }
 
@@ -178,7 +182,8 @@ export class ViewCacheController {
     this.bodyBytes = 0;
   }
 
-  /** The full page, from memory with no database call while nothing has changed since it was read. */
+  /** The full page, from memory with no database call while nothing has changed since it was read.
+   *  Null is a page that's gone; a read that failed rejects, so the two aren't mistaken. */
   body(id: string): Promise<Page | null> {
     const answer = this.openBody(id);
     if (this.config.shadow) {
@@ -210,7 +215,7 @@ export class ViewCacheController {
       this.waitingPrefetch = id;
       return;
     }
-    void this.readBody(id);
+    this.readBody(id).catch((e: unknown) => quiet.warn("prefetching a page failed", e));
   }
 
   cancelPrefetch(id: string): void {
@@ -233,8 +238,6 @@ export class ViewCacheController {
         if (!page) return this.dropBody(id);
         this.holdBody(page, seen);
         return page;
-      } catch {
-        return null;
       } finally {
         this.bodyReads.delete(id);
         const next = this.waitingPrefetch;
@@ -370,7 +373,8 @@ export class ViewCacheController {
     let rows: PageSummary[];
     try {
       rows = await this.adapter.listRange(start, end, getLocalTimezone(), false);
-    } catch {
+    } catch (e) {
+      quiet.warn("loading a calendar range failed", e);
       return;
     }
     if (this.rangeAsked.get(name) !== asked) return;
@@ -401,8 +405,9 @@ export class ViewCacheController {
       for (const head of heads) held.add(head.id);
       this.heads = [...held];
       for (const head of heads) this.headsSeq = Math.max(this.headsSeq, head.rowSeq ?? 0);
-    } catch {
+    } catch (e) {
       // Occurrences of heads outside the range wait for the next load.
+      quiet.warn("loading recurring series heads failed", e);
     }
     this.bump();
   }
@@ -449,8 +454,9 @@ export class ViewCacheController {
       const counts = await this.adapter.countViews(getLocalTimezone(), today);
       // An older count landing after a newer one would undo it.
       if (asked === this.countsAsked) this.counts = { counts, today };
-    } catch {
+    } catch (e) {
       // Badges keep their last counts; the next write recounts.
+      quiet.warn("counting the views failed", e);
     }
     this.bump();
   }
@@ -467,7 +473,8 @@ export class ViewCacheController {
       const page = await this.adapter.listView(key, entry.next, this.config.windowSize);
       for (const row of page.rows) this.stale.delete(row.id);
       loaded = this.cache.receive(token, page, this.store);
-    } catch {
+    } catch (e) {
+      quiet.warn("loading more of a list failed", e);
       this.cache.fail(token);
     } finally {
       this.loadingMore.delete(name);
@@ -552,8 +559,9 @@ export class ViewCacheController {
     try {
       this.tagList = await this.adapter.listTags();
       for (const listener of this.tagListeners) listener(this.tagList);
-    } catch {
+    } catch (e) {
       // The next refresh asks again.
+      quiet.warn("loading tags failed", e);
     }
   }
 
@@ -595,7 +603,8 @@ export class ViewCacheController {
       const page = await this.adapter.listView(key, null, limit);
       for (const row of page.rows) this.stale.delete(row.id);
       loaded = this.cache.receive(token, page, this.store);
-    } catch {
+    } catch (e) {
+      quiet.warn("loading a list failed", e);
       this.cache.fail(token);
     } finally {
       this.loadingFirst.delete(name);
@@ -687,8 +696,9 @@ export class ViewCacheController {
     const onScreen = (await this.allIds(key)).slice(want.first, want.last + 1);
     try {
       this.confirm(await this.adapter.getPages(onScreen));
-    } catch {
+    } catch (e) {
       // The rows stay as held; the next refresh brings them.
+      quiet.warn("refetching the rows on screen failed", e);
     }
     return { before, keep: [...first, ...onScreen] };
   }

@@ -141,6 +141,7 @@ export function DataSettings({
     try {
       setState({ path: await produce(), status: "done" });
     } catch (e: unknown) {
+      log.error(`${verb} failed`, e);
       setState({ message: storageErrorUserMessage(toStorageError(e), verb), status: "error" });
     }
   }

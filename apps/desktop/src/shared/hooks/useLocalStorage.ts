@@ -7,6 +7,7 @@ function readItem<T>(key: string, fallback: T): T {
   if (raw === null) return fallback;
   try {
     return JSON.parse(raw) as T;
+    // eslint-disable-next-line pikos/no-silent-catch -- a stored value of the wrong shape is the key's default, and this runs on every render
   } catch {
     // Stored value isn't the shape this key holds: fall back rather than surface a parse error.
     return fallback;

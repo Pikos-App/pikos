@@ -36,6 +36,7 @@ function readIndex(): number {
   try {
     const parsed = JSON.parse(raw);
     return typeof parsed === "number" && Number.isFinite(parsed) ? modIndex(parsed) : 0;
+    // eslint-disable-next-line pikos/no-silent-catch -- a stored index that isn't a number starts the placeholder rotation over
   } catch {
     return 0;
   }

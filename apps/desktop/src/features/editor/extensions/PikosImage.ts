@@ -1,3 +1,4 @@
+import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { createPikosImageNode } from "@pikos/editor-schema";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -8,7 +9,9 @@ import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("PikosImage");
 
-const IMAGE_SAVE_FAILED_NOTICE = "Couldn't save the image. Check disk space and permissions.";
+function imageSaveFailed(e: unknown): string {
+  return storageErrorUserMessage(toStorageError(e), "saving the image");
+}
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"];
 
@@ -54,9 +57,8 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
         view.dispatch(tr);
       }
     } catch (e) {
-      // Tauri command error may echo the user's source path. Log class only.
-      log.error("Failed to save asset", e instanceof Error ? e.name : "unknown");
-      postNotice(IMAGE_SAVE_FAILED_NOTICE);
+      log.error("Failed to save asset", e);
+      postNotice(imageSaveFailed(e));
     }
   }
 
@@ -182,7 +184,7 @@ export async function insertImageFromDialog(view: EditorView): Promise<void> {
       view.dispatch(tr);
     }
   } catch (e) {
-    log.error("Failed to upload from dialog", e instanceof Error ? e.name : "unknown");
-    postNotice(IMAGE_SAVE_FAILED_NOTICE);
+    log.error("Failed to upload from dialog", e);
+    postNotice(imageSaveFailed(e));
   }
 }

@@ -176,7 +176,11 @@ describe("QuickAddDialog — a refused write", () => {
     );
     const input = await quickAdd("Buy milk");
 
-    expect(await screen.findByText("Something went wrong while adding the page.")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Something went wrong while adding the page. Try again, and restart Pikos if it keeps happening."
+      )
+    ).toBeTruthy();
     expect((input as HTMLInputElement).value).toBe("Buy milk");
   });
 
@@ -185,12 +189,18 @@ describe("QuickAddDialog — a refused write", () => {
       new Error("disk is full")
     );
     const input = await quickAdd("Buy milk");
-    await screen.findByText("Something went wrong while adding the page.");
+    await screen.findByText(
+      "Something went wrong while adding the page. Try again, and restart Pikos if it keeps happening."
+    );
 
     fireEvent.change(input, { target: { value: "Buy oat milk" } });
 
     await waitFor(() =>
-      expect(screen.queryByText("Something went wrong while adding the page.")).toBeNull()
+      expect(
+        screen.queryByText(
+          "Something went wrong while adding the page. Try again, and restart Pikos if it keeps happening."
+        )
+      ).toBeNull()
     );
   });
 });

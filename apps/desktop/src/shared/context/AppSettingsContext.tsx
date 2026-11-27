@@ -4,7 +4,10 @@ import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { postNotice } from "@/shared/events/noticeBus";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
+
+const log = createLogger("AppSettings");
 
 export type WeekStart = 0 | 1;
 
@@ -94,7 +97,8 @@ function useAppSettingsValue(): AppSettingsValue {
         quietHoursStart,
         summaryTime,
       })
-      .catch(() => {
+      .catch((e: unknown) => {
+        log.warn("applying notification settings failed", e);
         // The settings persist locally either way, so the panel goes on showing reminders as on while
         // nothing is scheduled to fire; a reminder that never arrives looks like one never set.
         postNotice("Saved, but reminders may not fire until you restart Pikos.");

@@ -303,6 +303,7 @@ export function timedPagesInRange(
       const start = resolveBlockInstant(page, page.scheduledStart);
       const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
       return inSpan(start, end, rangeStart, rangeEnd);
+      // eslint-disable-next-line pikos/no-silent-catch -- core has no logger, so a page whose zone can't be resolved is left off the calendar; surfacing it is a follow-up
     } catch {
       return false;
     }
@@ -333,6 +334,7 @@ export function timedPagesByDay(pages: PageSummary[], days: Date[]): PageSummary
     try {
       start = resolveBlockInstant(page, page.scheduledStart);
       end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
+      // eslint-disable-next-line pikos/no-silent-catch -- core has no logger, so a page whose zone can't be resolved is left off the calendar; surfacing it is a follow-up
     } catch {
       continue;
     }
@@ -352,6 +354,7 @@ export function warmBlockInstants(pages: PageSummary[]): void {
     try {
       resolveBlockInstant(page, page.scheduledStart);
       if (page.scheduledEnd) resolveBlockInstant(page, page.scheduledEnd);
+      // eslint-disable-next-line pikos/no-silent-catch -- core has no logger, so a page whose zone can't be resolved is left off the calendar; surfacing it is a follow-up
     } catch {
       // Layout skips a page it can't place; so does this.
     }

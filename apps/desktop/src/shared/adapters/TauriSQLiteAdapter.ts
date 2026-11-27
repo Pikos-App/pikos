@@ -55,9 +55,10 @@ import type {
   WorkspaceExportOptions,
   WorkspaceUsageStats,
 } from "@pikos/core";
-import { type StorageError, toStorageError } from "@pikos/core";
+import type { StorageError } from "@pikos/core";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
 
+import { commandFailed } from "@/shared/adapters/command";
 import { markLocalWrite } from "@/shared/lib/externalChange";
 import { createLogger } from "@/shared/logger";
 
@@ -254,7 +255,7 @@ function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> 
   if (import.meta.env.DEV) watchdog(command);
   if (WRITE_COMMANDS.has(command)) markLocalWrite();
   return transport<T>(command, args).catch((err: unknown) => {
-    const error = toStorageError(err);
+    const error = commandFailed(command, err);
     const isWorkspaceDamage = error.kind === "Corrupt" && !READS_ANOTHER_FILE.has(command);
     if (isWorkspaceDamage) reportDamage(error);
     throw error;

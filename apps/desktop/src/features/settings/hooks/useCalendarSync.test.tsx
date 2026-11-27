@@ -9,6 +9,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
+import { StorageError } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
+
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
@@ -291,14 +294,14 @@ describe("useCalendarSync", () => {
       const hook = setupWithWorkspace();
       const account = await connectedAccount(hook);
       vi.spyOn(hook.result.current.ws.storage!, "disconnectSyncAccount").mockRejectedValueOnce(
-        new Error("keychain locked")
+        new StorageError("Db", "db error: keychain locked")
       );
 
       await act(async () => {
         await hook.result.current.sync.disconnect(account.id);
       });
 
-      expect(hook.result.current.sync.error).toBe("keychain locked");
+      expect(hook.result.current.sync.error).toMatch(/^Storage error while disconnecting/);
       expect(hook.result.current.sync.accounts).toHaveLength(1);
     });
 
@@ -307,53 +310,66 @@ describe("useCalendarSync", () => {
       const account = await connectedAccount(hook);
       const cal = account.calendars[0]!;
       vi.spyOn(hook.result.current.ws.storage!, "toggleSyncCalendar").mockRejectedValueOnce(
-        new Error("folder write failed")
+        new StorageError("Io", "io: folder write failed")
       );
 
       await act(async () => {
         await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
       });
 
-      expect(hook.result.current.sync.error).toBe("folder write failed");
+      expect(hook.result.current.sync.error).toMatch(/^Disk error while updating the calendar/);
     });
 
     it("resync failure surfaces as error and still clears the busy flag", async () => {
       const hook = setupWithWorkspace();
       const account = await connectedAccount(hook);
       vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce(
-        new Error("network down")
+        new StorageError("Network", "network: dns error")
       );
 
       await act(async () => {
         await hook.result.current.sync.resync(account.id);
       });
 
-      expect(hook.result.current.sync.error).toBe("network down");
+      expect(hook.result.current.sync.error).toMatch(/^Couldn't reach the network while syncing/);
       expect(hook.result.current.sync.busyAccountId).toBeNull();
     });
 
-    it("a non-Error rejection falls back to a friendly message", async () => {
+    it("a resync that fails for a reason other than the network doesn't blame the connection", async () => {
       const hook = setupWithWorkspace();
       const account = await connectedAccount(hook);
-      vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce("boom");
+      vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce(
+        new StorageError("Db", "db error: database is locked")
+      );
 
       await act(async () => {
         await hook.result.current.sync.resync(account.id);
       });
 
-      expect(hook.result.current.sync.error).toMatch(/couldn't sync/i);
+      expect(hook.result.current.sync.error).toMatch(/^Storage error while syncing the account/);
+      expect(hook.result.current.sync.error).not.toMatch(/connection|locked/);
+    });
+
+    it("an account list that can't be read stops loading and says so", async () => {
+      vi.spyOn(MockStorageAdapter.prototype, "getSyncStatus").mockRejectedValueOnce(
+        new StorageError("Db", "db error: database is locked")
+      );
+      const hook = setup();
+
+      await waitFor(() => expect(hook.result.current.loading).toBe(false));
+      expect(hook.result.current.error).toMatch(/reading your calendar accounts/);
     });
 
     it("a later successful action clears a stale error", async () => {
       const hook = setupWithWorkspace();
       const account = await connectedAccount(hook);
       vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce(
-        new Error("network down")
+        new StorageError("Network", "network: dns error")
       );
       await act(async () => {
         await hook.result.current.sync.resync(account.id);
       });
-      expect(hook.result.current.sync.error).toBe("network down");
+      expect(hook.result.current.sync.error).toMatch(/^Couldn't reach the network while syncing/);
 
       await act(async () => {
         await hook.result.current.sync.resync(account.id);

@@ -15,6 +15,7 @@ export function extractText(doc: unknown): string {
     if (doc === "" || doc === "{}") return "";
     try {
       doc = JSON.parse(doc);
+      // eslint-disable-next-line pikos/no-silent-catch -- a body that isn't a document has no text, as the Rust writer also decides
     } catch {
       return "";
     }

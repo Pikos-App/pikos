@@ -71,8 +71,8 @@ export function useAutoUpdater(): AutoUpdater {
         },
       });
     } catch (e: unknown) {
-      // Updater errors can include URLs from the GitHub Releases response, so only the class is logged.
-      log.error("Update check failed", e instanceof Error ? e.name : "unknown");
+      // Updater errors can include URLs from the GitHub Releases response, which formatError scrubs.
+      log.error("Update check failed", e);
       setStatus({
         message: "Couldn't check for updates. Check your network connection and try again.",
         scope: "check",
@@ -103,7 +103,7 @@ export function useAutoUpdater(): AutoUpdater {
       const { relaunch } = await import("@tauri-apps/plugin-process");
       await relaunch();
     } catch (e: unknown) {
-      log.error("Update install failed", e instanceof Error ? e.name : "unknown");
+      log.error("Update install failed", e);
       setStatus({
         message: "Couldn't install the update. Try again, or download the latest from pikos.app.",
         scope: "install",

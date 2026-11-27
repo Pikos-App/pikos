@@ -14,6 +14,7 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useCalendarExpansionHold, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useNow } from "@/shared/hooks/useNow";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
+import { createLogger } from "@/shared/logger";
 import { useCachedRange } from "@/shared/viewCache/useCachedRange";
 
 import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
@@ -21,6 +22,8 @@ import { useCalendarRange } from "../hooks/useCalendarRange";
 import { CALENDAR_GUTTER_VAR, CALENDAR_ZOOM_VAR, calendarGutterPx } from "../utils/gutterWidth";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
+
+const log = createLogger("CalendarView");
 
 const NO_PAGES: PageSummary[] = [];
 
@@ -119,7 +122,10 @@ export function CalendarView() {
       if (latest && !latest.title.trim()) {
         void deletePage(id);
       }
-    })();
+    })().catch((e: unknown) => {
+      // The page is kept untitled rather than deleted on a read that may be wrong.
+      log.warn(`checking page ${id} for a title failed`, e);
+    });
   }
 
   return (

@@ -2,6 +2,7 @@
 // calendar or a search result, or one with no `errorIds` (reorders, folder moves), would roll
 // back in silence. With no telemetry, a failure nobody is shown is a failure nobody can report.
 
+import { StorageError } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -146,4 +147,49 @@ describe("PagesContext — a failed write is surfaced", () => {
     expect(seen[0]).toMatch(/reordering pages/);
     off();
   });
+
+  it("raises a notice when a move fails for a reason other than a list that changed", async () => {
+    const hook = await setup();
+    let ids: string[] = [];
+    await act(async () => {
+      const a = await hook.result.current.pages.createPage({ title: "A" });
+      const b = await hook.result.current.pages.createPage({ title: "B" });
+      ids = [a.id, b.id];
+    });
+    vi.spyOn(MockStorageAdapter.prototype, "movePages").mockRejectedValue(
+      new StorageError("Db", "db error: database is locked")
+    );
+    const { off, seen } = captureNotices();
+
+    await act(async () => {
+      await hook.result.current.pages.movePages([ids[0]!], { after: ids[1]! });
+    });
+    off();
+
+    expect(seen).toEqual([expect.stringMatching(/^Storage error while moving pages/)]);
+  });
+
+  it.each(["Conflict", "NotFound"] as const)(
+    "stays quiet when a move is refused as %s, since the refresh redraws the list",
+    async (kind) => {
+      const hook = await setup();
+      let ids: string[] = [];
+      await act(async () => {
+        const a = await hook.result.current.pages.createPage({ title: "A" });
+        const b = await hook.result.current.pages.createPage({ title: "B" });
+        ids = [a.id, b.id];
+      });
+      vi.spyOn(MockStorageAdapter.prototype, "movePages").mockRejectedValue(
+        new StorageError(kind, "the list changed")
+      );
+      const { off, seen } = captureNotices();
+
+      await act(async () => {
+        await hook.result.current.pages.movePages([ids[0]!], { after: ids[1]! });
+      });
+      off();
+
+      expect(seen).toEqual([]);
+    }
+  );
 });

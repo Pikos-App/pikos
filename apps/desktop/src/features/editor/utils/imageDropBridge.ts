@@ -2,6 +2,7 @@
 // file drops from Finder, so ProseMirror's handleDrop never fires. Listen at the window level and
 // insert image nodes with posAtCoords.
 
+import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import type { Editor } from "@tiptap/react";
 
 import { postNotice } from "@/shared/events/noticeBus";
@@ -35,10 +36,8 @@ async function insertImageAt(editor: Editor, sourcePath: string, pos: number): P
     editor.view.dispatch(tr);
     return pos + node.nodeSize;
   } catch (e) {
-    // Don't pass `e` directly — the Tauri command's error string can echo
-    // the user's source path. Log only a fixed message + error class name.
-    log.error("save_asset failed", e instanceof Error ? e.name : "unknown");
-    postNotice("Couldn't save the image. Check disk space and permissions.");
+    log.error("save_asset failed", e);
+    postNotice(storageErrorUserMessage(toStorageError(e), "saving the image"));
     return pos;
   }
 }

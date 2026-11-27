@@ -21,6 +21,7 @@ export function useExportPage() {
     try {
       path = await storage.exportPageMarkdown(page.id);
     } catch (e: unknown) {
+      log.error(`exporting page ${page.id} failed`, e);
       showNotice(storageErrorUserMessage(toStorageError(e), "exporting the page"), 6000);
       return;
     }
@@ -29,7 +30,8 @@ export function useExportPage() {
     try {
       await getPlatform().revealInDir(path);
     } catch (e: unknown) {
-      log.warn("revealInDir failed after a page export", e);
+      // The opener's error quotes the exported file's path, which is the page's title: kind only.
+      log.warn("revealInDir failed after a page export", toStorageError(e));
     }
   }
 

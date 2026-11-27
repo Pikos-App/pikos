@@ -1,16 +1,22 @@
 // A module accessor like shared/platform, because callers are a mix of hooks, contexts and plain
 // modules that all read during render, where a provider lookup would buy nothing.
 //
-// The default wraps window.localStorage. Every method swallows its own failure: a Storage call
+// The default wraps window.localStorage. Every method contains its own failure: a Storage call
 // can throw when the quota is full or in a private mode that exposes the object but refuses to
-// use it, and losing a panel width is never worth taking the render down.
+// use it, and losing a panel width is never worth taking the render down. A write that's lost
+// is logged, because the setting then comes back changed on the next launch.
 
 import type { KeyValueStore } from "@pikos/core";
+
+import { createLogger, throttled } from "@/shared/logger";
+
+const log = throttled(createLogger("kv"));
 
 const webStorage: KeyValueStore = {
   getItem(key) {
     try {
       return localStorage.getItem(key);
+      // eslint-disable-next-line pikos/no-silent-catch -- reads run on every render, and an unreadable store reads as empty
     } catch {
       return null;
     }
@@ -24,6 +30,7 @@ const webStorage: KeyValueStore = {
         if (key !== null) out.push(key);
       }
       return out;
+      // eslint-disable-next-line pikos/no-silent-catch -- reads run on every render, and an unreadable store reads as empty
     } catch {
       return [];
     }
@@ -31,15 +38,16 @@ const webStorage: KeyValueStore = {
   removeItem(key) {
     try {
       localStorage.removeItem(key);
-    } catch {
-      // Storage unavailable: nothing to remove.
+    } catch (e) {
+      log.warn(`removing a stored setting failed (${key})`, e);
     }
   },
   setItem(key, value) {
     try {
       localStorage.setItem(key, value);
-    } catch {
+    } catch (e) {
       // Quota or private mode: the preference is lost, the render is not.
+      log.warn(`saving a stored setting failed (${key})`, e);
     }
   },
 };

@@ -284,9 +284,9 @@ export function SearchPalette() {
           setCompletedCountCapped(capped);
         })
         .catch((err: unknown) => {
-          // FTS5 syntax errors echo the user's query. Log only the error
-          // class — never pass `err` directly, never log the query text.
-          log.error("search failed", err instanceof Error ? err.name : "unknown");
+          // FTS5 syntax errors echo the user's query, which formatError leaves
+          // out of a StorageError; never log the query text itself.
+          log.error("search failed", err);
         });
     }
 
@@ -305,9 +305,15 @@ export function SearchPalette() {
   useEffect(() => {
     if (!storage || !isOpen) return;
     let cancelled = false;
-    void storage.listRecentPages(activePageId, RECENT_LIMIT).then((rows) => {
-      if (!cancelled) setRecentRows(rows);
-    });
+    storage
+      .listRecentPages(activePageId, RECENT_LIMIT)
+      .then((rows) => {
+        if (!cancelled) setRecentRows(rows);
+      })
+      .catch((e: unknown) => {
+        // The palette still lists the recent pages held in memory.
+        log.warn("listing recent pages failed", e);
+      });
     return () => {
       cancelled = true;
     };

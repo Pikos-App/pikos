@@ -10,8 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { createLogger } from "@/shared/logger";
 
+import { calendarErrorMessage } from "../utils/calendarErrorMessage";
 import { CaldavCredentialForm } from "./CaldavCredentialForm";
+
+const log = createLogger("AddAccountDialog");
 
 /**
  * What the dialog is waiting on, which decides whether it may be dismissed. `connecting` is writing an
@@ -78,9 +82,8 @@ export function AddAccountDialog({
       reset();
       onOpenChange(false);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Could not connect. Check the server and password."
-      );
+      log.warn("connecting a CalDAV account failed", e);
+      setError(calendarErrorMessage(e, "connecting the account"));
       setProgress({ kind: "idle" });
     }
   }
@@ -99,7 +102,8 @@ export function AddAccountDialog({
       onOpenChange(false);
     } catch (e) {
       if (googleAttempt.current !== attempt) return;
-      setError(e instanceof Error ? e.message : "Could not connect to Google. Try again.");
+      log.warn("connecting a Google account failed", e);
+      setError(calendarErrorMessage(e, "connecting to Google"));
       setProgress({ kind: "idle" });
     }
   }

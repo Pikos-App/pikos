@@ -10,8 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { createLogger } from "@/shared/logger";
 
+import { calendarErrorMessage } from "../utils/calendarErrorMessage";
 import { CaldavCredentialForm } from "./CaldavCredentialForm";
+
+const log = createLogger("ReconnectAccountDialog");
 
 interface ReconnectAccountDialogProps {
   account: SyncAccount;
@@ -42,7 +46,7 @@ export function ReconnectAccountDialog({
     onOpenChange(next);
   }
 
-  async function submit(run: () => Promise<void>, fallback: string) {
+  async function submit(run: () => Promise<void>, verb: string) {
     setBusy(true);
     setError(null);
     try {
@@ -50,7 +54,8 @@ export function ReconnectAccountDialog({
       setPassword("");
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : fallback);
+      log.warn(`reconnecting account ${account.id} failed`, e);
+      setError(calendarErrorMessage(e, verb));
     } finally {
       setBusy(false);
     }
@@ -74,9 +79,7 @@ export function ReconnectAccountDialog({
             <div className="flex justify-end">
               <Button
                 disabled={busy}
-                onClick={() =>
-                  void submit(onReconnectGoogle, "Could not connect to Google. Try again.")
-                }
+                onClick={() => void submit(onReconnectGoogle, "reconnecting to Google")}
                 size="sm"
               >
                 {busy ? (
@@ -97,12 +100,7 @@ export function ReconnectAccountDialog({
             error={error}
             onPasswordChange={setPassword}
             onSecondary={() => close(false)}
-            onSubmit={() =>
-              void submit(
-                () => onReconnect(password),
-                "Could not connect. Check the password and try again."
-              )
-            }
+            onSubmit={() => void submit(() => onReconnect(password), "reconnecting the account")}
             password={password}
             secondaryLabel="Cancel"
             submitLabel="Reconnect"

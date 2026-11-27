@@ -225,6 +225,7 @@ function seededDocument(
 function deriveContentText(content: string): string {
   try {
     return extractText(JSON.parse(content));
+    // eslint-disable-next-line pikos/no-silent-catch -- a test double matching the Rust writer, which stores no search text for a body that isn't JSON
   } catch {
     return "";
   }
@@ -233,6 +234,7 @@ function deriveContentText(content: string): string {
 function deriveLinks(content: string): string[] {
   try {
     return linkTargets(JSON.parse(content));
+    // eslint-disable-next-line pikos/no-silent-catch -- a test double matching the Rust writer, which finds no links in a body that isn't JSON
   } catch {
     return [];
   }

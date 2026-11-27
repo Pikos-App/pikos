@@ -156,6 +156,7 @@ export async function resolveImportImages(
     });
 
     let saved = false;
+    let lastError: unknown = null;
     for (const candidate of candidates) {
       try {
         const savedPath = await getPlatform().saveAsset(candidate);
@@ -163,8 +164,9 @@ export async function resolveImportImages(
         rewritten = rewriteImageRef(rewritten, ref, savedPath);
         saved = true;
         break;
-      } catch {
-        // Try next candidate
+      } catch (e) {
+        // Try next candidate; only the last failure is logged, once none is left.
+        lastError = e;
       }
     }
 
@@ -173,6 +175,8 @@ export async function resolveImportImages(
         // Speculative ref (extensionless wiki-embed) — leave as-is in the body.
         // It's probably a note transclusion, not an image.
       } else {
+        // The path is the person's file name, so only the error, which formatError keeps to its kind.
+        log.warn("an image in the import couldn't be copied", toStorageError(lastError));
         missing.push(ref.sourcePath);
         rewritten = rewritten.replace(ref.fullMatch, "");
       }
@@ -343,6 +347,8 @@ export function useImport() {
       plan.vaultRoot = dirPath;
       setState({ plan, step: "preview" });
     } catch (e) {
+      // The fs plugin's error quotes the file path, which is a note's title: kind only.
+      log.error("reading the Markdown vault failed", toStorageError(e));
       setState({
         message: storageErrorUserMessage(toStorageError(e), "reading your Markdown vault"),
         step: "error",
@@ -379,6 +385,8 @@ export function useImport() {
       };
       setState({ headers, initialConfig, rows, step: "mapping" });
     } catch (e) {
+      // Nothing here throws on bad input, so this is a bug in the parser, and its stack says where.
+      log.error("parsing the CSV failed", e);
       setState({
         message: storageErrorUserMessage(toStorageError(e), "parsing your CSV"),
         step: "error",
@@ -397,6 +405,7 @@ export function useImport() {
       }
       setState({ plan, step: "preview" });
     } catch (e) {
+      log.error("applying the CSV column mapping failed", e);
       setState({
         message: storageErrorUserMessage(toStorageError(e), "applying your column mapping"),
         step: "error",

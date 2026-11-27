@@ -3,6 +3,9 @@ import type { AccountWithCalendars, Folder } from "@pikos/core";
 import { useEffect, useState } from "react";
 
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("useCalendarAccountGroups");
 
 export interface CalendarAccountGroup {
   accountId: string | null;
@@ -27,9 +30,15 @@ export function useCalendarAccountGroups(externalFolders: Folder[]): CalendarAcc
   useEffect(() => {
     if (!storage || !folderKey) return;
     let cancelled = false;
-    void storage.getSyncStatus().then((next) => {
-      if (!cancelled) setAccounts(next);
-    });
+    storage
+      .getSyncStatus()
+      .then((next) => {
+        if (!cancelled) setAccounts(next);
+      })
+      .catch((e: unknown) => {
+        // The folders still show, in one group with no account heading.
+        log.warn("reading the sync accounts for folder groups failed", e);
+      });
     return () => {
       cancelled = true;
     };

@@ -16,14 +16,17 @@ export type StorageErrorKind =
 
 export class StorageError extends Error {
   readonly kind: StorageErrorKind;
-  /** The original thrown value, kept so log scrubbing can fall back to its string form. */
+  /** The original thrown value: the backend's `{ kind, message }`, or what JS threw. */
   readonly cause: unknown;
+  /** The backend command that failed, when the error came over IPC. */
+  readonly command: string | undefined;
 
-  constructor(kind: StorageErrorKind, message: string, cause?: unknown) {
+  constructor(kind: StorageErrorKind, message: string, cause?: unknown, command?: string) {
     super(message);
     this.name = "StorageError";
     this.kind = kind;
     this.cause = cause;
+    this.command = command;
   }
 }
 
@@ -34,23 +37,23 @@ export function isStorageError(err: unknown): err is StorageError {
 /**
  * Converts a thrown value into a StorageError so UI code can branch on `kind` instead of
  * string-matching `message`. Reads the backend's `{ kind, message }` wire shape; a plain `Error`
- * or anything else becomes `Unknown`.
+ * or anything else becomes `Unknown`. `command` names the backend command that rejected.
  */
-export function toStorageError(err: unknown): StorageError {
+export function toStorageError(err: unknown, command?: string): StorageError {
   if (isStorageError(err)) return err;
 
   if (err !== null && typeof err === "object" && "kind" in err && "message" in err) {
     const obj = err as { kind: unknown; message: unknown };
     const kind = toStorageErrorKind(obj.kind);
     const message = typeof obj.message === "string" ? obj.message : String(obj.message);
-    return new StorageError(kind, message, err);
+    return new StorageError(kind, message, err, command);
   }
 
   if (err instanceof Error) {
-    return new StorageError("Unknown", err.message, err);
+    return new StorageError("Unknown", err.message, err, command);
   }
 
-  return new StorageError("Unknown", String(err), err);
+  return new StorageError("Unknown", String(err), err, command);
 }
 
 const KIND_SET: ReadonlySet<StorageErrorKind> = new Set<StorageErrorKind>([
@@ -79,17 +82,17 @@ function toStorageErrorKind(raw: unknown): StorageErrorKind {
 export function storageErrorUserMessage(err: StorageError, verb = "the operation"): string {
   switch (err.kind) {
     case "NotFound":
-      return `Not found — refresh and try again.`;
+      return `Couldn't find it while ${verb}. It may have been deleted; refresh and try again.`;
     case "Conflict":
       return `Conflict while ${verb}. Try again in a moment.`;
     case "Io":
       return `Disk error while ${verb}. Check available space and permissions.`;
     case "Db":
-      return `Storage error while ${verb}.`;
+      return `Storage error while ${verb}. Try again, and restart Pikos if it keeps happening.`;
     case "Serde":
       return `Data shape mismatch while ${verb}. The workspace may need a restart.`;
     case "Invalid":
-      return `Invalid input for ${verb}.`;
+      return `Pikos couldn't accept that while ${verb}. Check what you entered and try again.`;
     case "Network":
       return `Couldn't reach the network while ${verb}. Check your connection.`;
     case "Corrupt":
@@ -99,6 +102,6 @@ export function storageErrorUserMessage(err: StorageError, verb = "the operation
     case "Internal":
     case "Unknown":
     default:
-      return `Something went wrong while ${verb}.`;
+      return `Something went wrong while ${verb}. Try again, and restart Pikos if it keeps happening.`;
   }
 }

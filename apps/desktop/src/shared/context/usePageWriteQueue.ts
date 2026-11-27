@@ -254,6 +254,7 @@ export function usePageWriteQueue({
   async function flushPage(id: string): Promise<void> {
     const accumulated = takePendingPatch(id);
     if (!accumulated) {
+      // eslint-disable-next-line pikos/no-silent-catch -- the write that failed reported itself; a flush only waits for it to settle
       await mutationQueues.current.get(id)?.catch(() => undefined);
       return;
     }

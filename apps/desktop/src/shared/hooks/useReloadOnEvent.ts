@@ -44,8 +44,9 @@ export function useReloadOnEvent({
         if (cancelled) un();
         else unlisten = un;
       })
-      .catch(() => {
-        /* listener failed to attach; non-fatal */
+      .catch((e: unknown) => {
+        // Changes from outside then show only after the next reload.
+        log.warn(`listening for ${event} failed`, e);
       });
 
     return () => {

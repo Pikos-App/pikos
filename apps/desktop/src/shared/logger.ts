@@ -21,9 +21,14 @@
 // fallback or unexpected state; info lifecycle anchors and destructive actions; debug dev-only
 // detail, stripped in prod.
 //
-// formatError() scrubs home-dir paths but not error messages from foreign systems (sqlite, Tauri
-// commands) that may echo user input: for those sites pass `e.name`, not `e`. The msg argument
-// must be app-controlled and short, never page titles, search queries or user file paths.
+// Pass the error itself as `err`. formatError() prints a StorageError, or the backend's raw
+// `{ kind, message }`, as its kind and command only, because the message is the Rust error's text
+// and can quote SQL parameters. For anything else it prints the message with home-dir paths, URLs
+// and email addresses scrubbed, so a foreign error that quotes a file name (a plugin's path, which
+// can be a note's title) must be wrapped with toStorageError() first. The msg argument must be
+// app-controlled and short, never page titles, search queries or user file paths.
+
+import { isStorageError } from "@pikos/core";
 
 const IS_DEV = import.meta.env.DEV;
 const IS_TEST = import.meta.env["VITE_TEST_MODE"] === "true";
@@ -31,9 +36,13 @@ const IS_TEST = import.meta.env["VITE_TEST_MODE"] === "true";
 // Replaces user-home prefixes on macOS, Linux and Windows with "~" so log files don't leak the
 // username.
 const HOME_PATH_RE = /(\/Users\/[^/\s)]+|\/home\/[^/\s)]+|C:\\Users\\[^\\\s)]+)/g;
+// A calendar server's address or an account's email can ride in a sync or updater error. The
+// webview's own origin is left alone: every stack frame names it, with the line that threw.
+const URL_RE = /\bhttps?:\/\/(?!(?:tauri\.)?localhost\b|127\.0\.0\.1\b)[^\s)"'>]+/gi;
+const EMAIL_RE = /[^\s@()<>"',;:]+@[^\s@()<>"',;:]+\.[a-z]{2,}/gi;
 
-function scrubPaths(s: string): string {
-  return s.replace(HOME_PATH_RE, "~");
+function scrub(s: string): string {
+  return s.replace(URL_RE, "<url>").replace(EMAIL_RE, "<email>").replace(HOME_PATH_RE, "~");
 }
 
 // Per-field cap for formatError output, so a runaway third-party error (a JSON parser quoting
@@ -44,16 +53,46 @@ function truncate(s: string, max = MAX_FIELD_CHARS): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
-export function formatError(e: unknown): string {
+/** How many `cause` links are followed, so a cycle can't hang the logger. */
+const MAX_CAUSE_DEPTH = 3;
+
+/** The backend's AppError as it arrives over IPC, before anything converted it. */
+function wireKind(e: unknown): string | null {
+  if (e === null || typeof e !== "object" || !("kind" in e) || !("message" in e)) return null;
+  const { kind } = e as { kind: unknown };
+  return typeof kind === "string" && /^[A-Za-z]{1,32}$/.test(kind) ? kind : "?";
+}
+
+function causeOf(e: Error): unknown {
+  return (e as { cause?: unknown }).cause;
+}
+
+export function formatError(e: unknown, depth = 0): string {
+  if (isStorageError(e)) {
+    const head = e.command
+      ? `StorageError(${e.kind}) from ${e.command}`
+      : `StorageError(${e.kind})`;
+    // Only a cause JS threw is followed: the backend's own `{ kind, message }` would print the text
+    // this branch leaves out.
+    const cause = e.cause instanceof Error && depth < MAX_CAUSE_DEPTH ? e.cause : null;
+    return cause ? `${head}\ncaused by: ${formatError(cause, depth + 1)}` : head;
+  }
+  const kind = wireKind(e);
+  if (kind) return `AppError(${kind})`;
   if (e instanceof Error) {
     const name = e.name || "Error";
-    const message = truncate(scrubPaths(e.message ?? ""));
-    const stack = e.stack ? truncate(scrubPaths(e.stack)) : "";
-    return stack ? `${name}: ${message}\n${stack}` : `${name}: ${message}`;
+    const message = truncate(scrub(e.message ?? ""));
+    const stack = e.stack ? truncate(scrub(e.stack)) : "";
+    const line = stack ? `${name}: ${message}\n${stack}` : `${name}: ${message}`;
+    const cause = causeOf(e);
+    return cause !== undefined && depth < MAX_CAUSE_DEPTH
+      ? `${line}\ncaused by: ${formatError(cause, depth + 1)}`
+      : line;
   }
-  if (typeof e === "string") return truncate(scrubPaths(e));
+  if (typeof e === "string") return truncate(scrub(e));
   try {
-    return truncate(scrubPaths(JSON.stringify(e)));
+    return truncate(scrub(JSON.stringify(e)));
+    // eslint-disable-next-line pikos/no-silent-catch -- the line says it couldn't print the value, which is the trace
   } catch {
     return "(unserializable)";
   }
@@ -93,6 +132,7 @@ function emit(level: Level, scope: string, msg: string, err?: unknown): void {
       const payload = err === undefined ? tag : `${tag} | ${formatError(err)}`;
       return log[level](payload);
     })
+    // eslint-disable-next-line pikos/no-silent-catch -- the log itself failed, so there is nowhere to write that down
     .catch(() => {});
 }
 
@@ -102,6 +142,34 @@ export function createLogger(scope: string): Logger {
     error: (msg, err) => emit("error", scope, msg, err),
     info: (msg, err) => emit("info", scope, msg, err),
     warn: (msg, err) => emit("warn", scope, msg, err),
+  };
+}
+
+const THROTTLE_MS = 30_000;
+
+/**
+ * A logger for a failure that can repeat on every write or tick: the first line for a message is
+ * written, then at most one per `windowMs`, saying how many it held back. Keyed by `msg`, so a
+ * message that names what failed keeps each failure's first line.
+ */
+export function throttled(log: Logger, windowMs = THROTTLE_MS): Logger {
+  const last = new Map<string, { at: number; held: number }>();
+  function write(level: Level, msg: string, err?: unknown): void {
+    const now = Date.now();
+    const seen = last.get(msg);
+    if (seen && now - seen.at < windowMs) {
+      seen.held += 1;
+      return;
+    }
+    last.set(msg, { at: now, held: 0 });
+    const held = seen?.held ?? 0;
+    log[level](held > 0 ? `${msg} (and ${held} more since the last line)` : msg, err);
+  }
+  return {
+    debug: (msg, err) => write("debug", msg, err),
+    error: (msg, err) => write("error", msg, err),
+    info: (msg, err) => write("info", msg, err),
+    warn: (msg, err) => write("warn", msg, err),
   };
 }
 

@@ -9,6 +9,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { createLogger } from "@/shared/logger";
+
+import { calendarErrorMessage } from "../utils/calendarErrorMessage";
+
+const log = createLogger("useCalendarSync");
 
 // Last resync outcome keyed by sync_calendar ROW id (not the provider
 // calendarId, which can repeat across two accounts). Sharpens the status dot
@@ -25,8 +30,9 @@ function prune(results: ResultMap, rowIds: string[]): ResultMap {
 // Connect shows its own inline error in AddAccountDialog. Other actions (menu
 // items, toggles) have no local error path, so a rejection would otherwise look
 // like nothing happened — the hook catches it and exposes `error` for the panel.
-function actionError(e: unknown, fallback: string): string {
-  return e instanceof Error && e.message ? e.message : fallback;
+function actionError(action: string, e: unknown, verb: string): string {
+  log.warn(`${action} failed`, e);
+  return calendarErrorMessage(e, verb);
 }
 
 export interface CalendarSyncState {
@@ -62,14 +68,27 @@ export function useCalendarSync(): CalendarSyncState {
   useEffect(() => {
     if (!storage) return;
     let cancelled = false;
-    void storage.getSyncStatus().then((next) => {
-      if (cancelled) return;
-      setAccounts(next);
-      setLoading(false);
-    });
-    void storage.googleSyncAvailable().then((next) => {
-      if (!cancelled) setGoogleAvailable(next);
-    });
+    storage
+      .getSyncStatus()
+      .then((next) => {
+        if (cancelled) return;
+        setAccounts(next);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(actionError("reading the sync accounts", e, "reading your calendar accounts"));
+        setLoading(false);
+      });
+    storage
+      .googleSyncAvailable()
+      .then((next) => {
+        if (!cancelled) setGoogleAvailable(next);
+      })
+      .catch((e: unknown) => {
+        // Google stays unoffered, which is what a build without its client shows too.
+        log.warn("asking whether Google sync is available failed", e);
+      });
     return () => {
       cancelled = true;
     };
@@ -99,13 +118,18 @@ export function useCalendarSync(): CalendarSyncState {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
-    listen("calendar-sync:pass", () => void refreshRef.current())
+    listen("calendar-sync:pass", () => {
+      refreshRef.current().catch((e: unknown) => {
+        log.warn("reading the sync accounts after a pass failed", e);
+      });
+    })
       .then((un) => {
         if (cancelled) un();
         else unlisten = un;
       })
-      .catch(() => {
-        /* listener failed to attach; the panel just stays on its last read */
+      .catch((e: unknown) => {
+        // The panel stays on its last read until it's opened again.
+        log.warn("listening for sync passes failed", e);
       });
     return () => {
       cancelled = true;
@@ -154,7 +178,7 @@ export function useCalendarSync(): CalendarSyncState {
     try {
       await storage.disconnectSyncAccount(accountId);
     } catch (e) {
-      setError(actionError(e, "Couldn't disconnect the account. Try again."));
+      setError(actionError("disconnecting an account", e, "disconnecting the account"));
       return;
     }
     setResults((prev) => prune(prev, rowIds));
@@ -172,7 +196,7 @@ export function useCalendarSync(): CalendarSyncState {
     try {
       await storage.toggleSyncCalendar(calendarRowId, enabled, color);
     } catch (e) {
-      setError(actionError(e, "Couldn't update the calendar. Try again."));
+      setError(actionError("toggling a calendar", e, "updating the calendar"));
       return;
     }
     setResults((prev) => prune(prev, [calendarRowId]));
@@ -190,7 +214,7 @@ export function useCalendarSync(): CalendarSyncState {
     try {
       await storage.setSyncCalendarColor(calendarRowId, color);
     } catch (e) {
-      setError(actionError(e, "Couldn't update the calendar colour. Try again."));
+      setError(actionError("recolouring a calendar", e, "changing the calendar's colour"));
       return;
     }
     await refresh();
@@ -228,7 +252,7 @@ export function useCalendarSync(): CalendarSyncState {
       await refresh();
       await reload();
     } catch (e) {
-      setError(actionError(e, "Couldn't sync right now. Check your connection and try again."));
+      setError(actionError(`syncing account ${accountId}`, e, "syncing the account"));
     } finally {
       setBusyAccountId(null);
     }
