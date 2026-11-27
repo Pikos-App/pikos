@@ -317,7 +317,10 @@ impl Bridge {
             }
             "get_usage_stats" => {
                 let week_start = arg(&mut args, "week_start")?;
-                return reply(db::dev::get_usage_stats_impl(&pool, week_start).await);
+                return reply(
+                    db::dev::get_usage_stats_impl(&pool, week_start, &pikos_db::today_local())
+                        .await,
+                );
             }
             // The poll the sync loop would run once the calendar changed upstream.
             "upstream_sync" => {

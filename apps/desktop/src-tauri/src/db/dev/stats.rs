@@ -57,16 +57,21 @@ pub async fn get_usage_stats(
     week_start: i64,
 ) -> AppResult<UsageStats> {
     let pool = state.get_pool().await?;
-    get_usage_stats_impl(&pool, week_start).await
+    get_usage_stats_impl(&pool, week_start, &pikos_db::today_local()).await
 }
 
 /// `week_start` is SQLite's weekday number, 0 = Sunday, which is also what the
 /// frontend's `WeekStart` holds. Rejected rather than clamped when out of range:
 /// `date()` answers NULL to an unrecognised modifier, so a bad value would empty
 /// every bar rather than fail.
+///
+/// `today` is the local date the newest week holds, never SQLite's `'now'`, which is UTC's: focus
+/// sessions and completions are stamped in local time, and the page timestamps, which are UTC, are
+/// moved to local before they are bucketed.
 pub(crate) async fn get_usage_stats_impl(
     pool: &sqlx::SqlitePool,
     week_start: i64,
+    today: &str,
 ) -> AppResult<UsageStats> {
     if !(0..=6).contains(&week_start) {
         return Err(crate::error::AppError::Internal(format!(
@@ -132,7 +137,7 @@ pub(crate) async fn get_usage_stats_impl(
            SELECT 0 UNION ALL SELECT n+1 FROM weeks WHERE n < 11 \
          ), \
          week_starts AS ( \
-           SELECT date('now', '-' || (n * 7) || ' days', '-6 days', 'weekday ' || ?1) AS week_start \
+           SELECT date(?2, '-' || (n * 7) || ' days', '-6 days', 'weekday ' || ?1) AS week_start \
            FROM weeks \
          ) \
          SELECT \
@@ -143,12 +148,12 @@ pub(crate) async fn get_usage_stats_impl(
            COALESCE(fs.focus_minutes, 0) AS focus_minutes \
          FROM week_starts ws \
          LEFT JOIN ( \
-           SELECT date(created_at, '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS created \
+           SELECT date(created_at, 'localtime', '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS created \
            FROM pages WHERE deleted_at IS NULL \
            GROUP BY w \
          ) cr ON cr.w = ws.week_start \
          LEFT JOIN ( \
-           SELECT date(updated_at, '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS edited \
+           SELECT date(updated_at, 'localtime', '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS edited \
            FROM pages WHERE deleted_at IS NULL AND updated_at != created_at \
            GROUP BY w \
          ) ed ON ed.w = ws.week_start \
@@ -166,6 +171,7 @@ pub(crate) async fn get_usage_stats_impl(
          ORDER BY ws.week_start ASC",
     )
     .bind(week_start)
+    .bind(today)
     .fetch_all(pool)
     .await?;
 

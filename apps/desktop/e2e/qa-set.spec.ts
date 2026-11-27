@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import {
   test as appTest,
+  bridgeCall,
   createFolder,
   expect,
   gutterLabel,
@@ -10,6 +11,7 @@ import {
   openCalendarMode,
   openEditorForPage,
   quickAdd,
+  stamp,
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
 
@@ -391,5 +393,37 @@ appTest(
       await expect(chip("Focus", "not used")).toBeVisible();
       await expect(chip("Calendar sync", "not used")).toBeVisible();
     });
+  }
+);
+
+appTest(
+  "the Focus panel's week bars show when the work was done, the newest reading This week",
+  { tag: ["@SET-12"] },
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "SET-12 writes past sessions the timer can't");
+    await quickAdd(app, "deep work");
+    const [page] = await bridgeCall<{ id: string }[]>(app, "list_pages");
+    const session = async (daysAgo: number, minutes: number) => {
+      const startedAt = await stamp(app, -daysAgo, "00:01");
+      await bridgeCall(app, "create_focus_session", {
+        durationS: minutes * 60,
+        endedAt: startedAt,
+        pageId: page?.id,
+        startedAt,
+      });
+    };
+    await session(0, 25);
+    await session(21, 50);
+
+    await openSettings(app, "Data");
+    const bars = settingsOf(app).locator('[title$="m"]');
+    await expect(bars).toHaveCount(12);
+    const titles = await bars.evaluateAll((els) => els.map((el) => el.getAttribute("title")));
+    const heights = await bars.evaluateAll((els) => els.map((el) => el.clientHeight));
+
+    expect(titles[11]).toBe("This week: 25m");
+    expect(titles[8]).toMatch(/: 50m$/);
+    expect(titles.filter((t) => !t?.endsWith(": 0m"))).toHaveLength(2);
+    expect(heights[8]).toBe(2 * (heights[11] ?? 0));
   }
 );

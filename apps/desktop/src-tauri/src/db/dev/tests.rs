@@ -5,8 +5,8 @@ use super::stats::*;
 use crate::db::DbState;
 use pikos_db::{
     create_focus_session, create_folder_impl, create_page_impl, insert_test_folder,
-    insert_test_page, list_folders_impl, list_pages_impl, now_iso, test_pool, NewFolder, NewPage,
-    TestPage,
+    insert_test_page, list_folders_impl, list_pages_impl, now_iso, now_local_iso, test_pool,
+    today_local, NewFolder, NewPage, TestPage,
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -143,8 +143,8 @@ async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, durati
     )
     .bind(id)
     .bind(page_id)
-    .bind(now_iso())
-    .bind(now_iso())
+    .bind(now_local_iso())
+    .bind(now_local_iso())
     .bind(duration_s)
     .execute(pool)
     .await
@@ -182,7 +182,9 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
     assert_eq!(s.total_focus_sessions, 2);
     assert_eq!(s.total_focus_minutes, 40); // (1500 + 900) / 60
     assert!(s.has_focus_sessions);
@@ -191,7 +193,9 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
     let pool = test_pool().await;
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
 
     assert_eq!(s.total_pages, 0);
     assert_eq!(s.total_folders, 0);
@@ -239,7 +243,9 @@ async fn usage_stats_counts_totals_and_adoption() {
     insert_focus_session(&pool, "fs1", "p1", 600).await;
     insert_focus_session(&pool, "fs2", "p1", 600).await;
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
 
     assert_eq!(s.total_pages, 3);
     assert_eq!(s.total_folders, 1);
@@ -279,7 +285,8 @@ async fn usage_stats_count_monday_in_its_own_week() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
 
-    let monday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 1')")
+    let monday: String = sqlx::query_scalar("SELECT date(?, '-6 days', 'weekday 1')")
+        .bind(today_local())
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -293,7 +300,9 @@ async fn usage_stats_count_monday_in_its_own_week() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
 
     assert_eq!(
         s.weekly_activity.last().unwrap().focus_minutes,
@@ -309,7 +318,8 @@ async fn usage_stats_bucket_weeks_on_the_users_week_start() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
 
-    let sunday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 0')")
+    let sunday: String = sqlx::query_scalar("SELECT date(?, '-6 days', 'weekday 0')")
+        .bind(today_local())
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -323,8 +333,12 @@ async fn usage_stats_bucket_weeks_on_the_users_week_start() {
     .await
     .unwrap();
 
-    let sun = get_usage_stats_impl(&pool, SUNDAY).await.unwrap();
-    let mon = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let sun = get_usage_stats_impl(&pool, SUNDAY, &today_local())
+        .await
+        .unwrap();
+    let mon = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
 
     let labels = |s: &UsageStats| -> Vec<String> {
         s.weekly_activity.iter().map(|w| w.week.clone()).collect()
@@ -348,13 +362,43 @@ async fn usage_stats_bucket_weeks_on_the_users_week_start() {
     );
 }
 
+/// A session is stamped in local time, so the weeks have to be counted from the local date. Counted
+/// from UTC's, a Sunday evening west of UTC already sits in Monday's week, and the newest bar,
+/// "This week", is empty while the day's work fills the one before it.
+#[tokio::test]
+async fn usage_stats_count_weeks_from_the_local_date() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Deep work"))
+        .await
+        .unwrap();
+    let sunday = "2026-06-07";
+    create_focus_session(
+        &pool,
+        "p1",
+        &format!("{sunday}T21:00:00"),
+        &format!("{sunday}T21:10:00"),
+        600,
+    )
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool, MONDAY, sunday).await.unwrap();
+    let latest = s.weekly_activity.last().unwrap();
+
+    assert_eq!((latest.week.as_str(), latest.focus_minutes), ("Jun 01", 10));
+}
+
 /// An unrecognised modifier makes SQLite's `date()` answer NULL, which would empty
 /// every bar rather than fail, so the range is checked before the query runs.
 #[tokio::test]
 async fn usage_stats_reject_a_week_start_outside_the_week() {
     let pool = test_pool().await;
-    assert!(get_usage_stats_impl(&pool, 7).await.is_err());
-    assert!(get_usage_stats_impl(&pool, -1).await.is_err());
+    assert!(get_usage_stats_impl(&pool, 7, &today_local())
+        .await
+        .is_err());
+    assert!(get_usage_stats_impl(&pool, -1, &today_local())
+        .await
+        .is_err());
 }
 
 /// Truncates like the running total: 90s + 90s is 3 minutes, not two rounded-up ones.
@@ -365,7 +409,9 @@ async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
     insert_focus_session(&pool, "fs1", "p1", 90).await;
     insert_focus_session(&pool, "fs2", "p1", 90).await;
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
     let latest = s.weekly_activity.last().unwrap();
 
     assert_eq!(latest.focus_minutes, 3);
@@ -386,13 +432,13 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     insert_rich_page(&pool, "p1", "Parent", "{}", "one two", 0, "[]").await;
 
     assert!(
-        !get_usage_stats_impl(&pool, MONDAY)
+        !get_usage_stats_impl(&pool, MONDAY, &today_local())
             .await
             .unwrap()
             .has_reminders
     );
     assert!(
-        !get_usage_stats_impl(&pool, MONDAY)
+        !get_usage_stats_impl(&pool, MONDAY, &today_local())
             .await
             .unwrap()
             .has_calendar_sync
@@ -412,7 +458,9 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     .await
     .unwrap();
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
     assert!(s.has_reminders);
     assert!(s.has_calendar_sync);
 }
@@ -424,7 +472,9 @@ async fn usage_stats_excludes_soft_deleted_pages() {
     insert_rich_page(&pool, "p2", "Gone", "{}", "x y z", 3, "[\"drop\"]").await;
     soft_delete(&pool, "p2").await;
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
     assert_eq!(s.total_pages, 1);
     assert_eq!(s.total_words, 2); // only the live page
                                   // adoption flags only reflect the surviving page
@@ -1369,6 +1419,8 @@ async fn usage_stats_count_scheduled_pages_not_schedule_rows() {
         .await
         .unwrap();
 
-    let s = get_usage_stats_impl(&pool, MONDAY).await.unwrap();
+    let s = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .unwrap();
     assert_eq!(s.total_schedules, 1);
 }
