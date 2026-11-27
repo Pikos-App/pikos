@@ -19,9 +19,13 @@
         }
 
         private func load() {
-            guard let store = try? OSLogStore(scope: .currentProcessIdentifier),
-                let entries = try? store.getEntries()
-            else { return }
+            let entries: AnySequence<OSLogEntry>
+            do {
+                entries = try OSLogStore(scope: .currentProcessIdentifier).getEntries()
+            } catch {
+                lines = ["The log couldn't be read: \(error.localizedDescription)"]
+                return
+            }
 
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
