@@ -354,6 +354,23 @@ where
         .join(";")
 }
 
+/// The keys of the parts whose values the engine can't read and so ignores, as rrule.js does:
+/// a `COUNT=abc` or a bad `UNTIL` repeats without end, an `INTERVAL=x` every period. Parsing
+/// stays lenient so a synced calendar's series still show; this lets a caller say so.
+pub fn unread_parts(rrule: &str) -> Vec<&str> {
+    parts(rrule)
+        .filter(|&(key, value)| match key {
+            "INTERVAL" | "COUNT" => value.parse::<u32>().is_err(),
+            "UNTIL" => parse_until(value).is_none(),
+            "BYMONTHDAY" | "BYSETPOS" => parse_int_list(value).is_none(),
+            "BYMONTH" => parse_month_list(value).is_none(),
+            "WKST" => weekday_from_code(value).is_none(),
+            _ => false,
+        })
+        .map(|(key, _)| key)
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ByDay {
     pub ordinal: Option<i32>,

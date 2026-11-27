@@ -189,6 +189,16 @@ pub async fn recompute_recurring_schedule(
     let Some(rule) = load_rule(tx, page_id).await? else {
         return Ok(());
     };
+    let unread = pikos_recurrence::unread_parts(&rule.rrule);
+    if !unread.is_empty() {
+        warn_once(&rule.id, "unread", || {
+            format!(
+                "rule {} on page {page_id}: ignoring the unreadable {}",
+                rule.id,
+                unread.join(", ")
+            )
+        });
+    }
     let excl = exclusion_union(tx, page_id, &rule.id, &rule.rrule_exdates).await?;
     let floor = synced_head_floor(tx, page_id).await?;
 
