@@ -9,11 +9,12 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 /** The headings a description may use, in the order they appear. Only the first and Evidence are required. */
-export const SECTIONS = ["What changes", "Migrations", "Evidence", "Not proven here"];
+export const SECTIONS = ["What changes", "Migrations", "Evidence", "Try by hand"];
 const REQUIRED = ["What changes", "Evidence"];
 const TYPES = "feat|fix|docs|refactor|test|perf|chore|build|ci";
 const TITLE = new RegExp(`^(?:(?:${TYPES})(?:\\([a-z0-9-]+\\))?|release): [a-z0-9]`);
 const MAX_BULLET_WORDS = 60;
+const MAX_BULLETS = 7;
 
 const withoutCode = (text) => text.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "code");
 
@@ -63,7 +64,11 @@ export function prBodyProblems(title, body) {
   }
 
   const changes = sections.find((s) => s.name === "What changes")?.content ?? "";
-  for (const line of changes.split("\n").filter((l) => /^[-*] /.test(l))) {
+  const bullets = changes.split("\n").filter((l) => /^[-*] /.test(l));
+  if (bullets.length > MAX_BULLETS) {
+    problems.push(`"## What changes" has ${bullets.length} bullets, over ${MAX_BULLETS}. Group related changes under one claim; past that it's a tour of the diff.`);
+  }
+  for (const line of bullets) {
     const words = withoutCode(line).split(/\s+/).length - 1;
     if (words > MAX_BULLET_WORDS) {
       problems.push(`A "What changes" bullet runs ${words} words, over ${MAX_BULLET_WORDS}: "${line.slice(2, 60)}…". Say the change and its reason; what it means for a person goes in the release notes.`);

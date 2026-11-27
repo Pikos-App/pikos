@@ -24,9 +24,9 @@ One or two plain sentences: what this is for, and why now.
 
 What was run, and what it showed.
 
-## Not proven here     (only when something isn't)
+## Try by hand         (only when there's something to try)
 
-What this pull request can't exercise, and anything to do at or after merge.
+What a person should check that no test here proves, and when.
 ```
 
 No other headings, and the sections stay in that order. The title is a commit subject:
@@ -44,9 +44,11 @@ notes, never in the description.
 
 ## What changes
 
-One bullet per decision a reviewer needs, not one per file or commit. Each opens with a bolded
-claim stating what now happens, then at most one sentence of why, or the limit it sets.
-Technical detail is welcome. A bullet the diff already tells the reviewer gets cut.
+One bullet per decision a reviewer needs, not one per file or commit, and seven at most. Each
+opens with a bolded claim stating what now happens, then at most one sentence of why, or the
+limit it sets. Technical detail is welcome. A bullet the diff already tells the reviewer gets
+cut. Past seven, group related changes under one claim; a pull request that still needs more is
+usually two.
 
 ## Migrations
 
@@ -64,11 +66,13 @@ The proof the diff can't carry. Name what was run and what it showed:
 "CI is green" or "tests pass" alone isn't evidence, because the checks on the pull request
 already say so.
 
-## Not proven here
+## Try by hand
 
-What this pull request can't exercise, like a scheduled-only step, a release-only workflow or a
-settings change after merge, and what a person should try by hand. Leave the section out when
-there's nothing to say. Don't write "nothing".
+The list the maintainer works through before merging or releasing. Each item says what to do,
+when (before merge, after merge, or at release), and what a pass looks like: a screen to drive on
+staging, a QA row by its ID, a scheduled run to watch, or a setting to change. Name a known limit
+here too, so whoever tries it knows where to push. Leave the section out when there's nothing to
+try. Don't write "nothing".
 
 ## Before you post
 
@@ -76,5 +80,7 @@ there's nothing to say. Don't write "nothing".
 2. `node scripts/check-pr-body.mjs --title "<title>" <file>` and fix what it reports.
 3. `gh pr create --title "<title>" --body-file <file>`, or `gh pr edit <n> --body-file <file>`.
 
-When revising a description someone else wrote, keep every fact and move it into the shape. Never
-invent evidence. If a merged pull request recorded none, Evidence says so in one line.
+When revising a description, keep every fact and move it into the shape. Never invent evidence.
+Look for it before giving up: tests the pull request added or changed (`gh pr diff <n>`), its
+commits, its comments, and CI's runs on it. Name a test only when the diff shows it. If
+nothing turns up, Evidence says so in one line.
