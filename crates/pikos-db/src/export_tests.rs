@@ -491,6 +491,111 @@ async fn an_unscheduled_page_has_no_date_lines_in_its_frontmatter() {
     assert!(!plan[0].contents.contains("scheduled_end"));
 }
 
+async fn tick_head(pool: &SqlitePool, page_id: &str) {
+    crate::complete_recurring_page_impl(
+        pool,
+        crate::CompleteRecurringInput {
+            page_id: page_id.into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+// qa: EXP-03:2
+#[tokio::test]
+async fn pages_sharing_a_title_each_get_their_own_file() {
+    let pool = test_pool().await;
+    insert_test_folder(&pool, "f1", "Work").await.unwrap();
+    for (id, title) in [("a", "Notes"), ("b", "notes"), ("c", "")] {
+        insert_test_page(
+            &pool,
+            TestPage {
+                folder_id: Some("f1"),
+                ..TestPage::new(id, title)
+            },
+        )
+        .await
+        .unwrap();
+    }
+    insert_test_page(&pool, TestPage::new("d", ""))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("e", ""))
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("f1"),
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("weekly", "Review")
+        },
+    )
+    .await
+    .unwrap();
+    crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "weekly".into(),
+            rrule: "FREQ=WEEKLY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-05-21".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    tick_head(&pool, "weekly").await;
+    tick_head(&pool, "weekly").await;
+    let out = std::env::temp_dir().join(format!("pkos_md_clash_{}", uuid::Uuid::new_v4()));
+
+    let (pages, _) = write_markdown_export(&pool, &out, &out.join("no-assets"), false)
+        .await
+        .unwrap();
+
+    let written: Vec<String> = walk_files(&out)
+        .iter()
+        .map(|path| {
+            path.strip_prefix(&out)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(pages, 8);
+    assert_eq!(written.len(), pages, "{written:?}");
+    assert_eq!(
+        written
+            .iter()
+            .map(|path| path.to_lowercase())
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        pages,
+        "two names that differ only in case are one file on macOS: {written:?}"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+fn walk_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .flat_map(|entry| {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk_files(&path)
+            } else {
+                vec![path]
+            }
+        })
+        .collect()
+}
+
 /// Why the `Uncategorized` fallback can't be reached, so nobody deletes it as dead code unaware.
 ///
 /// It fires for a page whose `folder_id` names a missing folder, which the schema forbids: the

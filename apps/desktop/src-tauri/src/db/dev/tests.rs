@@ -754,7 +754,7 @@ const MARKDOWN_VAULT: &str = concat!(
     "/../../../crates/pikos-db/tests/fixtures/markdown-vault"
 );
 
-// qa: EXP-03
+// qa: EXP-03:2
 // qa: EXP-05:2
 // qa: PRIV-04:4
 #[tokio::test]

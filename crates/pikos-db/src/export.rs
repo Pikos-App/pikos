@@ -6,7 +6,7 @@
 //! [`plan_markdown_export`]). [`write_markdown_export`] is that writing for a caller with the
 //! workspace's images on disk beside it, the desktop and the CLI.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use sqlx::Row;
@@ -123,6 +123,7 @@ pub async fn plan_markdown_export(
         })
         .collect();
 
+    let mut claimed = HashSet::new();
     Ok(rows
         .iter()
         .map(|row| {
@@ -134,9 +135,28 @@ pub async fn plan_markdown_export(
                     .map(|n| sanitize_filename(n))
                     .unwrap_or_else(|| "Uncategorized".to_string())
             });
-            markdown_page(row, directory, &titles)
+            let mut page = markdown_page(row, directory, &titles);
+            page.path = unclaimed_path(&page.path, &mut claimed);
+            page
         })
         .collect())
+}
+
+/// `path`, or `<stem> 2.md` and up when an earlier page took it, as the one-page export names a
+/// file that is already there.
+///
+/// A repeating page's done copies, untitled pages and imported duplicates share a title, and
+/// without this each was written over the last. `claimed` holds lowercased paths because the
+/// macOS and iOS file systems ignore case, so `Notes.md` and `notes.md` are one file there.
+fn unclaimed_path(path: &str, claimed: &mut HashSet<String>) -> String {
+    let stem = path.strip_suffix(".md").unwrap_or(path);
+    let free = std::iter::once(path.to_string())
+        .chain((2..).map(|n| format!("{stem} {n}.md")))
+        .find(|candidate| !claimed.contains(&candidate.to_lowercase()))
+        .expect("an unbounded range always finds a free name");
+
+    claimed.insert(free.to_lowercase());
+    free
 }
 
 /// One page as a Markdown file of its own, at the root of wherever it is written.
