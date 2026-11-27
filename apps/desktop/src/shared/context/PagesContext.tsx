@@ -21,8 +21,10 @@ import type {
   PageUpdate,
   RecurrenceRuleUpdate,
 } from "@pikos/core";
+import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { createContext, type ReactNode, useContext } from "react";
 
+import { postNotice } from "@/shared/events/noticeBus";
 import { recordOpen } from "@/shared/lib/recentOpens";
 import { createLogger } from "@/shared/logger";
 
@@ -255,8 +257,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         })
       );
     } catch (err) {
-      // A neighbour that moved since the list loaded; the refresh after every write redraws it.
-      log.warn("move refused", err);
+      const error = toStorageError(err);
+      // A neighbour that moved or went since the list loaded: the refresh after every write
+      // redraws the list as it is, which says enough. Anything else, the move didn't happen.
+      const isStaleList = error.kind === "Conflict" || error.kind === "NotFound";
+      log.warn(isStaleList ? "move refused" : "move failed", error);
+      if (!isStaleList) postNotice(storageErrorUserMessage(error, "moving pages"));
     }
   }
 
