@@ -1,3 +1,5 @@
 # A pull that merged may have brought in pull requests merged elsewhere, so clear away the
-# worktrees and branches they leave behind. It never fails the pull.
+# worktrees and branches they leave behind, then hold the build folders under their size cap.
+# Neither ever fails the pull.
 node scripts/clean-merged-work.mjs --quiet
+bash scripts/cleanup-builds.sh --quiet || echo "[cleanup-builds] skipped: it failed; run pnpm cleanup to see why"
