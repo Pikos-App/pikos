@@ -66,3 +66,6 @@ searches and verification passes, run on `model: sonnet`.
 
 Then `kit done pkos <ID>`, never `rm`, and move the item's row to its release page's
 "Landed" list with the date. If a skill proved wrong or incomplete, fix it now.
+
+A pull request's title and description follow `.claude/skills/pr-description/SKILL.md`, and CI
+checks the shape.

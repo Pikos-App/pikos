@@ -1,0 +1,33 @@
+name: PR description
+
+# Checks a pull request's title and description against .claude/skills/pr-description/SKILL.md.
+# Its own workflow, since an edit to the description reruns only this, not the whole of CI.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Title and description
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/check-pr-body.mjs
+          sparse-checkout-cone-mode: false
+
+      # Passed through the environment, so nothing in a description runs as shell.
+      - name: Check the title and description
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$BODY" | node scripts/check-pr-body.mjs --title "$TITLE" -
