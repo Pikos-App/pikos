@@ -11,6 +11,12 @@
 //!
 //! The generator freezes the clock because the TypeScript reads `new Date()` in three places.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

@@ -367,7 +367,7 @@ jobs:
       # No separate `cargo check -D warnings`: clippy compiles the same targets and denies the
       # compiler's warnings along with its own.
       - name: Cargo clippy (zero warnings)
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: bash scripts/clippy.sh --workspace --all-targets
 
       # The parser bridge and the fuzz generators are TypeScript, so this job needs Node as
       # well as Rust. Set up after fmt and clippy so a failure there surfaces without waiting
@@ -636,7 +636,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Cargo clippy (desktop crate, zero warnings)
-        run: cargo clippy --all-targets -- -D warnings
+        run: bash ../../../scripts/clippy.sh --all-targets
 
       - name: Cargo test (desktop crate)
         run: cargo test --all --quiet

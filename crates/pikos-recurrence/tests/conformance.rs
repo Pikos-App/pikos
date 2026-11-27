@@ -3,6 +3,12 @@
 //! `packages/core/src/utils/recurrence.corpus.test.ts`) and committed, so this
 //! test is hermetic — no Node at test time.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use pikos_recurrence::{
     align_weekly_rule_to_anchor, build_rrule, compute_next_end, expand_range,
     missed_occurrences_between, next_occurrence_after, parse_rrule, rrule_to_short_label,

@@ -124,10 +124,14 @@ pub fn save<R: Runtime>(app: &AppHandle<R>) {
 
     let Some(path) = state_path(app) else { return };
     if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+        if let Err(e) = fs::create_dir_all(parent) {
+            log::warn!("window state: could not create its folder: {e}");
+        }
     }
     if let Ok(json) = serde_json::to_string_pretty(&state) {
-        let _ = fs::write(&path, json);
+        if let Err(e) = fs::write(&path, json) {
+            log::warn!("window state: could not save the window's size and position: {e}");
+        }
     }
 }
 

@@ -3,6 +3,12 @@
 //! cases the JS suite asserts — the corpus and goldens pin breadth; these pin
 //! the readable, named behaviors without a JS toolchain in the loop.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use pikos_recurrence::{
     align_weekly_rule_to_anchor, build_rrule, compute_next_end, expand_range, list_occurrences,
     missed_occurrences_between, parse_rrule, snap_anchor_to_rule, Freq, Occurrence,

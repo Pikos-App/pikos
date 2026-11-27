@@ -5,6 +5,12 @@
 //! is `degradeCases` in `tests/corpus/recurrence.json`. The function under test is
 //! `pikos-recurrence`'s; it is graded here because the corpus lives here.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::fs;
 use std::path::PathBuf;
 

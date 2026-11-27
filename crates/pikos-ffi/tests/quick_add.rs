@@ -1,6 +1,12 @@
 //! The quick-add boundary: a malformed reference is refused rather than guessed at, and priority
 //! keeps all three of its states (parsing itself is graded in `pikos-core`).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use pikos_ffi::{parse_quick_add, Priority, PriorityEdit, QuickAddResult};
 
 const NOW: &str = "2026-03-15T12:00:00";

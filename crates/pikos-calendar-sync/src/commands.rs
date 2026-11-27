@@ -350,7 +350,9 @@ async fn release_credential(keychain: &Keychain, account_id: &str, provider: &st
             log::warn!("sync: could not revoke the Google grant for {account_id}: {e}");
         }
     }
-    let _ = keychain.delete(account_id);
+    if let Err(e) = keychain.delete(account_id) {
+        log::warn!("sync: could not delete the stored secret for {account_id}: {e}");
+    }
 }
 
 /// Resync an account through the provider its `provider` column names. The scheduler resolves

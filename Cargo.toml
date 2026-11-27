@@ -6,6 +6,14 @@ members = ["crates/*"]
 # provision; keep it standalone so workspace checks stay toolchain-agnostic.
 exclude = ["apps/desktop/src-tauri"]
 
+[workspace.lints.clippy]
+let_underscore_must_use = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+cast_possible_truncation = "warn"
+await_holding_lock = "warn"
+large_futures = "warn"
+
 # Size-optimized profile for the WebAssembly build of the recurrence engine
 # (see scripts/build-recurrence-wasm.sh). Kept separate from `release` so the
 # native CLI/backend keep their default optimization settings.

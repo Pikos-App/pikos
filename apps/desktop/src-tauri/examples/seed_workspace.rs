@@ -6,6 +6,12 @@
 //! so each request line is `{id, cmd, args}` carrying exactly the command name and
 //! args the app would send.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "a developer tool: a panic is its error report"
+)]
+
 use std::io::{BufRead, Write};
 
 use pikos_db::{AppError, AppResult};

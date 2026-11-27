@@ -101,3 +101,11 @@ tauri = { version = "2", features = ["test"] }
 # one rebuild of SQLite.
 [profile.dev.package.libsqlite3-sys]
 opt-level = 3
+
+[lints.clippy]
+let_underscore_must_use = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+cast_possible_truncation = "warn"
+await_holding_lock = "warn"
+large_futures = "warn"

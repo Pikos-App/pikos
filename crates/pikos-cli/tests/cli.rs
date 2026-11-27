@@ -4,6 +4,12 @@
 //! when packages/pikos-bridge/dist/bridge.mjs exists and are skipped with a note
 //! otherwise. Everything else runs unconditionally.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -4,6 +4,12 @@
 //! pastel eight are where a synced calendar is mapped, so a shuffle that keeps every value
 //! would still put an imported calendar in a colour that shouts.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::fs;
 use std::path::PathBuf;
 

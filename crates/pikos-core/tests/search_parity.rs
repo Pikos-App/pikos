@@ -6,6 +6,12 @@
 //! Every case records the text left behind, so a port that recognises one token too many
 //! (`ratio:1.5`, `priority:9`) fails even when its filter looks right.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::fs;
 use std::path::PathBuf;
 
