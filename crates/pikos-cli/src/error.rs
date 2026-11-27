@@ -45,22 +45,31 @@ impl CliError {
 }
 
 /// Map a pikos-db AppError to a scrubbed CliError. Foreign (sqlx) messages are
-/// never surfaced — only a stable kind + generic text; NotFound/Conflict/Invalid
-/// carry our own safe messages.
+/// never surfaced, only a stable kind, generic text and `AppError::log_summary`'s
+/// content-free reason; NotFound/Conflict/Invalid carry our own safe messages.
 pub fn classify(err: AppError) -> CliError {
-    match err {
-        AppError::TooNew { applied, supported } => CliError::new(
+    match &err {
+        &AppError::TooNew { applied, supported } => CliError::new(
             "SchemaTooNew",
             format!("This workspace's database is at schema v{applied}, newer than the v{supported} this Pikos CLI supports. Upgrade the CLI to match the desktop app."),
             6,
         ),
-        AppError::NotFound(m) => CliError::not_found(m),
-        AppError::Conflict(m) => CliError::conflict(m),
-        AppError::Invalid(m) => CliError::usage(m),
-        AppError::Db(_) => CliError::new("Db", "a database error occurred", 1),
-        AppError::Io(_) => CliError::internal("an I/O error occurred"),
-        AppError::Serde(_) => CliError::internal("a serialization error occurred"),
-        AppError::Network(m) => CliError::new("Network", m, 1),
+        AppError::NotFound(m) => CliError::not_found(m.clone()),
+        AppError::Conflict(m) => CliError::conflict(m.clone()),
+        AppError::Invalid(m) => CliError::usage(m.clone()),
+        AppError::Db(_) => CliError::new(
+            "Db",
+            format!("a database error occurred ({})", err.log_summary()),
+            1,
+        ),
+        AppError::Io(_) => {
+            CliError::internal(format!("an I/O error occurred ({})", err.log_summary()))
+        }
+        AppError::Serde(_) => CliError::internal(format!(
+            "a serialization error occurred ({})",
+            err.log_summary()
+        )),
+        AppError::Network(m) => CliError::new("Network", m.clone(), 1),
         // Its own kind and its own exit code: a script that sees this should
         // stop rather than retry, and the answer is a restore, not a rerun.
         // The detail is scrubbed like any foreign message — the app's Data
@@ -70,7 +79,7 @@ pub fn classify(err: AppError) -> CliError {
             "This workspace's database file is damaged. Restore a backup from the Pikos app, under Settings, Data.",
             9,
         ),
-        AppError::Internal(m) => CliError::internal(m),
+        AppError::Internal(m) => CliError::internal(m.clone()),
     }
 }
 
@@ -87,7 +96,7 @@ mod tests {
         // Foreign DB error text is scrubbed to a stable kind + generic message.
         let db = classify(AppError::Db(sqlx::Error::RowNotFound));
         assert_eq!(db.kind, "Db");
-        assert_eq!(db.message, "a database error occurred");
+        assert_eq!(db.message, "a database error occurred (Db/row_not_found)");
     }
 
     #[test]
