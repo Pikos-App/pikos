@@ -669,7 +669,14 @@ pub async fn holds_only_seed(pool: &SqlitePool) -> AppResult<bool> {
     let stored: String = sqlx::query_scalar("SELECT seeded FROM replica_meta WHERE id = 1")
         .fetch_one(pool)
         .await?;
-    let seeded: Fingerprints = serde_json::from_str(&stored).unwrap_or_default();
+    // With no seed any synced row counts as work, so the join merges and nothing is lost.
+    let seeded: Fingerprints = serde_json::from_str(&stored).unwrap_or_else(|e| {
+        log::warn!(
+            "replica: replica_meta.seeded is unreadable ({}), read as no seed",
+            AppError::from(e).log_summary()
+        );
+        Fingerprints::new()
+    });
 
     Ok(fingerprints(pool).await? == seeded)
 }
