@@ -398,3 +398,74 @@ async fn a_full_grant_yields_credentials_carrying_both_tokens() {
     assert_eq!(credentials.refresh_token, "rt");
     assert!(credentials.missing_scopes().is_empty());
 }
+
+/// Accepts the first write and refuses every one after it, as a keychain that locks mid-session.
+#[derive(Default)]
+struct RefusesLaterWrites {
+    inner: crate::test_support::MemoryStore,
+    writes: std::sync::atomic::AtomicUsize,
+}
+
+impl crate::keychain::CredentialStore for RefusesLaterWrites {
+    fn set(&self, key: &str, secret: &str) -> Result<(), crate::keychain::KeychainError> {
+        if self
+            .writes
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            > 0
+        {
+            return Err(crate::keychain::KeychainError::Backend("locked".into()));
+        }
+        crate::keychain::CredentialStore::set(&self.inner, key, secret)
+    }
+    fn get(&self, key: &str) -> Result<String, crate::keychain::KeychainError> {
+        crate::keychain::CredentialStore::get(&self.inner, key)
+    }
+    fn delete(&self, key: &str) -> Result<(), crate::keychain::KeychainError> {
+        crate::keychain::CredentialStore::delete(&self.inner, key)
+    }
+    fn delete_all(&self) -> Result<(), crate::keychain::KeychainError> {
+        crate::keychain::CredentialStore::delete_all(&self.inner)
+    }
+}
+
+/// A refreshed token the keychain wouldn't take is this machine's failure, not the network's, so
+/// it must not read as offline.
+#[tokio::test]
+async fn a_keychain_that_refuses_the_refreshed_tokens_is_not_read_as_offline() {
+    let keychain = Keychain::with_store(Box::new(RefusesLaterWrites::default()));
+    store(&keychain, ACCOUNT, &credentials("old-access", "rt", None)).unwrap();
+    let http = Scripted::ok(token_json("new-access", None, 3600));
+
+    let err = access_token_with(&keychain, ACCOUNT, &test_client(), &http)
+        .await
+        .unwrap_err();
+
+    let err = pikos_db::error::AppError::from(err);
+    assert!(
+        !matches!(err, pikos_db::error::AppError::Network(_)),
+        "{err:?}"
+    );
+}
+
+/// serde's message quotes what it couldn't read, and in this blob that can be a token.
+#[tokio::test]
+async fn an_unreadable_stored_blob_asks_for_a_reconnect_without_quoting_it() {
+    let keychain = memory_keychain();
+    keychain
+        .store(
+            ACCOUNT,
+            r#"{"access_token":"a","refresh_token":"r","expires_at":null,"granted_scopes":"hunter2-secret"}"#,
+        )
+        .unwrap();
+
+    let err = access_token_with(&keychain, ACCOUNT, &test_client(), &Scripted::silent())
+        .await
+        .unwrap_err();
+
+    let err = pikos_db::error::AppError::from(err);
+    assert!(
+        matches!(err, pikos_db::error::AppError::Invalid(_)),
+        "{err:?}"
+    );
+    assert!(!err.to_string().contains("hunter2"), "{err}");
+}

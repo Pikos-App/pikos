@@ -130,9 +130,10 @@ pub fn store(
     let blob = credentials
         .to_blob()
         .map_err(|e| GoogleError::Protocol(format!("serialize credentials: {e}")))?;
-    keychain
-        .store(account_id, &blob)
-        .map_err(|e| GoogleError::Network(e.user_message()))
+    keychain.store(account_id, &blob).map_err(|e| {
+        log::warn!("google_credentials_not_stored account={account_id} cause={e}");
+        GoogleError::Keychain(e.user_message())
+    })
 }
 
 /// A usable bearer token for this account, refreshing in place when the stored
@@ -225,8 +226,17 @@ fn load(keychain: &Keychain, account_id: &str) -> Result<GoogleCredentials, Goog
             GoogleError::Network(e.to_string())
         }
     })?;
-    GoogleCredentials::from_blob(&blob)
-        .map_err(|e| GoogleError::Protocol(format!("unreadable stored credentials: {e}")))
+    GoogleCredentials::from_blob(&blob).map_err(|e| {
+        // serde's message can quote the blob, a token included, so only its category and
+        // position are logged.
+        log::warn!(
+            "google_credentials_unreadable account={account_id} serde={:?} at {}:{}",
+            e.classify(),
+            e.line(),
+            e.column()
+        );
+        GoogleError::CredentialsUnreadable
+    })
 }
 
 fn token_error<RE>(e: RequestTokenError<RE, BasicErrorResponse>) -> GoogleError
@@ -252,7 +262,7 @@ where
     T: ErrorResponse + 'static,
 {
     match e {
-        RequestTokenError::Request(e) => GoogleError::Network(e.to_string()),
+        RequestTokenError::Request(e) => GoogleError::Network(crate::http::failure(&e)),
         RequestTokenError::ServerResponse(resp) => {
             GoogleError::Protocol(format!("Google rejected the request: {resp}"))
         }

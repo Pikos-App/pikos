@@ -103,9 +103,24 @@ async fn an_abandoned_authorization_times_out_and_frees_the_port() {
     let port = port_of(&loopback);
 
     let result = loopback.wait(Duration::from_millis(50)).await;
-    assert!(matches!(result, Err(GoogleError::Cancelled)));
+    assert!(matches!(result, Err(GoogleError::TimedOut)));
 
     assert!(tokio::net::TcpListener::bind(("127.0.0.1", port))
         .await
         .is_ok());
+}
+
+/// Nothing came back in time, which is not the same as the person saying no.
+#[tokio::test]
+async fn a_timed_out_authorization_says_it_timed_out() {
+    let loopback = Loopback::bind().await.unwrap();
+
+    let message = loopback
+        .wait(Duration::from_millis(20))
+        .await
+        .err()
+        .expect("nothing redirected")
+        .to_string();
+
+    assert!(message.contains("took too long"), "{message}");
 }

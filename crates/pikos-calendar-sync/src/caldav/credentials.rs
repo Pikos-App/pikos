@@ -35,4 +35,23 @@ mod tests {
         let restored = CaldavCredentials::from_blob(&creds.to_blob().unwrap()).unwrap();
         assert_eq!(creds, restored);
     }
+
+    #[test]
+    fn an_unreadable_caldav_credential_is_a_reconnect_that_quotes_none_of_it() {
+        let keychain = crate::test_support::memory_keychain();
+        keychain
+            .store(
+                "acc",
+                r#"{"base_url":"https://x/","username":"me","password":"hunter2-secr"#,
+            )
+            .unwrap();
+
+        let err = crate::caldav::stored_credentials(&keychain, "acc").unwrap_err();
+
+        assert!(
+            matches!(err, pikos_db::error::AppError::Invalid(_)),
+            "got {err:?}"
+        );
+        assert!(!err.to_string().contains("hunter2"), "{err}");
+    }
 }

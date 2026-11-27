@@ -1199,3 +1199,27 @@ async fn wal_db() -> TempDb {
         .expect("open wal test pool");
     TempDb { pool, path }
 }
+
+/// `provider.rs` promises that a stored blob which no longer reads is "reconnect needed". As a
+/// serde error it failed the pass on every poll, with nothing on screen to act on.
+#[tokio::test]
+async fn an_unreadable_stored_credential_asks_for_a_reconnect() {
+    let pool = test_pool().await;
+    seed(&pool, Some("t1")).await;
+    let keychain = crate::test_support::memory_keychain();
+    keychain
+        .store(
+            ACCOUNT,
+            r#"{"base_url":"https://dav.example/","username":"me","password":"hunt"#,
+        )
+        .unwrap();
+    let provider = crate::caldav::CaldavProvider::new(keychain);
+
+    let cal = calendar(&pool).await;
+    let outcome = sync_calendar(&pool, &provider, &account(), &cal, FOLDER).await;
+
+    assert!(
+        matches!(outcome, Ok(SyncOutcome::ReconnectNeeded)),
+        "got {outcome:?}"
+    );
+}

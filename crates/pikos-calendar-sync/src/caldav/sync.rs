@@ -27,6 +27,16 @@ const MULTIGET_BATCH: usize = 75;
 
 const DELETED: u16 = 404;
 
+// What an `UnexpectedStatus` names in place of the URL.
+const OP_SYNC_COLLECTION: &str = "sync-collection REPORT";
+const OP_CALENDAR_QUERY: &str = "calendar-query REPORT";
+const OP_MULTIGET: &str = "calendar-multiget REPORT";
+const OP_GETCTAG: &str = "getctag PROPFIND";
+
+fn unexpected(op: &'static str, status: u16) -> CaldavError {
+    CaldavError::UnexpectedStatus { op, status }
+}
+
 pub(crate) async fn sync_calendar<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -43,7 +53,7 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
         207 => {}
         403 => return backfill(transport, calendar_url).await,
         401 => return Err(CaldavError::Unauthorized),
-        other => return Err(CaldavError::UnexpectedStatus(other)),
+        other => return Err(unexpected(OP_SYNC_COLLECTION, other)),
     }
 
     let report = parse_report(&resp.body)?;
@@ -74,7 +84,7 @@ pub(crate) async fn current_sync_token<T: DavTransport>(
         207 => Ok(parse_report(&resp.body)?.sync_token.map(SyncToken)),
         403 | 405 | 501 => Ok(None),
         401 => Err(CaldavError::Unauthorized),
-        other => Err(CaldavError::UnexpectedStatus(other)),
+        other => Err(unexpected(OP_SYNC_COLLECTION, other)),
     }
 }
 
@@ -91,7 +101,7 @@ pub(crate) async fn current_ctag<T: DavTransport>(
         207 => Ok(super::xml::parse_ctag(&resp.body)?),
         403 | 404 | 405 | 501 => Ok(None),
         401 => Err(CaldavError::Unauthorized),
-        other => Err(CaldavError::UnexpectedStatus(other)),
+        other => Err(unexpected(OP_GETCTAG, other)),
     }
 }
 
@@ -104,7 +114,8 @@ pub(crate) async fn fetch_one<T: DavTransport>(
     let entry = entries
         .into_iter()
         .find(|e| e.calendar_data.is_some())
-        .ok_or_else(|| CaldavError::Protocol(format!("resource not found: {href}")))?;
+        // Not the href: it is a URL path, which can hold the account's email address.
+        .ok_or_else(|| CaldavError::Protocol("the server sent no body for the resource".into()))?;
     ics::parse_resource(
         &entry.href,
         entry.etag.as_deref(),
@@ -122,8 +133,9 @@ async fn backfill<T: DavTransport>(
         .await?;
     match resp.status {
         207 => {}
-        401 | 403 => return Err(CaldavError::Unauthorized),
-        other => return Err(CaldavError::UnexpectedStatus(other)),
+        401 => return Err(CaldavError::Unauthorized),
+        403 => return Err(CaldavError::Forbidden),
+        other => return Err(unexpected(OP_CALENDAR_QUERY, other)),
     }
     let report = parse_report(&resp.body)?;
     let (present, _removals) = split_present(report.entries);
@@ -180,14 +192,18 @@ async fn resolve_upserts<T: DavTransport>(
     let mut upserts = Vec::new();
     let mut unresolved = Vec::new();
     for e in bodied {
-        let parsed = e
-            .calendar_data
-            .as_deref()
-            .and_then(|ics| ics::parse_resource(&e.href, e.etag.as_deref(), ics).ok());
+        let parsed = match e.calendar_data.as_deref() {
+            Some(ics) => ics::parse_resource(&e.href, e.etag.as_deref(), ics),
+            None => Err(CaldavError::Protocol(
+                "the server sent no calendar data".into(),
+            )),
+        };
         match parsed {
-            Some(ev) => upserts.push(UpsertItem::Event(ev)),
-            None => {
-                log::warn!("caldav sync: skipping unresolvable resource {}", e.href);
+            Ok(ev) => upserts.push(UpsertItem::Event(ev)),
+            // The parser's reasons are fixed text. The href is left out: it is a URL path, which
+            // can hold the account's email address.
+            Err(reason) => {
+                log::warn!("caldav_sync_skipped_resource reason={reason}");
                 unresolved.push(e.href);
             }
         }
@@ -208,8 +224,9 @@ async fn multiget<T: DavTransport>(
         .await?;
     match resp.status {
         207 => Ok(parse_report(&resp.body)?.entries),
-        401 | 403 => Err(CaldavError::Unauthorized),
-        other => Err(CaldavError::UnexpectedStatus(other)),
+        401 => Err(CaldavError::Unauthorized),
+        403 => Err(CaldavError::Forbidden),
+        other => Err(unexpected(OP_MULTIGET, other)),
     }
 }
 
