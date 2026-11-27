@@ -53,7 +53,6 @@ export default tseslint.config(
           "./packages/core/tsconfig.json",
           "./packages/editor-schema/tsconfig.json",
           "./packages/editor-mobile/tsconfig.json",
-          "./packages/pikos-bridge/tsconfig.json",
           "./packages/ui/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,

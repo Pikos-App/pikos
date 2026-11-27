@@ -28,7 +28,6 @@ fi
 rust_crates=all
 rust_desktop=1
 rust_swift=1
-rust_bridge=1
 rust_summary="Rust gates: every crate, because the branch has no upstream to compare with"
 smoke_needed=1
 if [ -n "$pushing" ]; then
@@ -41,7 +40,6 @@ if [ -n "$pushing" ]; then
       crates) rust_crates=$value ;;
       desktop) rust_desktop=$value ;;
       swift) rust_swift=$value ;;
-      bridge) rust_bridge=$value ;;
       summary) rust_summary=$value ;;
     esac
   done <<EOF_SLICE
@@ -87,12 +85,6 @@ elif command -v cargo &>/dev/null; then
     echo "Running cargo clippy ($label)..."
     cargo clippy $packages --all-targets --quiet -- -D warnings || exit 1
     printf '\033[0;32m✓\033[0m Rust clippy — crates\n'
-
-    # pikos-cli's parser tests skip themselves when the bridge bundle is missing,
-    # and read a stale one when it is out of date — build it so they mean something.
-    if [ "$rust_bridge" = 1 ]; then
-      pnpm --filter @pikos/bridge build >/dev/null || exit 1
-    fi
 
     echo "Running cargo test ($label)..."
     cargo test $packages --quiet || exit 1

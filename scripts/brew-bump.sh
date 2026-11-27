@@ -69,6 +69,11 @@ else:
     if newest == version:
         cask(beta)
     formula = tap / "Formula/pikos-cli.rb"
+    # Pointed at a tarball with no bridge/ in it, that formula fails every install.
+    if 'libexec.install "bridge"' in formula.read_text():
+        sys.exit("Formula/pikos-cli.rb still installs the parser bridge, which the CLI no longer "
+                 "ships. Remove `depends_on \"node\"`, `libexec.install \"bridge\"` and the "
+                 "PIKOS_BRIDGE_JS env script from the tap, then rerun.")
     lines = formula.read_text().split("\n")
     for i, line in enumerate(lines):
         url = re.search(r'pikos-cli-[^/"]+?-((?:aarch64|x86_64)-[a-z0-9_-]+)\.tar\.gz', line)

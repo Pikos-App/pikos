@@ -184,9 +184,6 @@ display and reminders.
 **Replica sync**: keeping one workspace the same across a person's own devices. Terms in
 [`crates/pikos-db/src/replica/GLOSSARY.md`](../crates/pikos-db/src/replica/GLOSSARY.md).
 
-**`@pikos/bridge`**: how the CLI reaches the TypeScript-only NLP and recurrence parsing, via a
-one-shot `node` subprocess. Keeps that logic single-sourced in TypeScript.
-
 **Storage adapter**: the interface every DB read and write goes through from the frontend:
 `TauriSQLiteAdapter` in production, `MockStorageAdapter` under `VITE_TEST_MODE=true`.
 Components never `invoke` a DB command directly.
@@ -194,7 +191,7 @@ Components never `invoke` a DB command directly.
 **Real writer (e2e)**: `pikos-db` behind the end-to-end tests. The browser's
 `TauriSQLiteAdapter` sends its commands over localhost to the e2e bridge
 (`pikos-e2e-bridge`), which runs them against a SQLite file of the test's own. Every e2e test
-runs there unless tagged `@mock-only`. Not to be confused with `@pikos/bridge`.
+runs there unless tagged `@mock-only`.
 
 **Workspace**: one SQLite file is one workspace, self-contained, with no `workspace_id`
 column anywhere inside. The registry lives in `@tauri-apps/plugin-store`. A power-user
@@ -204,5 +201,6 @@ CLI and MCP can write it, because its triggers call functions only `pikos_db` re
 **Smart views**: Today and Inbox, pinned above folders. Today is schedules at or before today
 that aren't done, and Inbox is `folder_id IS NULL`. Neither is a real folder row.
 
-**Quick Add**: the `Cmd+N` modal with the natural-language parser, which lives in
-`packages/core`.
+**Quick Add**: the `Cmd+N` modal with the natural-language parser. The desktop runs the
+TypeScript parser in `packages/core`; the phone and the CLI run its Rust port in
+`crates/pikos-core/src/nlp/quick_add`, which is graded against it.

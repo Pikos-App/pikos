@@ -278,15 +278,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
       # The compiler comes from rust-toolchain.toml; the targets go onto that same toolchain.
       - name: Install the pinned Rust toolchain and its targets
         env:
@@ -303,13 +294,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: cli-${{ matrix.target }}
-
-      - run: pnpm install --frozen-lockfile
-
-      # The NLP parser stays single-sourced in the TS core, so `pikos add` shells
-      # to this bundle. It ships inside the tarball; everything else is pure Rust.
-      - name: Build the parser bridge
-        run: pnpm --filter @pikos/bridge build
 
       # `pikos --version` is clap reading CARGO_PKG_VERSION, and the crate carries
       # its own number that no release script bumps — so a published binary would
@@ -330,17 +314,13 @@ jobs:
       - name: The binary names no build-machine paths
         run: bash scripts/no-build-paths-check.sh target/${{ matrix.target }}/release/pikos
 
-      # Layout matches what the binary looks for: `../bridge/bridge.mjs` relative
-      # to itself. The Homebrew formula also pins PIKOS_BRIDGE_JS, so an install
-      # that resolves the binary through a symlink still finds it.
       - name: Package
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           STAGE="pikos-cli-${VERSION}-${{ matrix.target }}"
-          mkdir -p "$STAGE/bin" "$STAGE/bridge"
+          mkdir -p "$STAGE/bin"
           cp "target/${{ matrix.target }}/release/pikos" "$STAGE/bin/pikos"
-          cp packages/pikos-bridge/dist/bridge.mjs "$STAGE/bridge/bridge.mjs"
           cp crates/pikos-cli/README.md "$STAGE/README.md"
           cp LICENSE "$STAGE/LICENSE"
           tar -czf "${STAGE}.tar.gz" "$STAGE"
