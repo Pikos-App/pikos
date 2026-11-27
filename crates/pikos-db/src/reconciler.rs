@@ -1492,6 +1492,7 @@ fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
 /// nothing to index.
 pub fn mirror_search_text(location: Option<&str>, attendees_json: Option<&str>) -> Option<String> {
     let attendees: Vec<String> = attendees_json
+        // swallow-ok: search text only, and reading the page logs a list that won't parse.
         .and_then(|j| serde_json::from_str(j).ok())
         .unwrap_or_default();
     let parts: Vec<&str> = std::iter::once(location.unwrap_or(""))

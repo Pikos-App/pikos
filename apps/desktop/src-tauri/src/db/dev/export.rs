@@ -62,6 +62,7 @@ pub(crate) async fn build_export_json_impl(
                     };
                     let val: serde_json::Value = if let Ok(v) = row.try_get::<String, _>(name) {
                         if matches!(key, "content" | "tags" | "links" | "rrule_exdates") {
+                            // swallow-ok: a value that isn't JSON is exported as the text it is.
                             serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v))
                         } else {
                             serde_json::Value::String(v)

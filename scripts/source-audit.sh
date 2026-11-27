@@ -264,6 +264,43 @@ else
   pass "No raw SQL string interpolation"
 fi
 
+# A stored value that fails to parse must not turn into an empty one: a later save writes the
+# blank back over the real value, and nothing records that it happened. Flags a serde or column
+# read in the data crates that falls back to a default. Return the error, or log the id and the
+# cause and keep going; where silence is right, say why with `// swallow-ok:` on the line, the
+# two above it or the one after.
+hits=$(git ls-files -- 'crates/pikos-db/src/**' 'crates/pikos-replica/src/**' 'apps/desktop/src-tauri/src/**' \
+  | grep -E '\.rs$' | grep -vE '(_tests\.rs|/tests\.rs|/tests/|/e2e_[a-z_]+\.rs)' | python3 -c '
+import re, sys
+
+READ = re.compile(r"(serde_json::from_(str|slice|value)|\.try_get(::<[^>]+>)?)\(")
+FALLBACK = re.compile(r"\.(unwrap_or_default\(\)|unwrap_or\(|unwrap_or_else\(\|_\||ok\(\))")
+
+for path in sys.stdin.read().split("\n"):
+    if not path:
+        continue
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        continue
+    for i, line in enumerate(lines):
+        read = READ.search(line)
+        if not read or line.lstrip().startswith("//"):
+            continue
+        statement = " ".join(w.strip() for w in [line[read.start():]] + lines[i + 1 : i + 3])
+        if not FALLBACK.search(statement.split(";")[0]):
+            continue
+        if any("swallow-ok:" in w for w in lines[max(0, i - 2) : i + 2]):
+            continue
+        print("{}:{}:{}".format(path, i + 1, line.strip()))
+' 2>/dev/null || true)
+
+if [ -n "$hits" ]; then
+  fail "A stored value that fails to read falls back to a default (return or log the error, or add '// swallow-ok: <why>')" $hits
+else
+  pass "No stored value read as a silent default"
+fi
+
 cap_files=$(git ls-files -- 'apps/desktop/src-tauri/capabilities/*.json')
 if [ -n "$cap_files" ]; then
   hits=$(echo "$cap_files" \
