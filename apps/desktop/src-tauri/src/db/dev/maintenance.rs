@@ -233,6 +233,12 @@ pub async fn restore_backup(
     state: tauri::State<'_, DbState>,
     file_name: String,
 ) -> AppResult<()> {
+    restore_backup_impl(&state, &file_name).await?;
+    app.restart();
+}
+
+/// [`restore_backup`] up to the restart.
+pub(crate) async fn restore_backup_impl(state: &DbState, file_name: &str) -> AppResult<()> {
     let path = state
         .current_path()
         .await
@@ -241,14 +247,13 @@ pub async fn restore_backup(
 
     // Validate before taking the pool: a rejected restore has to leave a working
     // app behind, and every command fails once the pool is gone.
-    pikos_db::backups::verify_restorable(&path, &file_name).await?;
+    pikos_db::backups::verify_restorable(&path, file_name).await?;
 
     if let Some(pool) = state.take_pool().await {
         pikos_db::close_pool(&pool).await;
     }
 
-    let displaced = pikos_db::restore_backup(&path, &file_name).await?;
+    let displaced = pikos_db::restore_backup(&path, file_name).await?;
     log::info!("restored {file_name}; previous workspace kept at {displaced}");
-
-    app.restart();
+    Ok(())
 }
