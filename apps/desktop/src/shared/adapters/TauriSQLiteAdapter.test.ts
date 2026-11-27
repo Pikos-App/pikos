@@ -106,3 +106,15 @@ describe("a workspace found damaged mid-session", () => {
     expect(sent).not.toContain("close_damaged_workspace");
   });
 });
+
+describe("a failed command", () => {
+  it("rejects with a StorageError naming the command", async () => {
+    const { adapter } = await freshAdapter((cmd) => cmd === "restore_backup");
+
+    await expect(adapter.restoreBackup("pre-migration-x.sqlite")).rejects.toMatchObject({
+      command: "restore_backup",
+      kind: "Corrupt",
+      name: "StorageError",
+    });
+  });
+});
