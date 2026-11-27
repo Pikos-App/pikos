@@ -74,6 +74,8 @@ public struct SyncStatusLine: Equatable, Sendable {
             self.init(
                 text: "Your iCloud storage is full, so sync is paused. Changes send once there's room.",
                 action: .none)
+        case .retrying(let after):
+            self.init(text: Self.retrying(after: after), action: .none)
         case .failed(let message):
             self.init(text: "Couldn't sync: \(message)", action: .none)
         case .syncing:
@@ -83,6 +85,19 @@ public struct SyncStatusLine: Equatable, Sendable {
         case .unsent(let count):
             self.init(text: Self.withReassurance(Self.settled(queue, unsent: count, now: now), queue), action: .none)
         }
+    }
+
+    private static func retrying(after: TimeInterval?) -> String {
+        let when: String
+        switch after {
+        case let seconds? where seconds > 90:
+            when = "in about \(Int((seconds / 60).rounded())) minutes"
+        case .some:
+            when = "in a minute"
+        case nil:
+            when = "shortly"
+        }
+        return "iCloud is busy right now. Sync tries again by itself \(when)."
     }
 
     init(text: String, action: SyncAction) {

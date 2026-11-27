@@ -126,8 +126,8 @@ final class DeviceSync {
         let starter = SyncStarter<CloudKitSync> { [weak self] in
             try await self?.start(workspace, container: container)
         } failed: { [weak self] error in
-            Self.log.error("start failed: \(error.localizedDescription, privacy: .public)")
-            await self?.show(.failed(error.localizedDescription))
+            Self.log.error("\(SyncFailure.logLine("start", error), privacy: .public)")
+            await self?.show(SyncFailure.status(for: error))
         }
         self.starter = starter
         await starter.fetchNow()

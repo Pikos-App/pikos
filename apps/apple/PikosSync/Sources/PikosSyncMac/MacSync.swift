@@ -59,8 +59,8 @@
                 Self.log.info("started in \(joined, privacy: .public)")
                 return engine
             } failed: { error in
-                Self.log.error("start failed: \(error.localizedDescription, privacy: .public)")
-                await report(.failed(error.localizedDescription))
+                Self.log.error("\(SyncFailure.logLine("start", error), privacy: .public)")
+                await report(SyncFailure.status(for: error))
             }
             self.starter = starter
 

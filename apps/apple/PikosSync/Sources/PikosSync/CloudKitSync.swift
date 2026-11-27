@@ -17,6 +17,9 @@ public enum SyncStatus: Equatable, Sendable {
     case encryptionReset
     /// The account's iCloud storage is full: changes wait on this device until there's room.
     case storageFull
+    /// iCloud is busy or asked this device to slow down. Sync tries again by itself, after this
+    /// many seconds when CloudKit said.
+    case retrying(after: TimeInterval?)
     /// Settled, except for this many records iCloud refused or this device couldn't build.
     case unsent(Int)
     case failed(String)
@@ -132,7 +135,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             try await engine.sendChanges()
         } catch {
             await coordinator.sendFailed(ids)
-            Self.log.error("sending changes failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("send", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
@@ -147,7 +151,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
             return ids
         } catch {
-            Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("queueing changes", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
             return nil
         }
     }
@@ -163,7 +168,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         do {
             try await engine?.fetchChanges()
         } catch {
-            onStatus(.failed(error.localizedDescription))
+            Self.log.error("\(SyncFailure.logLine("fetch", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
@@ -203,8 +209,27 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 break
             }
         } catch {
-            Self.log.error("sync event failed: \(error.localizedDescription, privacy: .public)")
-            onStatus(.failed(error.localizedDescription))
+            Self.log.error("\(SyncFailure.logLine("handling \(Self.kind(of: event))", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
+        }
+    }
+
+    /// An event's name without its payload, whose description prints the records it carries.
+    static func kind(of event: CKSyncEngine.Event) -> String {
+        switch event {
+        case .stateUpdate: "stateUpdate"
+        case .accountChange: "accountChange"
+        case .fetchedDatabaseChanges: "fetchedDatabaseChanges"
+        case .fetchedRecordZoneChanges: "fetchedRecordZoneChanges"
+        case .sentDatabaseChanges: "sentDatabaseChanges"
+        case .sentRecordZoneChanges: "sentRecordZoneChanges"
+        case .willFetchChanges: "willFetchChanges"
+        case .willFetchRecordZoneChanges: "willFetchRecordZoneChanges"
+        case .didFetchRecordZoneChanges: "didFetchRecordZoneChanges"
+        case .didFetchChanges: "didFetchChanges"
+        case .willSendChanges: "willSendChanges"
+        case .didSendChanges: "didSendChanges"
+        @unknown default: "unknownEvent"
         }
     }
 
@@ -237,7 +262,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 try await refetch(upkeep.refetch)
             }
         } catch {
-            Self.log.error("sync upkeep failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("upkeep", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
