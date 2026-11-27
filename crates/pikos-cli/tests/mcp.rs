@@ -54,14 +54,6 @@ async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     ids
 }
 
-fn bridge_js() -> Option<String> {
-    let p = PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../packages/pikos-bridge/dist/bridge.mjs"
-    ));
-    p.exists().then(|| p.to_string_lossy().into_owned())
-}
-
 /// A live `pikos mcp` process and its pipes.
 struct Server {
     child: Child,
@@ -73,9 +65,6 @@ impl Server {
     fn start(db: &str) -> Self {
         let mut cmd = Command::new(BIN);
         cmd.arg("mcp").arg("--db").arg(db);
-        if let Some(js) = bridge_js() {
-            cmd.env("PIKOS_BRIDGE_JS", js);
-        }
         let mut child = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -188,11 +177,6 @@ async fn initialize_lists_tools_and_round_trips_a_page() {
     }
 
     // Create through the tool, then read the same page back through another.
-    let Some(_) = bridge_js() else {
-        eprintln!("skipped the write half: @pikos/bridge not built");
-        server.shutdown();
-        return;
-    };
     let created = server.call(3, "create_page", json!({ "text": "Water the plants" }));
     let id = created["created"][0]["id"]
         .as_str()
@@ -502,10 +486,6 @@ async fn create_page_dry_run_returns_the_parse_and_writes_nothing() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    if bridge_js().is_none() {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    }
 
     let mut server = Server::start(dbs);
     handshake(&mut server);

@@ -1,8 +1,4 @@
 //! End-to-end tests: drive the built `pikos` binary against a temp workspace.
-//!
-//! The `add` / recurring-`done` paths need the @pikos/bridge bundle and Node; they run
-//! when packages/pikos-bridge/dist/bridge.mjs exists and are skipped with a note
-//! otherwise. Everything else runs unconditionally.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -122,43 +118,6 @@ fn cli(db: &str, args: &[&str]) -> Output {
         .arg(db)
         .output()
         .unwrap()
-}
-
-fn bridge_js() -> Option<String> {
-    let p = PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../packages/pikos-bridge/dist/bridge.mjs"
-    ));
-    p.exists().then(|| p.to_string_lossy().into_owned())
-}
-
-fn cli_bridge(db: &str, args: &[&str]) -> Option<Output> {
-    let js = bridge_js()?;
-    Some(
-        Command::new(BIN)
-            .args(args)
-            .arg("--db")
-            .arg(db)
-            .env("PIKOS_BRIDGE_JS", js)
-            .output()
-            .unwrap(),
-    )
-}
-
-/// PATH is cleared so the inner `node` spawn fails ENOENT, as for a user without Node.
-/// The binary itself is invoked by absolute path, so only its subprocess is affected.
-fn cli_bridge_without_node(db: &str, args: &[&str]) -> Option<Output> {
-    let js = bridge_js()?;
-    Some(
-        Command::new(BIN)
-            .args(args)
-            .arg("--db")
-            .arg(db)
-            .env("PIKOS_BRIDGE_JS", js)
-            .env("PATH", "")
-            .output()
-            .unwrap(),
-    )
 }
 
 fn json(out: &Output) -> Value {
@@ -778,10 +737,7 @@ async fn schedule_flags_refuse_on_a_recurring_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(add) = cli_bridge(dbs, &["add", "Standup every weekday at 9am", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    let add = cli(dbs, &["add", "Standup every weekday at 9am", "--json"]);
     assert!(add.status.success());
     let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
     let head = scheduled_start(dbs, &id).await;
@@ -996,32 +952,63 @@ fn missing_workspace_exits_5() {
     assert_eq!(code(&out), 5);
 }
 
+/// PATH is cleared, as for a user without Node: the binary is invoked by absolute path,
+/// so only a subprocess it spawned would notice.
 #[tokio::test]
-async fn add_without_node_exits_7_with_actionable_error() {
+async fn add_needs_no_node() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(out) = cli_bridge_without_node(dbs, &["add", "anything", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
-    assert_eq!(code(&out), 7);
-    // Errors are JSON-on-stderr (stdout reserved for successful payloads).
-    let body: Value = serde_json::from_slice(&out.stderr).expect("stderr JSON");
-    assert_eq!(body["error"]["kind"], "MissingNode");
-    let msg = body["error"]["message"].as_str().unwrap_or("");
+    let out = Command::new(BIN)
+        .args(["add", "Water the plants tomorrow", "--json", "--db", dbs])
+        .env("PATH", "")
+        .output()
+        .unwrap();
     assert!(
-        msg.contains("Node.js"),
-        "message should name Node.js: {msg}"
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
+    assert_eq!(json(&out)["created"][0]["title"], "Water the plants");
+}
+
+/// The CLI reads a line as the phone does. Four hours from 11pm on the night US clocks
+/// spring forward ends at 03:00 on the wall clock in the phone's parser; the desktop's
+/// TypeScript parser, which the CLI used to run under Node, adds elapsed time in the
+/// local zone and lands on 04:00. The zone is pinned so the night is a DST change.
+#[tokio::test]
+async fn add_dry_run_reads_a_line_as_the_phone_does() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let out = Command::new(BIN)
+        .args([
+            "add",
+            "--dry-run",
+            "party mar 13 2027 11pm for 4 hours",
+            "--db",
+            dbs,
+        ])
+        .env("TZ", "America/Los_Angeles")
+        .output()
+        .unwrap();
     assert!(
-        msg.contains("nodejs.org") || msg.contains("brew install node"),
-        "message should hint at install path: {msg}",
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
-    // The user is told DB-only commands still work, which is why this isn't a generic Internal failure.
-    assert!(
-        msg.contains("DB-only") || msg.contains("list") || msg.contains("today"),
-        "message should mention DB-only commands as a fallback: {msg}",
+    assert_eq!(
+        json(&out),
+        serde_json::json!({
+            "type": "single",
+            "input": {
+                "title": "party",
+                "tags": [],
+                "durationMinutes": 240,
+                "scheduledStart": "2027-03-13T23:00:00",
+                "scheduledEnd": "2027-03-14T03:00:00",
+            },
+        })
     );
 }
 
@@ -1036,14 +1023,11 @@ async fn schema_newer_than_cli_exits_6() {
 }
 
 #[tokio::test]
-async fn add_single_parses_via_bridge() {
+async fn add_single_parses_the_line() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await; // migrate empty so the file exists
-    let Some(out) = cli_bridge(dbs, &["add", "Buy milk tomorrow #errands !high", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built (pnpm --filter @pikos/bridge build)");
-        return;
-    };
+    let out = cli(dbs, &["add", "Buy milk tomorrow #errands !high", "--json"]);
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -1062,17 +1046,14 @@ async fn add_creates_the_page_with_its_note_and_reminder() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(out) = cli_bridge(
+    let out = cli(
         dbs,
         &[
             "add",
             "Dentist tomorrow 3pm remind 30m before // ask about the crown",
             "--json",
         ],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built (pnpm --filter @pikos/bridge build)");
-        return;
-    };
+    );
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -1106,10 +1087,7 @@ async fn done_recurring_advances_and_clones() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(add) = cli_bridge(dbs, &["add", "Standup every weekday at 9am", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    let add = cli(dbs, &["add", "Standup every weekday at 9am", "--json"]);
     assert!(add.status.success());
     let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
     let before = json(&cli(dbs, &["read", &id, "--json"]))["scheduledStart"]
@@ -1117,7 +1095,7 @@ async fn done_recurring_advances_and_clones() {
         .unwrap()
         .to_string();
 
-    let done = cli_bridge(dbs, &["done", &id, "--json"]).unwrap();
+    let done = cli(dbs, &["done", &id, "--json"]);
     assert!(
         done.status.success(),
         "stderr: {}",
@@ -1146,17 +1124,14 @@ async fn add_recurring_snaps_an_off_pattern_anchor_onto_the_rule() {
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
 
-    let Some(add) = cli_bridge(
+    let add = cli(
         dbs,
         &[
             "add",
             "Gym on wednesday every monday from 9am to 11am",
             "--json",
         ],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(
         add.status.success(),
         "stderr: {}",
@@ -1213,10 +1188,7 @@ async fn add_files_into_a_prefix_matched_folder() {
     seed(dbs, vec![]).await;
     let projects = make_folder(dbs, "Projects").await;
 
-    let Some(add) = cli_bridge(dbs, &["add", "Ship the thing ~proj", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    let add = cli(dbs, &["add", "Ship the thing ~proj", "--json"]);
     assert!(
         add.status.success(),
         "stderr: {}",
@@ -1234,19 +1206,14 @@ async fn add_prefers_a_real_inbox_folder_over_the_inbox_view() {
     seed(dbs, vec![]).await;
     let inbox = make_folder(dbs, "Inbox Zero").await;
 
-    let Some(add) = cli_bridge(dbs, &["add", "Sort mail ~inbox", "--json"]) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    let add = cli(dbs, &["add", "Sort mail ~inbox", "--json"]);
     assert!(add.status.success());
     assert_eq!(json(&add)["created"][0]["folderId"], inbox.as_str());
 
     let db2 = unique_db();
     let dbs2 = db2.to_str().unwrap();
     seed(dbs2, vec![]).await;
-    let Some(bare) = cli_bridge(dbs2, &["add", "Sort mail ~inbox", "--json"]) else {
-        return;
-    };
+    let bare = cli(dbs2, &["add", "Sort mail ~inbox", "--json"]);
     assert!(bare.status.success());
     assert!(json(&bare)["created"][0]["folderId"].is_null());
 }
@@ -2141,7 +2108,7 @@ async fn add_dry_run_prints_the_parse_and_writes_nothing() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(out) = cli_bridge(
+    let out = cli(
         dbs,
         &[
             "add",
@@ -2149,10 +2116,7 @@ async fn add_dry_run_prints_the_parse_and_writes_nothing() {
             "--dry-run",
             "--json",
         ],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -2178,13 +2142,10 @@ async fn add_writes_the_parsed_reminder_lead() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(add) = cli_bridge(
+    let add = cli(
         dbs,
         &["add", "Dentist tomorrow at 3pm remind 30m before", "--json"],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(
         add.status.success(),
         "stderr: {}",
@@ -2207,13 +2168,10 @@ async fn add_writes_the_day_before_anchor_for_an_all_day_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(add) = cli_bridge(
+    let add = cli(
         dbs,
         &["add", "Dentist tomorrow remind day before", "--json"],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(add.status.success());
     let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
 
@@ -2226,17 +2184,14 @@ async fn add_writes_the_text_after_the_separator_as_the_body() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(add) = cli_bridge(
+    let add = cli(
         dbs,
         &[
             "add",
             "Buy a gift // she likes the #blue one\nask her sister",
             "--json",
         ],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(
         add.status.success(),
         "stderr: {}",
@@ -2267,7 +2222,7 @@ async fn add_dry_run_previews_the_reminder_and_the_body() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     seed(dbs, vec![]).await;
-    let Some(out) = cli_bridge(
+    let out = cli(
         dbs,
         &[
             "add",
@@ -2275,10 +2230,7 @@ async fn add_dry_run_previews_the_reminder_and_the_body() {
             "--dry-run",
             "--json",
         ],
-    ) else {
-        eprintln!("skipped: @pikos/bridge not built");
-        return;
-    };
+    );
     assert!(out.status.success());
     let v = json(&out);
     assert_eq!(v["input"]["title"], "Dentist");

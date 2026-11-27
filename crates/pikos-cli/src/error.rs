@@ -33,9 +33,8 @@ impl CliError {
     pub fn workspace(m: impl Into<String>) -> Self {
         Self::new("Workspace", m, 5)
     }
-    pub fn missing_node(m: impl Into<String>) -> Self {
-        Self::new("MissingNode", m, 7)
-    }
+    // 7 was `MissingNode`, from when `add` ran its parser under Node. It stays unused
+    // so a script still branching on it never catches a different failure.
     pub fn migration_required(m: impl Into<String>) -> Self {
         Self::new("MigrationRequired", m, 8)
     }
