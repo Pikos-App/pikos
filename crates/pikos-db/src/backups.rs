@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
-use crate::pool::embedded_migration_max;
+use crate::pool::{at_step, embedded_migration_max};
 
 /// Why a snapshot exists, read back from the filename prefix rather than stored.
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, ts_rs::TS)]
@@ -231,33 +231,113 @@ async fn sync_before_restore(workspace_path: &str) -> AppResult<Option<crate::re
 /// database, and left beside the new one they produce a workspace that is neither file, so
 /// they are removed here.
 pub async fn restore_backup(workspace_path: &str, file_name: &str) -> AppResult<String> {
-    let source = resolve(workspace_path, file_name)?;
-    verify(&source).await?;
+    restore_backup_reporting(workspace_path, file_name)
+        .await
+        .map_err(|failed| failed.error)
+}
+
+/// A restore that stopped, and how far it got.
+#[derive(Debug)]
+pub struct RestoreFailed {
+    /// What the restore was doing, a fixed phrase that is safe to log.
+    pub step: &'static str,
+    /// Whether the workspace file had been written to. Until then it is exactly as the caller
+    /// closed it, so it can be opened again.
+    pub workspace_replaced: bool,
+    /// The cause, its message naming the step.
+    pub error: AppError,
+}
+
+/// [`RestoreFailed::workspace_replaced`] for a step before the copy, and from it on.
+const UNTOUCHED: bool = false;
+const REPLACED: bool = true;
+
+impl RestoreFailed {
+    fn at(step: &'static str, workspace_replaced: bool) -> impl FnOnce(AppError) -> Self {
+        move |error| RestoreFailed {
+            step,
+            workspace_replaced,
+            error: at_step(error, step),
+        }
+    }
+
+    fn io_at<'p>(
+        step: &'static str,
+        workspace_replaced: bool,
+        path: &'p Path,
+    ) -> impl FnOnce(std::io::Error) -> Self + 'p {
+        move |e| RestoreFailed {
+            step,
+            workspace_replaced,
+            error: AppError::io_at(step, path, e),
+        }
+    }
+}
+
+/// [`restore_backup`], saying on failure which step stopped it and whether the workspace was
+/// still untouched, for a caller that closed its pool and has to decide what to open next.
+pub async fn restore_backup_reporting(
+    workspace_path: &str,
+    file_name: &str,
+) -> Result<String, RestoreFailed> {
+    let checking = "checking the backup";
+    let source =
+        resolve(workspace_path, file_name).map_err(RestoreFailed::at(checking, UNTOUCHED))?;
+    verify(&source)
+        .await
+        .map_err(RestoreFailed::at(checking, UNTOUCHED))?;
 
     let dir = backups_dir(workspace_path);
-    std::fs::create_dir_all(&dir)?;
+    std::fs::create_dir_all(&dir).map_err(RestoreFailed::io_at(
+        "creating the backups folder",
+        UNTOUCHED,
+        &dir,
+    ))?;
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
     let displaced = dir.join(format!("pre-restore-{ts}.sqlite"));
 
     let mut carried = None;
     if Path::new(workspace_path).exists() {
-        snapshot_workspace(workspace_path, &displaced).await?;
-        carried = sync_before_restore(workspace_path).await?;
+        snapshot_workspace(workspace_path, &displaced)
+            .await
+            .map_err(RestoreFailed::at(
+                "keeping a copy of the current workspace",
+                UNTOUCHED,
+            ))?;
+        carried = sync_before_restore(workspace_path)
+            .await
+            .map_err(RestoreFailed::at("reading device sync's state", UNTOUCHED))?;
     }
 
-    std::fs::copy(&source, workspace_path)?;
+    // A copy that fails can leave the file half written, so from here on it is not the one the
+    // caller closed.
+    let workspace = Path::new(workspace_path);
+    std::fs::copy(&source, workspace).map_err(RestoreFailed::io_at(
+        "copying the backup over the workspace",
+        REPLACED,
+        workspace,
+    ))?;
     for suffix in ["-wal", "-shm"] {
         let stale = PathBuf::from(format!("{workspace_path}{suffix}"));
         if stale.exists() {
-            std::fs::remove_file(&stale)?;
+            std::fs::remove_file(&stale).map_err(RestoreFailed::io_at(
+                "removing the old database's log file",
+                REPLACED,
+                &stale,
+            ))?;
         }
     }
-    renew_epoch(workspace_path).await?;
+    renew_epoch(workspace_path)
+        .await
+        .map_err(RestoreFailed::at("renewing the change counter", REPLACED))?;
     if let Some(carried) = carried {
-        let pool = crate::pool::open_pool_for_maintenance(workspace_path).await?;
+        let carrying = "carrying device sync over to the restored workspace";
+        let pool = crate::pool::open_pool_for_maintenance(workspace_path)
+            .await
+            .map_err(RestoreFailed::at(carrying, REPLACED))?;
         let result = crate::replica::after_restore(&pool, carried).await;
         pool.close().await;
-        result?;
+        result.map_err(RestoreFailed::at(carrying, REPLACED))?;
     }
 
     Ok(displaced.to_string_lossy().to_string())
@@ -431,6 +511,57 @@ mod tests {
         assert!(
             !std::path::Path::new(&format!("{path}-wal")).exists(),
             "a WAL belonging to the replaced database survived the restore"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_restore_that_stops_before_the_copy_reports_the_workspace_untouched() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, path) = workspace().await;
+        let backup_name = "pre-import-2026-01-02T00-00-00.sqlite";
+        snapshot(&path, backup_name).await;
+        let before = folder_count(&path).await;
+        // The displaced copy can't be written, so the restore stops before touching the file.
+        let backups = backups_dir(&path);
+        std::fs::set_permissions(&backups, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        let failed = restore_backup_reporting(&path, backup_name)
+            .await
+            .unwrap_err();
+        std::fs::set_permissions(&backups, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert_eq!(failed.step, "keeping a copy of the current workspace");
+        assert!(!failed.workspace_replaced);
+        assert!(
+            failed.error.to_string().contains(failed.step),
+            "{}",
+            failed.error
+        );
+        assert_eq!(folder_count(&path).await, before);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_restore_that_stops_after_the_copy_reports_the_workspace_replaced() {
+        let (dir, path) = workspace().await;
+        let backup_name = "pre-import-2026-01-02T00-00-00.sqlite";
+        snapshot(&path, backup_name).await;
+        std::fs::remove_file(&path).unwrap();
+        // A folder where the old log file would be, which removing a file can't take away.
+        std::fs::create_dir_all(format!("{path}-wal/held")).unwrap();
+
+        let failed = restore_backup_reporting(&path, backup_name)
+            .await
+            .unwrap_err();
+
+        assert_eq!(failed.step, "removing the old database's log file");
+        assert!(failed.workspace_replaced);
+        assert_eq!(failed.error.kind(), "Io");
+        assert!(
+            failed.error.to_string().contains("workspace.sqlite-wal"),
+            "{}",
+            failed.error
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
