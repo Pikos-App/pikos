@@ -112,9 +112,15 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     }
 
     public func start() async throws {
-        let saved = try await store.engineState()
-        let state = saved.flatMap {
-            try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0)
+        var state: CKSyncEngine.State.Serialization?
+        if let saved = try await store.engineState() {
+            do {
+                state = try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: saved)
+            } catch {
+                Self.log.error(
+                    "saved sync state (\(saved.count) bytes) didn't read, so this device fetches everything again: \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
         let configuration = CKSyncEngine.Configuration(
             database: database,
@@ -197,6 +203,16 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 try await coordinator.fetched(changes.modifications.map(\.record))
             case .sentRecordZoneChanges(let sent):
                 try await handleSent(sent, engine: syncEngine)
+            case .sentDatabaseChanges(let sent):
+                // A zone that couldn't be saved means nothing in it can be sent either.
+                for failure in sent.failedZoneSaves {
+                    let phase = "saving zone \(failure.zone.zoneID.zoneName)"
+                    Self.log.error("\(SyncFailure.logLine(phase, failure.error), privacy: .public)")
+                    onStatus(SyncFailure.status(for: failure.error))
+                }
+                for (id, error) in sent.failedZoneDeletes {
+                    Self.log.error("\(SyncFailure.logLine("deleting zone \(id.zoneName)", error), privacy: .public)")
+                }
             case .fetchedDatabaseChanges(let changes):
                 for deletion in changes.deletions {
                     if let status = try await coordinator.zoneDeleted(deletion.zoneID, reason: deletion.reason) {
@@ -280,7 +296,15 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     /// one is asked for by id. One that doesn't come stays held until the next upkeep.
     private func refetch(_ ids: [CKRecord.ID]) async throws {
         let results = try await database.records(for: ids)
-        let records = results.values.compactMap { try? $0.get() }
+        var records: [CKRecord] = []
+        for (id, result) in results {
+            switch result {
+            case .success(let record):
+                records.append(record)
+            case .failure(let error):
+                Self.log.error("\(SyncFailure.logLine("refetching \(id.recordName)", error), privacy: .public)")
+            }
+        }
         Self.log.info("fetched \(records.count) of \(ids.count) held images again")
         try await coordinator.fetched(records)
     }
@@ -313,6 +337,11 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                     again.append(id)
                 }
             }
+        }
+        // Deletes are only of tombstones past retention, which every device deletes too, so one
+        // that fails here is logged and left to the others.
+        for (id, error) in sent.failedRecordDeletes where error.code != .unknownItem {
+            Self.log.error("\(SyncFailure.logLine("deleting \(id.recordName)", error), privacy: .public)")
         }
         if !again.isEmpty {
             engine.state.add(pendingRecordZoneChanges: again.map { .saveRecord($0) })

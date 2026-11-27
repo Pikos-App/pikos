@@ -208,15 +208,22 @@ public actor SyncCoordinator {
 
         var decoded: [SyncRecord] = []
         var metadata: [(name: String, data: Data)] = []
+        var unreadable: [String] = []
         for record in records {
             serverCopies[record.recordID.recordName] = record
             if let sync = RecordCodec.decode(record) {
                 names[record.recordID.recordName] = sync.name
                 decoded.append(sync)
                 metadata.append((sync.name, RecordCodec.systemFields(of: record)))
+            } else {
+                unreadable.append("\(record.recordID.recordName) (\(record.recordType))")
             }
         }
         Self.log.info("fetched \(records.count) records, \(decoded.count) readable")
+        if !unreadable.isEmpty {
+            let shown = unreadable.prefix(SyncFailure.partialLimit).joined(separator: ", ")
+            Self.log.notice("skipped \(unreadable.count) fetched records with no workspace name: \(shown, privacy: .public)")
+        }
         if !decoded.isEmpty {
             do {
                 try await store.applyRecords(decoded)
