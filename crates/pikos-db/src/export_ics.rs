@@ -25,6 +25,7 @@ use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
 
 use crate::error::AppResult;
 use crate::export::{column, fetch_export_pages, page_id};
+use crate::pool::AtStep;
 
 /// How far past the last exported occurrence the generated `VTIMEZONE` spells
 /// its transitions out. An unbounded `RRULE` outruns any window; 30 years puts
@@ -441,7 +442,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         "id, title, content_text, scheduled_start, scheduled_end",
         include_synced,
     )
-    .await?;
+    .await
+    .at_step("reading the pages")?;
 
     // Read once and keyed by page rather than joined, as the CSV export does.
     let rules: HashMap<String, RuleRow> =
@@ -450,7 +452,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
              FROM page_recurrence_rules",
         )
         .fetch_all(pool)
-        .await?
+        .await
+        .at_step("reading the repeat rules")?
         .into_iter()
         .map(|(page_id, rrule, exdates_json, start, end, timezone)| {
             (
@@ -474,7 +477,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          UNION SELECT page_id, occurrence_date FROM skip_set",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the skipped and completed occurrences")?
     {
         exclusions.entry(page_id).or_default().push(occurrence_date);
     }
@@ -496,7 +500,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          ORDER BY original_date",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the changed occurrences")?
     {
         overrides.entry(page_id).or_default().push(OverrideRow {
             original_date,
@@ -514,7 +519,8 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          WHERE timezone IS NOT NULL",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the time zones of one-off events")?
     {
         schedule_zones.insert((page_id, start), timezone);
     }

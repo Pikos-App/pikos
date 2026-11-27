@@ -12,6 +12,7 @@ use std::path::Path;
 use sqlx::Row;
 
 use crate::error::{AppError, AppResult};
+use crate::pool::AtStep;
 
 /// The pages a user-facing export ships.
 ///
@@ -136,11 +137,14 @@ pub async fn plan_markdown_export(
     let folder_names: HashMap<String, String> =
         sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
             .fetch_all(pool)
-            .await?
+            .await
+            .at_step("reading the folders")?
             .into_iter()
             .collect();
 
-    let rows = fetch_export_pages(pool, &markdown_columns(), include_synced).await?;
+    let rows = fetch_export_pages(pool, &markdown_columns(), include_synced)
+        .await
+        .at_step("reading the pages")?;
 
     let mut titles: HashMap<String, String> = HashMap::new();
     for (position, row) in rows.iter().enumerate() {
@@ -198,7 +202,8 @@ pub async fn plan_markdown_page(
     let Some(row) = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(page_id)
         .fetch_optional(pool)
-        .await?
+        .await
+        .at_step("reading the page")?
     else {
         return Ok(None);
     };
@@ -206,7 +211,9 @@ pub async fn plan_markdown_page(
     let content: String = column(&row, page_id, "body")?;
     // An unparseable body is logged once, by `markdown_page`.
     let titles = match serde_json::from_str::<serde_json::Value>(&content) {
-        Ok(doc) => crate::page_links::target_titles(pool, &doc).await?,
+        Ok(doc) => crate::page_links::target_titles(pool, &doc)
+            .await
+            .at_step("reading the titles of the pages it links to")?,
         Err(_) => HashMap::new(),
     };
 
@@ -473,7 +480,8 @@ pub async fn build_export_csv(pool: &sqlx::SqlitePool, include_synced: bool) -> 
     let folder_names: HashMap<String, String> =
         sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
             .fetch_all(pool)
-            .await?
+            .await
+            .at_step("reading the folders")?
             .into_iter()
             .collect();
 
@@ -481,7 +489,8 @@ pub async fn build_export_csv(pool: &sqlx::SqlitePool, include_synced: bool) -> 
     let rrules: HashMap<String, String> =
         sqlx::query_as::<_, (String, String)>("SELECT page_id, rrule FROM page_recurrence_rules")
             .fetch_all(pool)
-            .await?
+            .await
+            .at_step("reading the repeat rules")?
             .into_iter()
             .collect();
 
@@ -493,7 +502,8 @@ pub async fn build_export_csv(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          WHERE minutes_before >= 0 ORDER BY minutes_before ASC",
     )
     .fetch_all(pool)
-    .await?
+    .await
+    .at_step("reading the reminders")?
     {
         reminders.entry(page_id).or_default().push(minutes_before);
     }
@@ -504,7 +514,8 @@ pub async fn build_export_csv(pool: &sqlx::SqlitePool, include_synced: bool) -> 
          scheduled_start, scheduled_end, created_at, updated_at, completed_at",
         include_synced,
     )
-    .await?;
+    .await
+    .at_step("reading the pages")?;
 
     let mut out = String::new();
     out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At\n");
