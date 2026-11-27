@@ -460,7 +460,7 @@ appTest(
     const dueIn = async (days: number) =>
       expect(dateLabel(open)).toHaveAttribute(
         "aria-label",
-        `Toggle date format: ${await dayLabel(app, days, "list")}`
+        `Date: ${await dayLabel(app, days, "list")}`
       );
 
     await appTest.step("SYNC-36 tick this week's and next week's", async () => {
