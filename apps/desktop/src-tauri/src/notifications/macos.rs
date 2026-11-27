@@ -167,7 +167,11 @@ pub fn setup(app: &AppHandle) -> bool {
         });
         center.getNotificationSettingsWithCompletionHandler(&settings_handler);
     }))
-    .map_err(|_| log::warn!("un_setup_unavailable (unbundled build?) — using plugin fallback"))
+    .map_err(|e| {
+        log::warn!(
+            "un_setup_unavailable exception={e:?} (unbundled build?) — using plugin fallback"
+        )
+    })
     .is_ok()
 }
 
@@ -186,6 +190,7 @@ pub async fn notifications_off() -> bool {
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     let tx = std::sync::Mutex::new(Some(tx));
+    // Reduced to text before the await: the exception object isn't `Send`.
     let read_failed = objc2::exception::catch(AssertUnwindSafe(|| {
         let handler = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
             let status = unsafe { settings.as_ref() }.authorizationStatus();
@@ -196,15 +201,33 @@ pub async fn notifications_off() -> bool {
         UNUserNotificationCenter::currentNotificationCenter()
             .getNotificationSettingsWithCompletionHandler(&handler);
     }))
-    .is_err();
-    if read_failed {
+    .err()
+    .map(|e| format!("exception={e:?}"));
+    if let Some(why) = read_failed {
+        note_settings_unread(&why);
         return false;
     }
 
-    matches!(
-        tokio::time::timeout(AUTHORIZATION_READ_TIMEOUT, rx).await,
-        Ok(Ok(status)) if status == UNAuthorizationStatus::Denied
-    )
+    match tokio::time::timeout(AUTHORIZATION_READ_TIMEOUT, rx).await {
+        Ok(Ok(status)) => status == UNAuthorizationStatus::Denied,
+        Ok(Err(_)) => {
+            note_settings_unread("the handler was dropped without answering");
+            false
+        }
+        Err(_) => {
+            note_settings_unread("no answer within the timeout");
+            false
+        }
+    }
+}
+
+/// The read runs every tick, so a failure that persists is logged once per launch rather than
+/// every minute. Delivery goes ahead either way.
+fn note_settings_unread(why: &str) {
+    static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log::warn!("un_settings_unread {why}; delivering as if notifications are on");
+    }
 }
 
 /// `false` (e.g. unbundled dev binary) means the caller should fall back to the plugin.
@@ -213,6 +236,7 @@ pub fn deliver(title: &str, body: &str, identifier: &str) -> bool {
     if !is_bundled() {
         return false;
     }
+    let logged_id = identifier.to_string();
     objc2::exception::catch(AssertUnwindSafe(|| {
         let center = UNUserNotificationCenter::currentNotificationCenter();
 
@@ -232,10 +256,16 @@ pub fn deliver(title: &str, body: &str, identifier: &str) -> bool {
         // `notification_fired` while macOS drops the banner.
         let completion = RcBlock::new(move |error: *mut NSError| {
             if let Some(err) = unsafe { error.as_ref() } {
-                log::warn!("un_deliver_failed error={}", err.localizedDescription());
+                log::warn!(
+                    "un_deliver_failed log_id={logged_id} domain={} code={} error={}",
+                    err.domain(),
+                    err.code(),
+                    err.localizedDescription()
+                );
             }
         });
         center.addNotificationRequest_withCompletionHandler(&request, Some(&completion));
     }))
+    .map_err(|e| log::warn!("un_deliver_exception exception={e:?}; using plugin fallback"))
     .is_ok()
 }

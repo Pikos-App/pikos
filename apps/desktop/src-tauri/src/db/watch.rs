@@ -154,7 +154,11 @@ fn pump<F: FnMut()>(
                 }
                 emit();
             }
-            Ok(Err(_)) => continue,
+            Ok(Err(e)) => {
+                // The kind only: notify's Display adds the paths, which carry the home folder.
+                log::warn!("db_watch_event_error kind={:?}", e.kind);
+                continue;
+            }
             Err(_) => return, // sender dropped — watcher gone
         }
     }
