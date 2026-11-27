@@ -3,8 +3,10 @@ name: CI
 # Every PR runs, a docs-only one included, so "CI result" always reports and main can require
 # it. Docs-only changes still skip the code gates: the `changes` job decides that per job.
 on:
+  # A release branch runs too: TestFlight builds from it, and before this nothing tested what
+  # reached a phone.
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
   # GitHub drops a cache nobody has read for seven days, and a run with none takes about 30
