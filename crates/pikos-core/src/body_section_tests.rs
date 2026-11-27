@@ -138,3 +138,13 @@ fn a_heading_on_a_page_without_any_is_refused() {
 
     assert_eq!(err.0, r#"no heading "Notes": the page has no headings"#);
 }
+
+#[test]
+fn a_body_that_is_not_a_document_says_where_it_broke_without_quoting_it() {
+    let stored = r#"{"type":"doc","content":"salary review"}"#;
+
+    let Unplaced(why) = edit_section(stored, &SectionEdit::Append, &[new_para("x")]).unwrap_err();
+
+    assert!(why.contains("content isn't a list"), "{why}");
+    assert!(!why.contains("salary"), "{why}");
+}

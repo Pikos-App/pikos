@@ -40,18 +40,19 @@ pub fn edit_section(
     edit: &SectionEdit,
     blocks: &[Value],
 ) -> Result<String, Unplaced> {
-    let not_a_document = |_| Unplaced("the page's body is not a document".to_string());
     let fields: BTreeMap<String, &RawValue> =
-        serde_json::from_str(stored).map_err(not_a_document)?;
+        serde_json::from_str(stored).map_err(not_a_document("not a JSON object"))?;
     let stored_blocks: Vec<&RawValue> = match fields.get("content") {
-        Some(raw) => serde_json::from_str(raw.get()).map_err(not_a_document)?,
+        Some(raw) => {
+            serde_json::from_str(raw.get()).map_err(not_a_document("its content isn't a list"))?
+        }
         None => Vec::new(),
     };
     let parsed: Vec<Value> = stored_blocks
         .iter()
         .map(|block| serde_json::from_str(block.get()))
         .collect::<Result<_, _>>()
-        .map_err(not_a_document)?;
+        .map_err(not_a_document("a block doesn't read"))?;
 
     let (from, to) = match edit {
         SectionEdit::Append => (parsed.len(), parsed.len()),
@@ -86,6 +87,18 @@ pub fn edit_section(
     members.push(format!("\"content\":[{content}]"));
 
     Ok(format!("{{{}}}", members.join(",")))
+}
+
+/// serde's message can quote the body, so only where it broke is said.
+fn not_a_document(what: &'static str) -> impl Fn(serde_json::Error) -> Unplaced {
+    move |e| {
+        Unplaced(format!(
+            "the page's stored body is not a document: {what} ({:?} at {}:{})",
+            e.classify(),
+            e.line(),
+            e.column()
+        ))
+    }
 }
 
 fn heading_level(block: &Value) -> Option<u64> {

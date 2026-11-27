@@ -800,11 +800,22 @@ async fn merge_over_stored_body(
         return Ok(false);
     };
 
-    let not_a_document = |_| AppError::Invalid(format!("page {id}'s body is not a document"));
-    let stored_doc = serde_json::from_str(&stored).map_err(not_a_document)?;
-    let my_doc = serde_json::from_str(mine).map_err(not_a_document)?;
+    let not_a_document = |side: &str, e: serde_json::Error| {
+        AppError::Invalid(format!(
+            "page {id}'s {side} body is not a document ({})",
+            AppError::from(e).log_summary()
+        ))
+    };
+    let stored_doc = serde_json::from_str(&stored).map_err(|e| not_a_document("stored", e))?;
+    let my_doc = serde_json::from_str(mine).map_err(|e| not_a_document("edited", e))?;
     // An unreadable base reads as an empty page, so both sides are kept whole.
-    let base_doc = serde_json::from_str(base).unwrap_or(serde_json::Value::Null);
+    let base_doc = serde_json::from_str(base).unwrap_or_else(|e| {
+        log::warn!(
+            "page {id}: the base body is not a document ({}), merged as empty",
+            AppError::from(e).log_summary()
+        );
+        serde_json::Value::Null
+    });
 
     let merged = pikos_core::body_merge::merge_bodies(&base_doc, &stored_doc, &my_doc).to_string();
     updates.content = Some(merged);
