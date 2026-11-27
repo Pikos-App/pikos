@@ -578,7 +578,12 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         // the instance it redefines. A `skipped` row redefines nothing, so it excludes instead.
         let mut exdates: BTreeSet<String> = BTreeSet::new();
         if let Some(rule) = rule {
-            let stored: Vec<String> = serde_json::from_str(&rule.exdates_json).unwrap_or_default();
+            let stored =
+                crate::schedules::stored_exdates(&format!("of page {id}"), &rule.exdates_json)
+                    .unwrap_or_else(|e| {
+                        log::warn!("{e}; exported with none, as the app shows it");
+                        Vec::new()
+                    });
             let replaced: std::collections::HashSet<&str> = page_overrides
                 .iter()
                 .filter(|o| o.status != "skipped")
