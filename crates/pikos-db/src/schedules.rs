@@ -107,10 +107,23 @@ pub struct PageRecurrenceRule {
     pub created_at: String,
 }
 
+/// A rule's stored `rrule_exdates`. The error names the rule and says where the JSON broke,
+/// without quoting it.
+pub(crate) fn stored_exdates(rule_id: &str, raw: &str) -> AppResult<Vec<String>> {
+    serde_json::from_str(raw).map_err(|e| {
+        AppError::Internal(format!(
+            "rule {rule_id}: rrule_exdates is not a JSON array of dates ({})",
+            AppError::from(e).log_summary()
+        ))
+    })
+}
+
 impl From<RecurrenceRuleRow> for PageRecurrenceRule {
     fn from(row: RecurrenceRuleRow) -> Self {
-        let rrule_exdates: Vec<String> =
-            serde_json::from_str(&row.rrule_exdates).unwrap_or_default();
+        let rrule_exdates = stored_exdates(&row.id, &row.rrule_exdates).unwrap_or_else(|e| {
+            log::warn!("{e}; read as none");
+            Vec::new()
+        });
         PageRecurrenceRule {
             id: row.id,
             page_id: row.page_id,
@@ -592,7 +605,7 @@ pub(crate) async fn merge_rule_exdates_tx(
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Recurrence rule not found: {rule_id}")))?;
-    let mut exdates: Vec<String> = serde_json::from_str(&current).unwrap_or_default();
+    let mut exdates = stored_exdates(rule_id, &current)?;
     for d in add {
         if !exdates.contains(d) {
             exdates.push(d.clone());
@@ -645,8 +658,7 @@ pub async fn remove_rule_exdate_impl(
                 .fetch_optional(&mut *tx)
                 .await?
                 .ok_or_else(|| AppError::NotFound(format!("Recurrence rule not found: {id}")))?;
-        let exdates: Vec<String> = serde_json::from_str::<Vec<String>>(&current)
-            .unwrap_or_default()
+        let exdates: Vec<String> = stored_exdates(&id, &current)?
             .into_iter()
             .filter(|d| d != &date)
             .collect();
