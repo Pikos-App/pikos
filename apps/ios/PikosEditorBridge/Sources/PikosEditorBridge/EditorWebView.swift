@@ -4,6 +4,9 @@
 
 import SwiftUI
 import WebKit
+import os
+
+private let log = Logger(subsystem: "app.pikos", category: "editor")
 
 /// The editor, as a SwiftUI view: a WKWebView hosting the shared Tiptap editor, the one
 /// non-native surface in an otherwise native app.
@@ -210,6 +213,7 @@ public struct EditorWebView: UIViewRepresentable {
                 // cannot break out of the expression.
                 webView.evaluateJavaScript("window.pikosEditor.receive(\(json))")
             } catch {
+                log.fault("a bridge message didn't encode, so the editor never got it: \(String(describing: type(of: error)), privacy: .public)")
                 assertionFailure("could not encode a bridge message: \(error)")
             }
         }
@@ -220,17 +224,23 @@ public struct EditorWebView: UIViewRepresentable {
         ) {
             guard let body = message.body as? [String: Any],
                 let data = try? JSONSerialization.data(withJSONObject: body)
-            else { return }
+            else {
+                log.fault("the editor sent a message that isn't a JSON object, so it was dropped")
+                return
+            }
 
             let incoming: EditorBridge.Incoming
             do {
                 incoming = try JSONDecoder().decode(EditorBridge.Incoming.self, from: data)
             } catch let failure as EditorBridge.Incoming.DecodingFailure {
-                // A version or type mismatch is a build problem. Loud in debug, ignored in release:
+                // A version or type mismatch is a build problem. Loud in debug, logged in release:
                 // dropping a message the host cannot understand beats acting on a guess.
+                log.fault("the editor sent a message this build rejects: \(String(describing: failure), privacy: .public)")
                 assertionFailure("editor bridge rejected a message: \(failure)")
                 return
             } catch {
+                // Private: a decoding error can quote the value it choked on, which may be text.
+                log.fault("an editor message didn't decode: \(String(describing: error), privacy: .private)")
                 assertionFailure("editor bridge could not decode a message: \(error)")
                 return
             }
@@ -238,6 +248,9 @@ public struct EditorWebView: UIViewRepresentable {
             switch incoming {
             case .ready(let payload):
                 guard payload.protocolVersion == EditorBridge.protocolVersion else {
+                    log.fault(
+                        "the editor speaks protocol \(payload.protocolVersion), this build \(EditorBridge.protocolVersion), so it never becomes ready"
+                    )
                     assertionFailure(
                         "editor speaks protocol \(payload.protocolVersion), host speaks "
                             + "\(EditorBridge.protocolVersion)")
