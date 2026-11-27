@@ -239,11 +239,11 @@ pub async fn restore_backup(
 
 /// [`restore_backup`] up to the restart.
 pub(crate) async fn restore_backup_impl(state: &DbState, file_name: &str) -> AppResult<()> {
-    let path = state
+    let canonical = state
         .current_path()
         .await
         .ok_or_else(|| AppError::Internal("No database connected.".into()))?;
-    let path = path.to_string_lossy().to_string();
+    let path = canonical.to_string_lossy().to_string();
 
     // Validate before taking the pool: a rejected restore has to leave a working
     // app behind, and every command fails once the pool is gone.
@@ -253,7 +253,57 @@ pub(crate) async fn restore_backup_impl(state: &DbState, file_name: &str) -> App
         pikos_db::close_pool(&pool).await;
     }
 
-    let displaced = pikos_db::restore_backup(&path, file_name).await?;
-    log::info!("restored {file_name}; previous workspace kept at {displaced}");
+    let displaced = match pikos_db::backups::restore_backup_reporting(&path, file_name).await {
+        Ok(displaced) => displaced,
+        Err(failed) => return Err(after_failed_restore(state, canonical, failed).await),
+    };
+    let kept = std::path::Path::new(&displaced)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    log::info!("restored {file_name}; previous workspace kept as {kept}");
     Ok(())
+}
+
+/// A restore that stopped after the pool closed. If it never wrote to the workspace, the workspace
+/// opens again and the app carries on; otherwise the file may be half written, nothing is
+/// opened, and the error asks for a relaunch, which opens whatever the file now holds.
+///
+/// The reopened pool goes back into the state, which is where every command and the sync loop
+/// get theirs. iCloud sync and the outside-change watcher were handed the closed pool at launch
+/// and keep it until the next relaunch.
+async fn after_failed_restore(
+    state: &DbState,
+    canonical: std::path::PathBuf,
+    failed: pikos_db::backups::RestoreFailed,
+) -> AppError {
+    log::error!(
+        "restore_backup stopped while {}: {} workspace_replaced={}",
+        failed.step,
+        failed.error.log_summary(),
+        failed.workspace_replaced
+    );
+    if failed.workspace_replaced {
+        return failed.needing_relaunch();
+    }
+
+    match crate::db::open_pool(&canonical.to_string_lossy()).await {
+        Ok(pool) => {
+            *state.inner.lock().await = crate::db::DbStateInner {
+                pool: Some(pool),
+                path: Some(canonical),
+            };
+            log::warn!(
+                "restore_backup: reopened the workspace it left untouched; iCloud sync and the outside-change watcher resume at the next launch"
+            );
+            failed.error
+        }
+        Err(e) => {
+            log::error!(
+                "restore_backup: reopening the untouched workspace failed: {}",
+                e.log_summary()
+            );
+            failed.needing_relaunch()
+        }
+    }
 }

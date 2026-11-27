@@ -253,6 +253,14 @@ const UNTOUCHED: bool = false;
 const REPLACED: bool = true;
 
 impl RestoreFailed {
+    /// The error for a caller left with no workspace open, which only a relaunch fixes.
+    pub fn needing_relaunch(self) -> AppError {
+        at_step(
+            self.error,
+            "the restore stopped with no workspace open, so relaunch Pikos",
+        )
+    }
+
     fn at(step: &'static str, workspace_replaced: bool) -> impl FnOnce(AppError) -> Self {
         move |error| RestoreFailed {
             step,
