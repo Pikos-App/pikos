@@ -12,8 +12,6 @@ import {
   WRITE_QUEUE_DEBOUNCE_MS,
 } from "./fixtures";
 
-// ─── Open page and edit content ────────────────────────────────────────────
-
 appTest("open page and edit content @smoke", async ({ app }) => {
   await quickAdd(app, "my test page");
   await quickAdd(app, "other page");
@@ -23,12 +21,10 @@ appTest("open page and edit content @smoke", async ({ app }) => {
     "my test page"
   );
 
-  // Edit the title — title renders as a div when unfocused, textarea when focused.
-  // Click the div to enter edit mode, then select all and retype.
+  // The title renders as a div when unfocused and a textarea when focused.
   const titleDisplay = app.getByLabel("Page title");
   await expect(titleDisplay).toHaveText("my test page");
   await titleDisplay.click();
-  // Wait for edit mode — the textbox replaces the display div on focus.
   const titleInput = app.getByRole("textbox", { name: "Page title" });
   await expect(titleInput).toBeFocused();
   await app.keyboard.press(mod("Mod+a"));
@@ -39,7 +35,6 @@ appTest("open page and edit content @smoke", async ({ app }) => {
     "renamed page"
   );
 
-  // Add a description — same div/textarea pattern
   const descDisplay = app.getByLabel("Page description");
   await descDisplay.click();
   const descInput = app.getByRole("textbox", { name: "Page description" });
@@ -51,7 +46,6 @@ appTest("open page and edit content @smoke", async ({ app }) => {
   await app.keyboard.type("Hello world");
   await expect(editor).toContainText("Hello world");
 
-  // Navigate away and back — all changes should persist (autosave)
   await app.locator("[data-page-list-item]").getByText("other page").click();
   await app.locator("[data-page-list-item]").getByText("renamed page").click();
   await expect(app.getByLabel("Page title")).toHaveText("renamed page");
@@ -59,11 +53,8 @@ appTest("open page and edit content @smoke", async ({ app }) => {
   await expect(editor).toContainText("Hello world");
 });
 
-// ─── Typing into the middle of a title ─────────────────────────────────────
-
-// Two characters, not one: the old bug re-placed the caret after the state
-// round-trip, so the first character landed correctly and every one after it
-// went to the end. "abcXdefY" instead of "abcXYdef".
+// Two characters, not one: a caret re-placed after the state round-trip lands the first correctly and
+// sends every later one to the end ("abcXdefY" instead of "abcXYdef").
 appTest("typing into the middle of a title or description stays there @smoke", async ({ app }) => {
   await quickAdd(app, "abcdef");
 
@@ -88,8 +79,6 @@ appTest("typing into the middle of a title or description stays there @smoke", a
   await expect(descInput).toHaveValue("abcXYdef");
 });
 
-// ─── Complete a page (toggle status) ───────────────────────────────────────
-
 appTest("complete a page via status toggle @smoke", async ({ app }) => {
   await quickAdd(app, "task to complete");
 
@@ -100,7 +89,6 @@ appTest("complete a page via status toggle @smoke", async ({ app }) => {
 
   await expect(pageItem).not.toBeVisible();
 
-  // Completed section toggle is always visible
   const completedToggle = app.getByRole("button", { name: /Completed/ });
   await expect(completedToggle).toBeVisible();
 
@@ -109,8 +97,6 @@ appTest("complete a page via status toggle @smoke", async ({ app }) => {
     app.locator("[data-page-list-item]").filter({ hasText: "task to complete" })
   ).toBeVisible();
 });
-
-// ─── Delete a page and undo ────────────────────────────────────────────────
 
 appTest("delete a page and undo @smoke", { tag: ["@TRASH-02:3"] }, async ({ app }) => {
   await quickAdd(app, "page to delete");
@@ -125,18 +111,15 @@ appTest("delete a page and undo @smoke", { tag: ["@TRASH-02:3"] }, async ({ app 
   const toast = app.getByRole("alert", { name: /page to delete/ });
   await expect(toast).toBeVisible();
 
-  // Undo restores the page. The toast's action button is labelled "Undo"
-  // (see UndoDeleteContext.requestDeletePage), not "Undo delete".
+  // The toast's action button is labelled "Undo" (UndoDeleteContext.requestDeletePage), not "Undo delete".
   await toast.getByRole("button", { name: "Undo" }).click();
   await expect(pageItem).toBeVisible();
 });
 
-// ─── Move page to folder via context menu ──────────────────────────────────
-
 appTest("move page to folder via context menu @smoke", { tag: ["@LIST-05:2"] }, async ({ app }) => {
   await createFolder(app, "Work");
 
-  // Create the page from Inbox — quickAdd lands pages in the active view's folder.
+  // Create the page from Inbox: quickAdd lands pages in the active view's folder.
   await app.getByRole("button", { name: /Inbox/ }).click();
   await quickAdd(app, "movable page");
 
@@ -155,30 +138,21 @@ appTest("move page to folder via context menu @smoke", { tag: ["@LIST-05:2"] }, 
   ).toBeVisible();
 });
 
-// ─── Drag-to-reorder within the page list ───────────────────────────────────
-//
-// useThreePanelDnD's `at === "page" && ot === "page"` branch handles page
-// reordering inside a folder/inbox via the SortableContext over the
-// page-list rows. This is distinct from `folders.spec.ts:drag a folder to
-// reorder` which exercises the sidebar's folder list. Reorder only commits
-// in manual sort mode — the default sort is by date, so we switch first.
-// A regression in the sortable wiring would leave drag-reorder silently
-// failing inside the page list even though folders still rearrange.
+// Reorder commits only in manual sort mode (the default sort is by date), so the test switches first.
+// Guards the SortableContext wiring over the page-list rows (useThreePanelDnD's page branch), which
+// could fail silently while folders still rearrange.
 
 appTest("drag a page above another reorders the page list", async ({ app }) => {
   await quickAdd(app, "alpha task");
   await quickAdd(app, "bravo task");
   await quickAdd(app, "charlie task");
 
-  // Switch the active view's sort mode to Manual — reorder is a no-op
-  // otherwise (the list is sorted automatically in other modes).
+  // Reorder is a no-op in the automatic sort modes.
   await app.getByRole("button", { name: /^Sort:/ }).click();
   await app.getByRole("menuitem", { name: "Manual" }).click();
   await expect(app.getByRole("button", { name: "Sort: manual" })).toBeVisible();
 
-  // Capture the initial order. Manual sort defaults to creation order
-  // (newest first or oldest first depending on the build) — either way the
-  // post-drag order must differ.
+  // Manual sort defaults to creation order, newest or oldest first by build; either way the post-drag order must differ.
   const items = app.locator("[data-page-list-item]");
   await expect(items).toHaveCount(3);
   const before = await items.allInnerTexts();
@@ -202,12 +176,9 @@ appTest("drag a page above another reorders the page list", async ({ app }) => {
 
   const after = await items.allInnerTexts();
   expect(after).not.toEqual(before);
-  // The dragged title (last in `before`) is now first.
   const formerLastTitle = before[before.length - 1]!.trim().split("\n")[0]!;
   expect(after[0]!.trim().split("\n")[0]).toBe(formerLastTitle);
 });
-
-// ─── Outside changes ────────────────────────────────────────────────────────
 
 appTest(
   "a page written outside the app shows once the doorbell rings, without a reload",

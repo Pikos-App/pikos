@@ -1,6 +1,3 @@
-// The tags menu is the only way to add or create a tag, and the tooltip that names
-// the current tags is anchored to the control the menu opens over.
-
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 

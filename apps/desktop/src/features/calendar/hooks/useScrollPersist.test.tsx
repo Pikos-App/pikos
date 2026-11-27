@@ -1,10 +1,5 @@
-// useScrollPersist — covers initial restore (saved value → corresponding
-// scrollTop), smart-start fallback when no usable saved value, debounced
-// persistence on scroll, and one-shot restore (no re-pin on geometry change).
-//
-// The hook reads container height via ResizeObserver; jsdom doesn't ship one,
-// so we install a manual mock per test. A small Harness component attaches
-// the hook's scrollRef to a real div whose clientHeight we control.
+// The hook reads container height via ResizeObserver, which jsdom lacks, so each test installs a manual
+// mock. Harness attaches the hook's scrollRef to a real div whose clientHeight we control.
 
 import type { CollapseGeometry } from "@pikos/core";
 import { buildCollapseGeometry } from "@pikos/core";
@@ -16,8 +11,7 @@ import { HOUR_LABEL_CLEARANCE_PX, useScrollPersist } from "./useScrollPersist";
 
 const STORAGE_KEY = "pikos:test:scrollHour";
 
-// Geometry with both bands expanded so mapHourToY(h, geometry) === h * hourHeight.
-// 9am → 9 × 64 = 576 px, easy to read in assertions.
+// Both bands expanded, so mapHourToY(h, geometry) === h * hourHeight.
 function makeGeometry(): CollapseGeometry {
   return buildCollapseGeometry(
     { bottomCollapsed: false, bottomHour: 22, topCollapsed: false, topHour: 6 },
@@ -57,7 +51,6 @@ function Harness({
   return <div data-testid="scroll" ref={scrollRef} style={{ height: "100%" }} />;
 }
 
-/** Create a probe + a setter the harness uses to push live values out. */
 function makeProbe() {
   const probe: ProbeRef = { containerHeight: 0, scrollEl: null };
   function update(next: ProbeRef) {
@@ -100,7 +93,6 @@ function installResizeObserver(initialHeight: number) {
   });
 
   return {
-    /** Push a resize entry to all live observers. */
     pushResize(height: number) {
       const entry = {
         contentRect: { height },
@@ -181,10 +173,9 @@ describe("useScrollPersist — re-render semantics", () => {
     const { rerender } = render(<Harness geometry={initialGeom} onProbe={update} />);
     expect(probe.scrollEl?.scrollTop).toBe(576 - HOUR_LABEL_CLEARANCE_PX);
 
-    // User scrolls; then geometry recomputes (density flip, band toggle…).
     if (probe.scrollEl) probe.scrollEl.scrollTop = 1200;
     rerender(<Harness geometry={makeGeometry()} onProbe={update} />);
-    // Restore must NOT re-fire — the in-session scroll position is preserved.
+    // Restore must not re-fire: the in-session scroll position is preserved.
     expect(probe.scrollEl?.scrollTop).toBe(1200);
     ro.restore();
   });

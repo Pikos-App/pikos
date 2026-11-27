@@ -40,20 +40,13 @@ const log = createLogger("useImport");
 
 import type { ImportBatchItem } from "../types";
 
-// ─── Markdown → Tiptap JSON conversion ───────────────────────────────────────
-
 /**
- * Obsidian renders blank lines (\n\n) as visible empty lines the user can click on.
- * Standard markdown just uses them as paragraph separators with no intermediate content.
- * After converting markdown → Tiptap JSON, insert empty paragraph nodes between
- * top-level blocks to match Obsidian's visual behavior.
- *
- * For 3+ consecutive newlines (extra blank lines), additional empty paragraphs are added.
+ * Inserts empty paragraphs between top-level blocks to match Obsidian, which renders each blank line
+ * as a clickable empty line; standard markdown treats blank lines as separators only.
  */
 export function insertBlankLineParagraphs(md: string, json: JSONContent): JSONContent {
   if (!json.content || json.content.length < 2) return json;
 
-  // Count how many blank lines each \n\n+ separator represents.
   const separators: number[] = [];
   for (const m of md.matchAll(/\n{2,}/g)) {
     // \n\n = 1 blank line, \n\n\n = 2 blank lines, etc.
@@ -84,25 +77,15 @@ function getMarkdownConverter(): (md: string) => string {
 }
 
 export function convertMarkdownToTiptap(md: string): string {
-  // Lazy-init a single editor instance for the lifetime of the app.
   if (!sharedEditor) {
     sharedEditor = new Editor({
       content: "",
-      // The production schema, not a hand-rolled approximation of it.
-      //
-      // This used to assemble its own extension list, and it had drifted: it
-      // omitted TabIndent, so imported documents carried no `indent` attribute
-      // while every document the editor writes carries `indent: 0` on each
-      // paragraph and heading. Opening an imported page and typing one
-      // character normalised the whole document, turning the first keystroke
-      // into a full-document rewrite.
-      //
-      // Only the markdown *parsing* is overridden below; its schema
-      // contribution is unchanged.
+      // The production schema, not a hand-rolled approximation: a separate extension list drifted
+      // (no TabIndent), so imported documents lacked `indent: 0` and the first keystroke on an opened
+      // import rewrote the whole document. Only the markdown parsing is overridden below.
       extensions: createDocumentExtensions({
         markdown: Markdown.configure({
-          // Obsidian renders single \n as line breaks (non-CommonMark).
-          // Without this, single newlines collapse to spaces.
+          // Obsidian renders single \n as line breaks (non-CommonMark); without this they collapse to spaces.
           breaks: true,
           transformPastedText: false,
         }),
@@ -114,16 +97,10 @@ export function convertMarkdownToTiptap(md: string): string {
   sharedEditor.commands.setContent(md);
   const withBlankLines = insertBlankLineParagraphs(md, sharedEditor.getJSON());
 
-  // Normalise through the editor a second time.
-  //
-  // insertBlankLineParagraphs builds `{ type: "paragraph" }` nodes by hand, and
-  // a hand-built node carries no attributes — so imported documents ended up
-  // with paragraphs missing the defaults every edited document has. Re-running
-  // setContent lets ProseMirror apply them.
-  //
-  // Done this way rather than by adding the attributes at the construction
-  // site, because that would have to be updated every time the schema gains an
-  // attribute, and the failure mode of forgetting is silent.
+  // Normalise through the editor a second time: insertBlankLineParagraphs builds attribute-less
+  // paragraph nodes, and re-running setContent lets ProseMirror apply the defaults. Done here rather
+  // than at the construction site, which would need updating whenever the schema gains an attribute,
+  // and forgetting is silent.
   sharedEditor.commands.setContent(withBlankLines);
   return JSON.stringify(sharedEditor.getJSON());
 }
@@ -138,8 +115,6 @@ function wrapPlainText(text: string): string {
   }));
   return JSON.stringify({ content: paragraphs, type: "doc" });
 }
-
-// ─── Image import helpers ────────────────────────────────────────────────────
 
 /**
  * Resolve image references in a markdown body, copy files to workspace assets,
@@ -156,7 +131,7 @@ export async function resolveImportImages(
   const missing: string[] = [];
   let rewritten = body;
 
-  // Deduplicate by sourcePath — same image referenced multiple times should copy once
+  // One copy per sourcePath, however often it is referenced.
   const pathToSaved = new Map<string, string>();
 
   for (const ref of imageRefs) {
@@ -216,9 +191,7 @@ function rewriteImageRef(body: string, ref: ImageRef, savedPath: string): string
 function addAssetPathsToJson(json: JSONContent): JSONContent {
   if (json.type === "image" && json.attrs?.["src"]) {
     const src = json.attrs["src"] as string;
-    // A stored asset path, or a full filesystem path, is the image's file: set it as
-    // data-asset-path. Decode URI encoding (tiptap-markdown encodes spaces as %20)
-    // so the path matches the actual filesystem.
+    // Decode the URI encoding tiptap-markdown applies (spaces as %20) so the path matches the filesystem.
     if (src.startsWith(`${ASSET_DIR}/`) || (src.startsWith("/") && !src.startsWith("//"))) {
       const decodedSrc = decodeURIComponent(src);
       return {
@@ -258,8 +231,6 @@ async function workspacePagesTitled(
       .map(({ id, title }) => ({ id, title }))
   );
 }
-
-// ─── File reading ─────────────────────────────────────────────────────────────
 
 interface VaultReadResult {
   files: VaultFile[];
@@ -316,8 +287,6 @@ async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
 
   return { files, skipped };
 }
-
-// ─── State machine ────────────────────────────────────────────────────────────
 
 export interface MissingImage {
   page: string;
@@ -440,16 +409,15 @@ export function useImport() {
     setState({ step: "importing" });
 
     try {
-      // Pre-import backup (non-blocking — don't fail the import if backup fails)
+      // Non-blocking: a failed backup must not fail the import.
       try {
         await storage?.backupBeforeImport();
       } catch (err) {
-        // Log so a missing backup file isn't a mystery if the user needs to roll back
+        // Logged so a missing backup file isn't a mystery on rollback.
         log.warn("pre-import backup failed; proceeding without rollback file", err);
       }
 
-      // Convert content to Tiptap JSON — use markdown converter for all sources
-      // (handles plain CSV bodies as single paragraphs).
+      // The markdown converter serves every source; plain CSV bodies become single paragraphs.
       const convert = getMarkdownConverter();
 
       const converted: { doc: JSONContent; page: ImportPage; title: string }[] = [];
@@ -465,9 +433,8 @@ export function useImport() {
         }
 
         const rawContent = bodyToConvert ? convert(bodyToConvert) : wrapPlainText("");
-        // The converter output is generated by our own code, so a parse
-        // failure here means the converter regressed — log + fall back so
-        // the rest of the import still completes.
+        // The converter's output is our own, so a parse failure means it regressed; log and fall back
+        // so the rest of the import completes.
         const parsedRaw = tryParseTiptapJson(rawContent, "useImport.executeImport");
         const doc = addAssetPathsToJson(parsedRaw ?? EMPTY_TIPTAP_DOC);
         converted.push({ doc, page: p, title });
@@ -523,9 +490,7 @@ export function useImport() {
       });
       return { missingImages, unlinkedLinks };
     } catch (e) {
-      // Surface the raw cause — the import catch used to swallow it entirely
-      // (only a generic user-facing message reached the UI), which is why
-      // import failures were undiagnosable from the logs.
+      // Surface the raw cause: only a generic message reaches the UI, so the logs are where a failure is diagnosed.
       log.error("import failed", e);
       setState({
         message: storageErrorUserMessage(toStorageError(e), "running the import"),

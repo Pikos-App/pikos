@@ -1,4 +1,4 @@
-// Popover stays open across toggles for multi-select; Escape closes.
+// Stays open across toggles for multi-select.
 
 import { Check } from "lucide-react";
 import { useState } from "react";
@@ -21,9 +21,8 @@ export interface TagsPopoverProps {
 export function TagsPopover({ allTags, anchored, onClose, onToggle, selected }: TagsPopoverProps) {
   const [open, setOpen] = useState(false);
 
-  // A tag typed into quick add is chosen before any page carries it, so it is in `selected`
-  // but not yet in `allTags`. Listed only from `allTags`, the menu left out the one tag the
-  // page already had, and offered to create it.
+  // A tag typed into quick add is in `selected` before any page carries it, so it isn't in
+  // `allTags`; listing only `allTags` would hide the page's own tag and offer to create it.
   const listedTags = [...selected.filter((t) => !allTags.includes(t)), ...allTags];
 
   const hasSelected = selected.length > 0;

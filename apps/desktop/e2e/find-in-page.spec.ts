@@ -2,8 +2,6 @@ import { expect } from "@playwright/test";
 
 import { test as appTest, mod, quickAdd } from "./fixtures";
 
-// ─── Find in page (Cmd+F) ──────────────────────────────────────────────────
-
 appTest(
   "find in page highlights matches",
   { tag: ["@EDIT-10:3"] },
@@ -43,8 +41,6 @@ appTest(
   }
 );
 
-// ─── Zero matches ──────────────────────────────────────────────────────────
-
 appTest(
   "find in page shows zero matches, in a bar clear of the window's edge",
   { tag: ["@EDIT-10:3"] },
@@ -70,8 +66,6 @@ appTest(
   }
 );
 
-// ─── Prefill selected text ─────────────────────────────────────────────────
-
 appTest(
   "find in page prefills selected text",
   { tag: ["@EDIT-10:3"] },
@@ -83,7 +77,6 @@ appTest(
     await editor.click();
     await app.keyboard.type("hello world");
 
-    // Select "world" (5 chars) via Shift+ArrowLeft from end of line
     for (let i = 0; i < 5; i++) await app.keyboard.press("Shift+ArrowLeft");
 
     await app.keyboard.press(mod("Mod+f"));

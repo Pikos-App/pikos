@@ -1,15 +1,7 @@
-// E2E coverage for the import flows (markdown vault + CSV).
-//
-// The native pickers and Tauri filesystem APIs aren't available in the
-// browser-only e2e environment, so the import surface honours
-// VITE_TEST_MODE-only escape hatches:
-//   - `window.__PIKOS_TEST_VAULT__` feeds prebuilt VaultFile entries into the
-//     markdown parser.
-//   - `window.__PIKOS_TEST_CSV__` feeds a raw CSV string into the CSV parser.
-// The rest of each flow — mapping page (CSV only), preview modal,
-// executeImport, page list refresh — runs against the MockStorageAdapter
-// exactly as it does in unit tests, so this spec verifies that the
-// user-visible glue between the parsers and the workspace state is wired up.
+// The native pickers and Tauri filesystem APIs aren't available in the browser-only e2e environment, so the
+// import surface honours two VITE_TEST_MODE-only escape hatches: `window.__PIKOS_TEST_VAULT__` feeds prebuilt
+// VaultFile entries into the markdown parser, and `window.__PIKOS_TEST_CSV__` feeds a raw CSV string into the
+// CSV parser. The rest of each flow runs against MockStorageAdapter, as in unit tests.
 
 import { expect } from "@playwright/test";
 
@@ -40,9 +32,7 @@ appTest("markdown import: folder pick → preview → commit", async ({ app }) =
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
 
-  // Inject the test vault before any user interaction so the click handler
-  // sees it. Settings has to be open first or the import button isn't mounted,
-  // but the global is read at click time so order doesn't matter.
+  // The global is read at click time, so only the settings overlay (which mounts the import button) must be open first.
   await app.evaluate(
     ({ files, path }) => {
       (window as unknown as Record<string, unknown>)["__PIKOS_TEST_VAULT__"] = {
@@ -57,27 +47,19 @@ appTest("markdown import: folder pick → preview → commit", async ({ app }) =
   await app.getByRole("button", { exact: true, name: "Data" }).click();
   await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
 
-  // Trigger the markdown import. Without the test-mode escape hatch this
-  // would call openDialog(); with it, the parser receives VAULT_FILES.
   await app.getByRole("button", { name: /Select folder/ }).click();
 
-  // Preview modal renders with a summary line. The source label is
-  // "Markdown / Obsidian" and the page/folder counts come straight from the
-  // parsed plan — 4 pages in 2 folders (Work × 2, Personal × 1) plus one
-  // inbox page.
+  // The source label is "Markdown / Obsidian"; counts come from the parsed plan: 4 pages in 2 folders
+  // (Work × 2, Personal × 1) plus one inbox page.
   await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
   await expect(app.getByText(/Markdown \/ Obsidian/)).toBeVisible();
   await expect(app.getByText(/4 pages in 2 folders \+ Inbox/)).toBeVisible();
 
   await app.getByRole("button", { name: /Import 4 pages/ }).click();
 
-  // After executeImport completes the SettingsPage effect SHOULD close the
-  // overlay and route to inbox, but in this test environment the auto-close
-  // doesn't reliably reach the click-handling layer before the next click
-  // attempt — sidebar clicks get intercepted by the still-mounted settings
-  // overlay (Playwright's toBeVisible doesn't check z-stacking). Escape
-  // explicitly dismisses settings so subsequent sidebar clicks land. (Real
-  // users hit Escape too if the auto-close ever lags.)
+  // executeImport should close the overlay and route to inbox, but the auto-close doesn't reliably land before
+  // the next click, and Playwright's toBeVisible doesn't check z-stacking, so the lingering overlay intercepts
+  // sidebar clicks. Escape dismisses it explicitly.
   await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible({
     timeout: 5_000,
   });
@@ -88,16 +70,12 @@ appTest("markdown import: folder pick → preview → commit", async ({ app }) =
 
   await expect(app.locator("[data-page-list-item]").getByText("Inbox Note")).toBeVisible();
 
-  // Folder sidebar should now have Work and Personal entries created by the
-  // import. The exact-match filter avoids picking up "Work in progress" if
-  // an unrelated test artifact ever lands in a default workspace.
+  // Exact match, so an unrelated "Work in progress" in a default workspace isn't picked up.
   const sidebar = app.getByRole("group", { name: "Views and folders" });
   await expect(sidebar.getByRole("button", { exact: true, name: "Work" })).toBeVisible();
   await expect(sidebar.getByRole("button", { exact: true, name: "Personal" })).toBeVisible();
 
-  // Open Work and verify its two pages landed there. Quarterly Report has
-  // status=done so it's under the collapsed-by-default Completed section —
-  // expand it before asserting.
+  // Quarterly Report is status=done, so it sits under the collapsed Completed section; expand it before asserting.
   await sidebar.getByRole("button", { exact: true, name: "Work" }).click();
   const workItems = app.locator("[data-page-list-item]");
   await expect(workItems.getByText("Followups")).toBeVisible();
@@ -126,25 +104,18 @@ appTest(
 
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
-    // Cancel via the back arrow returns to the Data settings tab, not all the
-    // way out of settings. The Data tab's Import heading is the proof.
+    // Cancel via the back arrow returns to the Data settings tab, not out of settings; the Import heading proves it.
     await app.getByRole("button", { name: "Cancel import" }).click();
     await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
     await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible();
 
-    // No pages should have been created.
     await app.keyboard.press("Escape");
     await expect(app.locator("[data-page-list-item]").getByText("Inbox Note")).not.toBeVisible();
   }
 );
 
-// ─── Empty vault ────────────────────────────────────────────────────────────
-//
-// Picking a folder with zero .md files is a user-visible negative path: the
-// importer should refuse with a clear message rather than open an empty
-// preview. Guards against a regression where the empty-file guard in
-// parseMarkdownDir is dropped and the user lands on a preview with nothing
-// to import (or worse, a crash on the empty plan).
+// Picking a folder with zero .md files must be refused with a clear message, not open an empty preview.
+// Guards the empty-file guard in parseMarkdownDir; a crash on the empty plan is the worst case.
 
 appTest(
   "markdown import: empty vault shows error and skips preview",
@@ -168,13 +139,8 @@ appTest(
   }
 );
 
-// ─── Skip-completed toggle in preview ──────────────────────────────────────
-//
-// The preview modal exposes a "Skip N completed" checkbox when the plan
-// contains any done pages. Toggling it filters the visible plan and updates
-// the footer's "Import N pages" button. Confirming with the toggle on
-// imports only the active subset. Regression here would silently let
-// already-done pages flood the workspace on import.
+// The preview's "Skip N completed" checkbox filters the plan and the "Import N pages" button; confirming with it
+// on imports only the active subset, so already-done pages don't flood the workspace.
 
 appTest(
   "markdown import: skip-completed toggle drops done pages from the import",
@@ -194,13 +160,11 @@ appTest(
     await app.getByRole("button", { name: /Select folder/ }).click();
     await expect(app.getByRole("heading", { name: "Import Preview" })).toBeVisible();
 
-    // Plan has 1 completed page (Quarterly Report, status: done) of 4 total.
-    // Confirm button reflects the full count until the toggle flips.
+    // The plan has 1 completed page (Quarterly Report) of 4; the button shows the full count until the toggle flips.
     await expect(app.getByRole("button", { name: /Import 4 pages/ })).toBeVisible();
 
     await app.getByRole("checkbox", { name: /Skip 1 completed/ }).check();
 
-    // Footer count drops to the active subset (4 − 1 = 3).
     await expect(app.getByRole("button", { name: /Import 3 pages/ })).toBeVisible();
     await expect(app.getByRole("button", { name: /Import 4 pages/ })).not.toBeVisible();
 
@@ -215,20 +179,14 @@ appTest(
     const workItems = app.locator("[data-page-list-item]");
     await expect(workItems.filter({ hasText: "Followups" })).toBeVisible();
 
-    // The Completed accordion always renders as a header — expand it and
-    // assert the section is empty rather than asserting the header is
-    // missing. Quarterly Report was the only completed page in the source.
+    // The Completed accordion always renders a header: expand it and assert it is empty, rather than asserting the header is missing.
     await app.getByRole("button", { exact: true, name: "Completed" }).click();
     await expect(workItems.filter({ hasText: "Quarterly Report" })).toHaveCount(0);
   }
 );
 
-// ─── Nested folders flatten to display names ───────────────────────────────
-//
-// Pikos has flat folders (no nesting) — nested vault paths flatten with " / "
-// separators so the source structure is still visible to the user. This test
-// locks down the preview-side display so a regression in
-// parseMarkdownVault's path-join logic would surface immediately.
+// Pikos has flat folders, so nested vault paths flatten with " / " separators. Locks down the preview-side
+// display against a regression in parseMarkdownVault's path-join.
 
 appTest(
   "markdown import: nested vault paths flatten to 'A / B' in the preview",
@@ -253,21 +211,15 @@ appTest(
 
     await expect(app.getByText(/2 pages in 2 folders/)).toBeVisible();
 
-    // Flattened folder labels surface as clickable folder rows in the preview tree.
-    // The exact-name match avoids picking up unrelated text containing the substrings.
+    // Exact-name match avoids unrelated text containing the substrings.
     await expect(app.getByRole("button", { name: "Projects / Work (1)" })).toBeVisible();
     await expect(app.getByRole("button", { name: "Personal / Travel (1)" })).toBeVisible();
   }
 );
 
-// ─── Frontmatter metadata round-trips to the page byline ────────────────────
-//
-// Verifies the full chain: YAML frontmatter → markdown parser → importBatch
-// → workspace → page-list active state → editor byline chips. Unit tests
-// cover each stage in isolation; this is the only place we assert the
-// glue holds together. A regression that drops `priority` or `scheduled`
-// during importBatch would silently leave imported pages stripped of
-// metadata — silent because the page itself still exists.
+// The full chain: YAML frontmatter → markdown parser → importBatch → workspace → page-list → editor byline
+// chips. Unit tests cover each stage; this is the only check that the glue holds. A dropped `priority` or
+// `scheduled` would leave imported pages silently stripped of metadata.
 
 appTest(
   "markdown import: frontmatter priority and schedule surface on the imported page byline",
@@ -307,13 +259,9 @@ appTest(
   }
 );
 
-// ─── CSV import: TickTick autodetect → mapping → preview → commit ───────────
-//
-// TickTick is the primary CSV migration target (the README ships with a
-// dedicated migration guide). Detection keys on a "List Name" + "Title"
-// header pair, which routes through the column-mapping page before the
-// preview. A regression in autodetect, applyMappings, or the import-batch
-// glue would silently strip migrated TickTick data.
+// TickTick is the primary CSV migration target. Detection keys on a "List Name" + "Title" header pair and
+// routes through the column-mapping page before the preview; a regression in autodetect, applyMappings or the
+// import-batch glue would silently strip migrated data.
 
 const TICKTICK_CSV = `List Name,Title,Status
 Work,Quarterly plan,0
@@ -345,9 +293,7 @@ appTest(
     await expect(app.getByRole("heading", { name: "Import Preview" })).not.toBeVisible({
       timeout: 5_000,
     });
-    // SettingsPage auto-routes to inbox + closes on import success, but the
-    // overlay sometimes lingers in this harness — Escape guarantees the
-    // sidebar is clickable.
+    // The overlay sometimes lingers in this harness after the import auto-closes it; Escape makes the sidebar clickable.
     await app.keyboard.press("Escape");
 
     const sidebar = app.getByRole("group", { name: "Views and folders" });
@@ -358,19 +304,14 @@ appTest(
     const workItems = app.locator("[data-page-list-item]");
     await expect(workItems.filter({ hasText: "Quarterly plan" })).toBeVisible();
 
-    // Old task has TickTick Status=2 → mapped to "done", lives under the
-    // Completed accordion in the same folder.
+    // The old task (TickTick Status=2) maps to "done" and lives under the Completed accordion in its folder.
     await app.getByRole("button", { exact: true, name: "Completed" }).click();
     await expect(workItems.filter({ hasText: "Old task" })).toBeVisible();
   }
 );
 
-// ─── CSV import: cancel from the mapping page ──────────────────────────────
-//
-// The mapping page sits between the file pick and the preview. Cancelling
-// here must return to the Data settings tab without writing anything to the
-// workspace. A regression in the reset wiring would either leave the user
-// stranded on the mapping page or silently commit a partial plan.
+// The mapping page sits between the file pick and the preview; cancelling must return to the Data tab without
+// writing to the workspace. A reset regression would strand the user or commit a partial plan.
 
 appTest(
   "CSV import: cancel from mapping page returns to Data settings",
@@ -387,11 +328,9 @@ appTest(
     // Footer Cancel button (exact match avoids the back-arrow's "Cancel import" name).
     await app.getByRole("button", { exact: true, name: "Cancel" }).click();
 
-    // Back to the Data tab — Import heading proves it; mapping page is gone.
     await expect(app.getByRole("heading", { name: "Import" })).toBeVisible();
     await expect(app.getByRole("heading", { name: "Map CSV Columns" })).not.toBeVisible();
 
-    // No pages should have been created.
     await app.keyboard.press("Escape");
     await expect(
       app.locator("[data-page-list-item]").filter({ hasText: "Quarterly plan" })

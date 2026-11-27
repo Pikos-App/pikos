@@ -14,18 +14,14 @@ interface PaginationState {
   viewId: string;
   total: number;
   offset: number;
-  /** IDs explicitly loaded by this view's paginated fetches. The derived
-   * list shows pages in this set OR pages completed during the current
-   * session — so an optimistic status toggle surfaces instantly while
-   * unrelated completed pages that happen to live in the `pages` array
-   * (e.g. pulled in by CalendarView's range fetch) stay hidden. */
+  /** Pages this view's paginated fetches loaded. The list shows these plus pages completed this session,
+   * so unrelated completed pages that happen to be in `pages` (e.g. from the calendar's range fetch) stay hidden. */
   loadedIds: Set<string>;
 }
 
 /**
- * Lazy-loads completed pages when the "Completed" section is expanded.
- * Fetches PAGE_SIZE at a time into the WorkspaceContext pages array,
- * so all optimistic updates (title edits, status toggles) work automatically.
+ * Lazy-loads completed pages, PAGE_SIZE at a time, into the WorkspaceContext pages array so optimistic
+ * updates apply to them.
  */
 export function useCompletedPages(activeViewId: string) {
   const { listCompletedPages, mergePages } = usePages();
@@ -33,14 +29,10 @@ export function useCompletedPages(activeViewId: string) {
 
   const [paginationState, setPaginationState] = useState<PaginationState | null>(null);
   const fetchingViewRef = useRef<string | null>(null);
-  // Timestamp captured on mount — pages whose `completedAt` is newer than
-  // this were completed during this session and should be visible in the
-  // Completed section even before pagination explicitly fetched them.
-  // Floored to the second because `completedAt` is stored as
-  // `yyyy-MM-dd'T'HH:mm:ss` (no ms), and a toggle within the same wall
-  // second as this mount would otherwise parse to <sessionStartMs and be
-  // filtered out. useState's initializer runs once, outside the pure-render
-  // path that react-hooks/purity polices.
+  // Captured on mount: pages completed after it count as completed this session even if pagination never
+  // fetched them. Floored to the second because `completedAt` has no ms, so a toggle within the same
+  // second would parse as earlier. The initializer keeps Date.now out of the render path that
+  // react-hooks/purity polices.
   const [sessionStartMs] = useState(() => Math.floor(Date.now() / 1000) * 1000);
 
   const pagination = paginationState?.viewId === activeViewId ? paginationState : undefined;
@@ -107,20 +99,16 @@ export function useCompletedPages(activeViewId: string) {
     );
   }
 
-  // Derive completed pages from the context's pages array — same source as
-  // optimistic updates. The include rule is: folder matches and either the
-  // page was loaded by this view's pagination OR it was completed during
-  // this session. Together that covers the user's two natural expectations
-  // (explicit "Load more" and "I just marked this done") without surfacing
-  // ambient completed pages that got into `pages` via other code paths.
+  // Derived from the context's pages array so optimistic updates show. Included: folder matches and the page
+  // was loaded by this view's pagination or completed this session, which keeps ambient completed pages
+  // from other code paths out.
   const loadedIds = pagination?.loadedIds;
   const today = localToday();
   const completedPages = (held ?? [])
     .filter((p) => {
       if (isOpen(p)) return false;
       if (isDateView) {
-        // A date view's completed section shows every page completed today —
-        // the date check is already the session gate.
+        // A date view shows every page completed today; the date check is the session gate.
         return p.completedAt?.slice(0, 10) === today;
       }
       if (activeViewId === "inbox") {

@@ -1,7 +1,3 @@
-// The Calendar Sync panel drives the real adapter commands end-to-end (against
-// MockStorageAdapter in test mode). Covers add-account → toggle → status, and
-// per-calendar recolour.
-
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -45,8 +41,7 @@ describe("CalendarSyncSettings", () => {
     expect(screen.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
   });
 
-  // Two providers on one account list is the 0.4.0 shape; each keeps its own
-  // calendars and its own disable scope, so neither can shadow the other.
+  // Two providers on one account list: each keeps its own calendars and disable scope, so neither shadows the other.
   it("shows a CalDAV and a Google account side by side", async () => {
     renderWithProviders(<CalendarSyncSettings />);
     await connectAccount();

@@ -1,7 +1,6 @@
 import { MockStorageAdapter } from "@pikos/core/testing";
-// The palette has two query paths that must stay distinguishable: a plain query
-// is one FTS5 search, an operator query is a structured listPages filter. These
-// specs pin which path answers which query, and what the completed toggle says.
+// A plain query is one FTS5 search; an operator query is a structured listPages filter. These
+// specs pin which path answers which.
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { addDays, format } from "date-fns";
 import { useEffect } from "react";
@@ -75,7 +74,6 @@ async function seed(pages: SeedPage[]) {
   await api().workspace.reload();
 }
 
-/** Mount the palette, initialise the workspace, seed pages, then open it. */
 async function setup(pages: SeedPage[] = [], folderNames: string[] = []) {
   renderWithProviders(
     <>
@@ -129,8 +127,6 @@ function queryRow(title: string) {
 
 afterEach(cleanup);
 
-// ─── Plain queries — the FTS5 path ─────────────────────────────────────────
-
 describe("SearchPalette — plain queries", () => {
   it("returns the FTS match and drops the rest", async () => {
     await setup([{ title: "alpha report" }, { title: "beta notes" }]);
@@ -178,8 +174,6 @@ describe("SearchPalette — plain queries", () => {
     expect(screen.queryByText(/completed/i)).toBeNull();
   });
 });
-
-// ─── Operator queries — the listPages filter path ──────────────────────────
 
 describe("SearchPalette — operators", () => {
   it("filters by tag without any free text", async () => {
@@ -292,8 +286,6 @@ describe("SearchPalette — operators", () => {
   });
 });
 
-// ─── is:done vs the completed toggle ───────────────────────────────────────
-
 describe("SearchPalette — is:done", () => {
   it("surfaces completed pages without the toggle being on", async () => {
     await setup([{ title: "alpha open" }, { done: true, title: "alpha archived" }]);
@@ -324,8 +316,6 @@ describe("SearchPalette — is:done", () => {
     });
   });
 });
-
-// ─── Command mode ("> …") ──────────────────────────────────────────────────
 
 describe("SearchPalette — command mode", () => {
   afterEach(() => {

@@ -69,8 +69,7 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     // and the hour to scroll are read the same way or the jump misses the block.
     const start = viewerStart(page)!;
     setReferenceDate(parseLocalISO(start));
-    // Date-only (all-day) strings have no time component — the chip sits in the
-    // always-visible all-day strip, so no timed-grid scroll needed.
+    // Date-only (all-day) strings have no time: the chip sits in the all-day strip, so no timed-grid scroll.
     if (isTimedIso(start)) {
       const startDate = parseLocalISO(start);
       const pageHour = startDate.getHours() + startDate.getMinutes() / 60;
@@ -105,9 +104,8 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    // Shrink to 0 to measure true scrollHeight (avoids stale height inflating it).
-    // On first mount after focus, start from the div's measured height so the
-    // initial frame has no shift — scrollHeight will only grow from there.
+    // Shrink to 0 to measure true scrollHeight. On first mount after focus, start from the div's
+    // measured height so the first frame doesn't shift.
     el.style.height = titleHeightRef.current !== undefined ? `${titleHeightRef.current}px` : "0";
     titleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
@@ -158,11 +156,9 @@ export function MetadataHeader({ onAppendToBody, onFocusEditor, page }: Metadata
     updatePage(page.id, { subtitle: next });
   }
 
-  /** Leaving a metadata field writes it out now rather than on the debounce.
-   *  The window listener below is a different event: it fires when the whole app
-   *  loses focus, never when focus moves between elements inside it. Without
-   *  this, clicking from the title into the body left the edit unwritten for
-   *  800ms, and a quit inside that window dropped it. */
+  /** Leaving a metadata field writes it out now, not on the debounce. The window blur listener below
+   *  fires only when the whole app loses focus, so without this a click from the title into the body
+   *  left the edit unwritten for 800ms, and a quit in that window dropped it. */
   function commitField() {
     void flushPage(page.id);
   }

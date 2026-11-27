@@ -2,15 +2,13 @@ import { expect } from "@playwright/test";
 
 import { test as appTest, mod, quickAdd } from "./fixtures";
 
-// ─── Opens settings and navigates every tab ─────────────────────────────────
-
 appTest("settings opens and each tab renders @smoke", async ({ app }) => {
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
 
   await app.getByRole("button", { name: "Open settings" }).click();
 
-  // General is the default tab — its About + Preferences headings confirm the overlay rendered.
+  // General is the default tab; its headings confirm the overlay rendered.
   await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
   await expect(app.getByRole("heading", { name: "Preferences" })).toBeVisible();
 
@@ -34,8 +32,6 @@ appTest("settings opens and each tab renders @smoke", async ({ app }) => {
   expect(errors).toEqual([]);
 });
 
-// ─── Cmd+, opens settings ───────────────────────────────────────────────────
-
 appTest("settings opens via Cmd+, shortcut @smoke", async ({ app }) => {
   const errors: string[] = [];
   app.on("pageerror", (e) => errors.push(e.message));
@@ -49,13 +45,6 @@ appTest("settings opens via Cmd+, shortcut @smoke", async ({ app }) => {
   expect(errors).toEqual([]);
 });
 
-// ─── Delete-all-data typed confirmation ─────────────────────────────────────
-//
-// The Danger zone "Delete" button opens a typed-confirm dialog that requires
-// the user to type "delete" before the destructive action enables. Test
-// stops at the typed-match → confirm-enabled boundary; clicking the final
-// Confirm would actually wipe the e2e workspace, so we Cancel out instead.
-
 appTest(
   "Delete all data dialog requires typing 'delete' to enable confirm",
   { tag: ["@TRASH-08:3"] },
@@ -63,10 +52,8 @@ appTest(
     await app.getByRole("button", { name: "Open settings" }).click();
     await expect(app.getByRole("heading", { name: "About" })).toBeVisible();
 
-    // Delete all data lives on the Data settings page now — navigate there first.
     await app.getByRole("button", { exact: true, name: "Data" }).click();
 
-    // Danger zone is at the bottom of Data; scroll the trigger into view.
     const trigger = app.getByRole("button", { exact: true, name: "Delete" });
     await trigger.scrollIntoViewIfNeeded();
     await trigger.click();
@@ -79,12 +66,11 @@ appTest(
     await input.fill("nope");
     await expect(confirm).toBeDisabled();
 
-    // Typing the phrase enables it. Use mixed case + whitespace to verify the
-    // case-insensitive trim — same contract as the unit test.
+    // Mixed case and whitespace verify the case-insensitive trim, as in the unit test.
     await input.fill("  DELETE  ");
     await expect(confirm).toBeEnabled();
 
-    // Cancel out — clicking confirm would wipe the workspace and break later tests.
+    // Cancel out: confirming would wipe the workspace and break later tests.
     await app.getByRole("button", { name: "Cancel" }).click();
     await expect(
       app.getByRole("alertdialog", { name: "Delete all Pikos data?" })
@@ -92,11 +78,8 @@ appTest(
   }
 );
 
-// ─── The Data tab reflects the workspace as it is now ───────────────────────
-
-// The panel stays mounted while closed, so a fetch keyed on anything that
-// doesn't change per-open pins every figure to app launch. Creating the page
-// first and opening settings after is what separates the two.
+// The panel stays mounted while closed, so a fetch keyed on anything that doesn't change per open pins
+// every figure to app launch. Creating the page first and opening settings after separates the two.
 appTest("Data tab reads the workspace as it is on open", async ({ app }) => {
   await quickAdd(app, "Stand-up every monday at 9am");
 

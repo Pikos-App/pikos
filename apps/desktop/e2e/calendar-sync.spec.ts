@@ -1,9 +1,6 @@
-// Mock-driven (VITE_TEST_MODE=true → MockStorageAdapter): no network, no real
-// CalDAV/Google creds. Live auth/transport is exercised only in the manual
-// pre-release layer.
-//
-// The synced-block tests need the "synced" dev seed (Settings → Developer),
-// available because the e2e webServer runs the Vite dev server.
+// Mock-driven (MockStorageAdapter): no network, no real CalDAV/Google creds; live auth/transport is covered
+// only by the manual pre-release layer. The synced-block tests need the "synced" dev seed (Settings →
+// Developer), available because the e2e webServer runs the Vite dev server.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -56,8 +53,6 @@ async function disableCalendar(app: Page, name: string) {
   await expect(toggle).not.toBeChecked();
 }
 
-// ─── tier1: add account ──────────────────────────────────────────────────────
-
 appTest(
   "Calendar Sync panel adds a CalDAV account, calendars start off @smoke @mock-only",
   async ({ app }) => {
@@ -68,8 +63,7 @@ appTest(
 
     await app.getByRole("button", { name: "Add account" }).click();
     await expect(app.getByRole("dialog", { name: "Add calendar account" })).toBeVisible();
-    // Both providers ship in 0.4.0; the mock adapter reports an OAuth client, so
-    // Google is offered rather than showing the not-available-in-this-build state.
+    // Google is offered rather than the not-available-in-this-build state because the mock adapter reports an OAuth client.
     await expect(app.getByRole("button", { name: /Google/ })).toBeEnabled();
 
     await app.getByRole("button", { name: /CalDAV/ }).click();
@@ -86,8 +80,6 @@ appTest(
     await expect(app.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
   }
 );
-
-// ─── tier1: toggle ↔ sidebar folder (the highest-value smoke) ─────────────────
 
 appTest(
   "enabling a calendar adds a sidebar folder, disabling removes it @smoke @mock-only",
@@ -109,12 +101,9 @@ appTest(
   }
 );
 
-// ─── tier2: turning a calendar back on reclaims what it kept ─────────────────
-//
-// Switching a calendar off keeps the pages the user worked in and destroys the
-// rest; switching it back on hands the kept ones back to the calendar, which is
-// the only toggle that overwrites the user's own arrangement — hence the confirm.
-// The whole round trip was manual QA until the mock learned to re-link.
+// Switching a calendar off keeps the pages the user worked in and destroys the rest; switching it back on
+// hands the kept ones back to the calendar, the only toggle that overwrites the user's own arrangement,
+// hence the confirm.
 
 appTest(
   "turning a calendar back on reclaims the pages it kept",
@@ -123,19 +112,15 @@ appTest(
     await seedSynced(app);
     await openCalendarMode(app);
 
-    // The seed stacks on the realistic one, which has its own Personal and Work
-    // folders — so the sidebar name is ambiguous and everything here goes through
-    // the calendar instead. What matters is that the count does not grow: a second
-    // folder is what a re-enable leaves behind when it mints one rather than
-    // reclaiming the de-flagged original, stranding the kept pages in the first.
+    // The seed stacks on the realistic one, which has its own Personal and Work folders, so the sidebar name
+    // is ambiguous and everything here goes through the calendar. The count must not grow: a re-enable that
+    // mints a folder rather than reclaiming the de-flagged original strands the kept pages in the first.
     const personalFolders = app.getByRole("button", { exact: true, name: "Personal" });
     const foldersBefore = await personalFolders.count();
 
-    // Own one more Personal mirror so teardown keeps it. A status change is the edit
-    // that lands immediately; a body edit waits on two debounces and would still be
-    // unowned by the time the teardown below runs. The seed already ships one owned
-    // mirror in this calendar — "Team standup", whose parked description implies the
-    // user edited it — so the kept count below is two, not one.
+    // Own one more Personal mirror so teardown keeps it. A status change lands immediately; a body edit waits
+    // on two debounces and would still be unowned when teardown runs. The seed already ships one owned mirror
+    // here ("Team standup", whose parked description implies an edit), so the kept count is two.
     const offsite = app.getByRole("button", { exact: true, name: "Company offsite" });
     await offsite.click();
     await app.getByRole("button", { name: "Mark done" }).click();
@@ -173,13 +158,11 @@ appTest(
 
     // The kept page is a live mirror again: its title is calendar-owned once more.
     await offsite.click();
-    // A calendar-owned title is text, not a field — see the read-only treatment test.
+    // A calendar-owned title is text, not a field (see the read-only treatment test).
     await expect(app.getByRole("dialog").getByText("Company offsite")).toBeVisible();
     await expect(app.getByRole("dialog").getByRole("textbox")).toHaveCount(0);
   }
 );
-
-// ─── tier2: recolor ──────────────────────────────────────────────────────────
 
 appTest("recolor a synced calendar from the swatch palette @mock-only", async ({ app }) => {
   await connectCaldav(app);
@@ -192,8 +175,6 @@ appTest("recolor a synced calendar from the swatch palette @mock-only", async ({
 
   await expect(app.getByRole("button", { name: "Colour for Personal" })).toBeVisible();
 });
-
-// ─── tier2: resync + disconnect ──────────────────────────────────────────────
 
 appTest("resync then disconnect removes the account and its folder @mock-only", async ({ app }) => {
   await connectCaldav(app);
@@ -215,12 +196,9 @@ appTest("resync then disconnect removes the account and its folder @mock-only", 
   await expect(app.getByRole("button", { name: "Personal" })).not.toBeVisible();
 });
 
-// ─── tier2: connecting an account that is already connected ──────────────────
-//
-// The CalDAV half of C2's "connect the same account twice" row. Identity is
-// provider + display name, so the second connect must land on the existing
-// account rather than minting a twin with duplicate folders. The Google half
-// stays manual — its OAuth can't run here.
+// The CalDAV half of "connect the same account twice". Identity is provider + display name, so the second
+// connect must land on the existing account rather than minting a twin with duplicate folders. The Google
+// half stays manual: its OAuth can't run here.
 
 appTest(
   "connecting the same CalDAV account again reuses it, no duplicates @mock-only",
@@ -239,8 +217,6 @@ appTest(
   }
 );
 
-// ─── tier2: disabling a calendar the user has worked in ──────────────────────
-//
 // The survivors arm of the teardown: a mirror the user edited is theirs, so it
 // detaches in place and its folder stays behind as an ordinary one. The empty
 // case (folder disappears) is the tier1 toggle test above.
@@ -249,10 +225,8 @@ appTest("disabling a calendar keeps an edited mirror and its folder", async ({ a
   await seedSynced(app);
   await openPersonalFolder(app);
 
-  // Deliberately not "Team standup": the seed plants that one already owned (its
-  // parked description implies an edit), so an edit there would prove nothing —
-  // it would detach whether or not this test typed a character. This mirror is
-  // bare until the keystrokes below, which is what the survivors arm is about.
+  // Deliberately not "Team standup": the seed plants that one already owned, so an edit there would prove
+  // nothing; it would detach whether or not this test typed. This mirror is bare until the keystrokes below.
   const edited = app.locator("[data-page-list-item]").getByText("Design review (LA team)").first();
   await edited.click();
   // A locked title renders as static text; unlocking turns it into a button.
@@ -281,8 +255,6 @@ appTest("disabling a calendar keeps an edited mirror and its folder", async ({ a
   await edited.click();
   await expect(editableTitle).toBeVisible();
 });
-
-// ─── tier2: two accounts, colliding calendar names ───────────────────────────
 
 appTest(
   "same-named calendars on two accounts separate under account headings @mock-only",
@@ -315,10 +287,7 @@ appTest(
   }
 );
 
-// ─── tier2: the seed is legible on the calendar at all ───────────────────────
-//
-// A seed slot collision fails silently: the loser collapses into the "+N more"
-// pill and stops existing for every other check here. Three of the five did.
+// A seed slot collision fails silently: the loser collapses into the "+N more" pill and stops existing for every other check here.
 
 appTest(
   "every seeded synced event that lands on today renders as its own block",
@@ -351,8 +320,6 @@ appTest(
   }
 );
 
-// ─── tier2: synced-block treatment ───────────────────────────────────────────
-
 appTest("synced events render source + detached treatment, schedule read-only", async ({ app }) => {
   await seedSynced(app);
   await openCalendarMode(app);
@@ -374,11 +341,8 @@ appTest("synced events render source + detached treatment, schedule read-only", 
   await expect(popover.getByText("Design review (LA team)")).toBeVisible();
   await expect(popover.getByRole("textbox")).toHaveCount(0);
 
-  // The chip that used to offer a pointer is the virtual occurrence's Repeats, which
-  // no block here reaches reliably — `RecurrencePopover.test.tsx` owns that assertion.
+  // The virtual occurrence's Repeats chip isn't reliably reachable from any block here; `RecurrencePopover.test.tsx` owns that assertion.
 });
-
-// ─── tier2: a synced block can't be dragged ──────────────────────────────────
 
 // The only DOM-level proof that a calendar-owned block is immovable; every other
 // check of this invariant is at the isolated-hook level (useTimedDrag/useTimedResize).
@@ -407,12 +371,9 @@ appTest("a synced block can't be dragged", async ({ app }) => {
   expect(await block.getAttribute("aria-label")).toBe(label);
 });
 
-// ─── tier2: synced recurring completion (the recurring × synced intersection) ─
-//
-// First e2e coverage of the recurring × synced intersection. The seed's "Weekly
-// 1:1 (London)" is London-source viewed under New York, so a green completion
-// also proves cross-zone occurrence-date-key agreement — a mis-keyed occurrence
-// would be rejected as "not part of this synced series" and no clone would land.
+// The seed's "Weekly 1:1 (London)" is London-source viewed under New York, so a green completion also proves
+// cross-zone occurrence-date-key agreement: a mis-keyed occurrence would be rejected as "not part of this
+// synced series" and no clone would land.
 
 /** Open an external-calendar folder by name. A same-named draggable user folder
  *  may also exist; the external one is the non-sortable sidebar item (external
@@ -491,12 +452,8 @@ appTest("unchecking a synced recurring done clone restores the occurrence", asyn
   ).toHaveCount(1);
 });
 
-// ─── tier2: a moved synced occurrence renders at its new slot + completes ──────
-//
-// An upstream-moved instance is stored as an override row keyed to its original
-// date — previously nothing rendered it (an all-day move vanished, a timed move
-// ghosted at the old slot). It now renders locked and completable at its new
-// time, and completing it records the ORIGINAL occurrence so reminder derivation
+// An upstream-moved instance is stored as an override row keyed to its original date. It renders locked and
+// completable at its new time, and completing it records the ORIGINAL occurrence so reminder derivation
 // agrees. The seed's "Recurring review" moves one instance ~3 weeks out, to 3 PM.
 
 /** Page forward until the moved override block (its new slot is 3 PM) renders. */
@@ -536,8 +493,6 @@ appTest(
   }
 );
 
-// ─── tier2: the tick routing splits on sync origin ──────────────────────────
-//
 // A synced-origin occurrence is ticked where it renders: completion is a record
 // that this instance is resolved, so the checkbox sits on the block and the head
 // is untouched. A native virtual keeps the repeat glyph and no checkbox — its
@@ -593,17 +548,12 @@ appTest("a synced virtual completes itself; a native virtual has no checkbox", a
   await expect(app.getByRole("button", { name: "Mark done" })).toHaveCount(0);
 });
 
-// ─── tier2: a detached series keeps its occurrences in-series ────────────────
+// A detached synced series is the user's to move, but it still has an upstream to re-link to, so a moved
+// occurrence stays an override row keyed to its original date rather than cloning out of the series. The
+// seeded provider-moved instance renders unlocked and completes on its ORIGINAL date with the head untouched;
+// dragging a plain virtual mints an override (one block, no clone) instead of materialising a page.
 //
-// A detached synced series is the user's to move, but it still has an upstream to
-// re-link to — so a moved occurrence stays an override row keyed to its original
-// date rather than cloning out of the series. Two halves: the seeded
-// provider-moved instance renders unlocked and completes on its ORIGINAL date
-// with the head untouched, and dragging a plain virtual mints an override
-// (one block, no clone) instead of materialising a page.
-//
-// The seed's "Detached sprint" is weekly from today 7:15 AM, with day+14's
-// instance moved to day+16 at 3 PM.
+// The seed's "Detached sprint" is weekly from today 7:15 AM, with day+14's instance moved to day+16 at 3 PM.
 
 function sprintBlocks(app: Page, timeLabel: RegExp) {
   return app.getByRole("button", { name: timeLabel });
@@ -683,8 +633,6 @@ appTest("dragging a detached series' virtual leaves one block and no clone", asy
   await expect(sprintRows(app)).toHaveCount(1);
 });
 
-// ─── tier2: a synced virtual occurrence's date is read-only ──────────────────
-//
 // Drag/resize are suppressed on a locked block, so the occurrence popover is the
 // only surface that can reach a locked series' reschedule. The seed's "Recurring
 // review" head is this week, day+7 is an EXDATE, day+14 is moved to an override
@@ -716,8 +664,6 @@ appTest("a synced recurring occurrence's popover offers no editable date", async
   await expect(app.getByRole("button", { name: "Set schedule" })).toHaveCount(0);
 });
 
-// ─── tier2: description-changed notice + read-only mirror metadata ───────────
-//
 // pending_description surfaces as a passive, offline notice — the user folds it
 // in by hand, sync never overwrites. The seed's "Team standup" carries a pending
 // description plus read-only location/attendees.
@@ -739,8 +685,6 @@ appTest(
   }
 );
 
-// ─── tier2: an overdue synced head reaches the gap dialog ────────────────────
-//
 // A synced head floors at the connect day, so occurrences that pass while the app
 // is closed leave it genuinely overdue — the same shape a native series reaches,
 // and it gets the same scope question. Uses the raw `page` fixture because
@@ -778,8 +722,6 @@ appTest(
   }
 );
 
-// ─── tier2: a past synced one-off stays in Today until ticked ────────────────
-//
 // The predicate is unit-pinned; this covers the round trip — the row reaches
 // Today's Overdue group, and the tick lands on the locked mirror instead of
 // being rejected read-only.
@@ -802,8 +744,6 @@ appTest("a past synced one-off shows in Today and clears when ticked", async ({ 
   await app.getByRole("button", { name: /^Completed/ }).click();
   await expect(signoff).toBeVisible();
 });
-
-// ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page", async ({ app }) => {
   await seedSynced(app);
@@ -829,14 +769,10 @@ appTest("search by room quotes the room on the result row", async ({ app }) => {
   await expect(dialog.getByText("Zoom", { exact: true })).toBeVisible();
 });
 
-// ─── tier2: the page list honours the mirror lock ────────────────────────────
-//
-// DOM-level proof for the list side of the lock, mirroring "a synced block can't
-// be dragged" on the calendar side. The unit tests call handleDragEnd directly and
-// fake the mousemove, so nothing below them exercises dnd-kit's activation
-// threshold, the real ghost, or the actual context menu. Both tests pair a locked
-// page against the seed's detached one — same list, same shape, differing only in
-// lock state, which is the axis the fix keys on.
+// DOM-level proof for the list side of the lock, mirroring "a synced block can't be dragged" on the calendar
+// side. The unit tests call handleDragEnd directly and fake the mousemove, so nothing below them exercises
+// dnd-kit's activation threshold, the real ghost, or the actual context menu. Both tests pair a locked page
+// against the seed's detached one, differing only in lock state.
 
 appTest("a synced page's context menu offers no move, rename or date edit", async ({ app }) => {
   await seedSynced(app);
@@ -881,12 +817,10 @@ async function dragRowToPoint(app: Page, row: Locator, x: number, y: number): Pr
 
 /** A timed slot in **today's** column.
  *
- * Not [`weekGridDropPoint`], which aims across the week: a page dropped on another
- * day leaves Today, and its row label then reads a bare date whether it is timed or
- * not, so there is nothing left to assert scheduling against. Reading the grid
- * block instead is what this used to do, and a block collapses into a "+N more"
- * pill when the day is busy — layout, not scheduling, and it varies with the
- * viewer's zone because the seed's events land on different days. */
+ * Not [`weekGridDropPoint`], which aims across the week: a page dropped on another day leaves Today, and its
+ * row label then reads a bare date whether timed or not, leaving nothing to assert scheduling against.
+ * Reading the grid block would not do either: a block collapses into a "+N more" pill when the day is busy,
+ * which varies with the viewer's zone because the seed's events land on different days. */
 async function todayColumnDropPoint(app: Page): Promise<{ x: number; y: number }> {
   const heading = await app.evaluate(() =>
     new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", weekday: "long" })
@@ -963,12 +897,10 @@ appTest("a synced page can't be dragged from the list onto the calendar", async 
   expect(detached.after).not.toBe(detached.before);
 });
 
-// A calendar folder is system-managed: nothing files into it, and the backend
-// refuses a move that tries. Today the UI never gets that far — `ExternalCalendarItem`
-// registers no dnd droppable, so the drag simply finds nothing to drop on. That is
-// structural rather than guarded, and the matrix warns that unifying the two sidebar
-// components would quietly hand the calendar folder a droppable. This pins the
-// outcome so such a refactor fails here instead of in a QA pass.
+// A calendar folder is system-managed: nothing files into it, and the backend refuses a move that tries. The
+// UI never gets that far: `ExternalCalendarItem` registers no dnd droppable, so the drag finds nothing to drop
+// on. That is structural rather than guarded, and unifying the two sidebar components would quietly hand the
+// calendar folder a droppable; this pins the outcome so such a refactor fails here.
 appTest("a page can't be dropped onto a calendar folder", async ({ app }) => {
   await seedSynced(app);
   await openCalendarFolder(app, "Work");
@@ -1002,8 +934,6 @@ appTest("a page can't be dropped onto a calendar folder", async ({ app }) => {
   ).toHaveCount(0);
 });
 
-// ─── tier2: the Today nav row and a mixed selection honour the lock ───────────
-//
 // The last two page-list surfaces that can reschedule. Neither raises a ghost
 // that says anything about the mirror, so both are measured by the byline's
 // save-failure chip: the one trace a refused write leaves once it has rolled
@@ -1035,13 +965,11 @@ appTest("a synced page can't be dropped onto the Today nav row", async ({ app })
   await expect(detachedDate).not.toHaveAttribute("aria-label", detachedBefore!);
 });
 
-// `todayColumnDropPoint` aims at a fixed fraction down the time grid, so it names a
-// fixed clock time, near half past nine. Against a wall clock later than that the
-// drop schedules the page into the past, which moves it to the collapsed Overdue
-// group and out of the list every assertion below reads. The test passed in the
-// morning and failed in the afternoon. Pin the hour rather than aiming relative to
-// now, which only narrows the window. Raw `page` fixture because clock.install has
-// to run before the first app script reads Date.
+// `todayColumnDropPoint` aims at a fixed fraction down the time grid, so it names a fixed clock time near half
+// past nine. Against a later wall clock the drop schedules the page into the past, which moves it to the
+// collapsed Overdue group and out of the list every assertion reads. Pin the hour rather than aiming relative
+// to now, which only narrows the window. Raw `page` fixture because clock.install must run before the first app
+// script reads Date.
 appTest(
   "a mixed selection schedules the ordinary page and leaves the mirror @mock-only",
   async ({ page }) => {
@@ -1090,8 +1018,6 @@ appTest(
     await expect(page.getByRole("button", { name: "Save failed — click to retry" })).toHaveCount(0);
   }
 );
-
-// ─── tier2: a calendar's folder is never a destination ───────────────────────
 
 // With the ordinary "Personal" deleted, the calendar's is the only folder of that name, so every
 // place that picks a folder, from a list or by name, has to pass it by. The two that pick by name

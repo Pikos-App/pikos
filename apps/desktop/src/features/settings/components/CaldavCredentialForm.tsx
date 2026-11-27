@@ -1,5 +1,4 @@
-// The credential body shared by the add-account and reconnect dialogs: same fields, help link, error
-// line and busy-aware action row. Each dialog keeps its own title, description and submit callback.
+// Credential body shared by the add-account and reconnect dialogs; each keeps its own title, description and submit.
 
 import { caldavSendsPasswordInClear } from "@pikos/core";
 
@@ -27,7 +26,7 @@ interface CaldavCredentialFormProps {
   onSecondary: () => void;
 }
 
-/** "a, b and c" — the reading order, not a bulleted list of one or two things. */
+/** Joins names as "a, b and c". */
 function listWords(words: string[]): string {
   if (words.length <= 1) return words[0] ?? "";
   return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
@@ -52,9 +51,8 @@ export function CaldavCredentialForm({
   ].filter((m): m is string => typeof m === "string");
   const canSubmit = missing.length === 0 && !busy;
 
-  // Only once something has been typed. On an untouched form the list is every
-  // field and says nothing the empty inputs don't; the case worth naming is the
-  // half-filled one, where Connect is grey and the reason isn't on screen.
+  // Only once something is typed: an untouched form would list every field. The half-filled
+  // form is the case worth naming, where Connect is grey and the reason isn't on screen.
   const started = !!(password || server?.url.trim() || server?.username.trim());
 
   return (

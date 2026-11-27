@@ -15,11 +15,7 @@ interface SearchablePopoverProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   anchored?: AnchoredOpen;
-  /**
-   * Intercepts Radix's focus-restore on close. When set, the default
-   * trigger-refocus is cancelled and this callback fires instead — used by
-   * QuickAdd chips to bounce focus back to the dialog's main input.
-   */
+  /** Cancels Radix's focus-restore on close and calls this instead. */
   onCloseAutoFocus?: () => void;
   children: (opts: { query: string; close: () => void; clearQuery: () => void }) => ReactNode;
 }

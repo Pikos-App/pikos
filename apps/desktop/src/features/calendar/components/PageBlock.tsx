@@ -29,10 +29,7 @@ import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 /** The block's own vertical padding at the default zoom, which its contents sit inside. */
 const BLOCK_PADDING_PX = 4;
 
-/**
- * Bottom-edge handle height (px) for the duration resize gesture. Drops to 3px
- * on short blocks (< 30px) so the handle stays well under a third of block height.
- */
+/** Bottom-edge resize handle height (px); 3px on blocks under 30px so it stays under a third of the height. */
 function resizeZoneFor(displayHeight: number): number {
   return displayHeight < 30 ? 3 : 4;
 }
@@ -45,30 +42,20 @@ interface PageBlockProps {
   /** Called once after the auto-opened popover is closed by the user. */
   onAutoOpenConsumed?: () => void;
   onDoubleClick: (pageId: string) => void;
-  /** When true, dims the block — used while it is being dragged to a new position. */
   isDragging?: boolean;
-  /** When true, the block was just dropped here and eases out of the drag ghost's look. */
   isSettling?: boolean;
-  /** Called when the settle animation ends. */
   onSettled?: () => void;
   /**
-   * When true, the block's rendered width has dropped below the
-   * "legible-time" threshold (COMPACT_MODE_WIDTH_PX). Renders single-line
-   * title only, drops the time row, and hides the checkbox until hover.
-   * Independent of the height-driven `isCompact` chip mode.
+   * True when the rendered width is below the legible-time threshold (COMPACT_MODE_WIDTH_PX): single-line
+   * title, no time row, checkbox hidden until hover. Independent of the height-driven `isCompact`.
    */
   isCompactWidth?: boolean;
   /** False when the block is too narrow for any of its title (`TITLE_MIN_WIDTH_PX`), which
    * leaves the checkbox alone. */
   hasRoomForTitle?: boolean;
-  /** Called (with initial clientX/Y) when drag threshold is crossed on the block body. */
   onDragStart?: (clientX: number, clientY: number) => void;
-  /** Called when the user presses in the bottom resize zone. */
   onResizeStart?: () => void;
-  /**
-   * When set, overrides the rendered height of the block (px).
-   * Used to show the live resize ghost while the user drags the bottom edge.
-   */
+  /** Overrides the rendered height (px) to show the live resize ghost. */
   resizeHeight?: number;
 }
 
@@ -110,7 +97,7 @@ export function PageBlock({
   const displayHeight = isResizing ? Math.max(resizeHeight, 0) : height;
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && !isResizing;
-  // During resize, show the live end time (snapped to 15 min to match commit behaviour).
+  // During resize, show the live end time, snapped to 15 min like the commit.
   const liveEndDate =
     resizeHeight !== undefined
       ? addClockMinutes(
@@ -118,20 +105,14 @@ export function PageBlock({
           (snapY(Math.max(resizeHeight, 0), metrics.hourHeight) / metrics.hourHeight) * 60
         )
       : null;
-  // First segment of a 2+-midnight event shows the full bookend label
-  // "9 AM Mon – 5 PM Thu" so both endpoints are visible at a glance.
+  // The first segment of a 2+-midnight event shows both endpoints in the label.
   const isMultiDayTimed = crossingMidnightsCount(startDate, endDate) >= 2;
   const timeLabel =
     isMultiDayTimed && !isContinuationBefore
       ? formatMultiDayTimeRange(startDate, liveEndDate ?? endDate)
       : formatTimeRange(startDate, liveEndDate ?? endDate);
-  // Layout tiers by available height, in the scaled units `CalendarMetrics` owns:
-  //   below the time-row tier   → 1-line title only (a time row wouldn't fit)
-  //   time-row tier             → 1-line title + time row
-  //   two-line tier and above   → 2-line title + time row
-  // This keeps short blocks (e.g. 45min) showing their time, while tall blocks
-  // still get a 2-line title for long page names.
-  // `isCompactWidth` always forces a 1-line title regardless of height.
+  // Layout tiers by available height, in `CalendarMetrics` units: title only, then title + time row,
+  // then a 2-line title. Short blocks keep their time; `isCompactWidth` forces a 1-line title.
   const showTimeLabel =
     hasRoomForTitle &&
     !isRenderingCompact &&
@@ -139,13 +120,11 @@ export function PageBlock({
     !isContinuationBefore;
   const useTwoLineTitle =
     !isCompactWidth && !fallsShortOf(displayHeight, metrics.twoLineTitleMinHeight);
-  // A block is as tall as its duration, so the shortest ones are smaller than the
-  // scaled checkbox. Left to itself the box was clipped to the two vertical edges
-  // of its own square, which reads as a rendering fault rather than a small box.
+  // The shortest blocks are smaller than the scaled checkbox; unclamped, the box is clipped to the two
+  // vertical edges of its square, which reads as a rendering fault.
   const checkboxMaxPx = Math.max(displayHeight - BLOCK_PADDING_PX * metrics.zoom, 1);
   const done = isDone(page);
-  // Multi-day events render as one visual bar: only the first day shows the
-  // title/checkbox. Continuation days keep the colored bar as a click target.
+  // Multi-day events read as one bar: only the first day shows the title and checkbox.
   const showLabel = !isContinuationBefore;
   const showTitle = showLabel && hasRoomForTitle;
 
@@ -163,25 +142,18 @@ export function PageBlock({
     onDoubleClick: () => onDoubleClick(page.id),
   });
 
-  // Cross-midnight events render as two segments. Segment A (start day) has
-  // isContinuationAfter; segment B (end day) has isContinuationBefore. Per
-  // spec, segment B is read-only — drag and resize both come from segment A.
-  // Resize on segment A is also disabled because its visual bottom is the day
-  // boundary, not the real event end.
+  // Cross-midnight events render as two segments. Segment B (isContinuationBefore) is read-only: drag
+  // and resize both come from segment A, whose visual bottom is the day boundary, not the real end.
   const isSplitSegment = isContinuationBefore || isContinuationAfter;
   const isSegmentB = isContinuationBefore === true;
-  // Synced events have a locked schedule. The drag/resize hooks already no-op,
-  // but the gesture *affordances* (grab cursor on press-and-hold, the resize
-  // handle + row-resize cursor) must be suppressed here too — otherwise the
-  // cursor advertises a move/resize that can't happen.
+  // Synced events lock the schedule. The hooks already no-op, but the grab cursor and resize handle
+  // must go too, or the cursor advertises a move that can't happen.
   const locked = page.scheduleLocked;
   const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB && !locked;
 
   /**
-   * Hover linkage across split segments. Both segments share `page.id`, so
-   * toggling a class on every `[data-cal-page-id="…"]` element lights up the
-   * partner segment without a context round-trip. The CSS rule lives in
-   * app.css and mirrors the `:hover` styling on a single block.
+   * Both split segments share `page.id`, so toggling a class on every `[data-cal-page-id]` element
+   * lights the partner segment without a context round-trip. The CSS lives in app.css.
    */
   function applyHoverLink(active: boolean) {
     if (!isSplitSegment) return;
@@ -192,19 +164,16 @@ export function PageBlock({
   }
 
   /**
-   * Drag-to-reschedule. The resize handle is a separate element and does not
-   * route through here. Segment B blocks the drag entirely so a two-segment
-   * event can only be rescheduled from its start segment.
+   * Segment B blocks the drag, so a two-segment event reschedules only from its start segment. The
+   * resize handle doesn't route through here.
    */
   function handleBlockPointerDown(e: React.PointerEvent) {
     if (!e.isPrimary || e.button !== 0) return;
-    // No stopPropagation: DayColumn filters presses that land on a block by
-    // target instead, because pointerdown is what Radix listens on to dismiss
-    // an open popover from outside — see the note on its handler.
+    // No stopPropagation: DayColumn filters presses on a block by target, because Radix dismisses
+    // an open popover on pointerdown.
     if (!onDragStart) return;
     if (isSegmentB) return;
-    // Locked (synced): don't begin the drag threshold — a click still opens the
-    // popover (onClick), but there's no grab cursor and no reschedule attempt.
+    // Locked (synced): no drag threshold; a click still opens the popover.
     if (locked) return;
     const { clientX: startX, clientY: startY } = e;
     beginDragThreshold(startX, startY, {
@@ -218,11 +187,7 @@ export function PageBlock({
     });
   }
 
-  /**
-   * Marks the gesture as a drag immediately so a plain click on the handle
-   * still suppresses the popover, then waits for the threshold before telling
-   * the parent to start resizing.
-   */
+  /** Marks the gesture as a drag at once so a plain click on the handle still suppresses the popover. */
   function handleResizeHandlePointerDown(e: React.PointerEvent) {
     if (!e.isPrimary || e.button !== 0) return;
     // Keeps handleBlockPointerDown's "does not route through here" true — both
@@ -248,23 +213,18 @@ export function PageBlock({
 
   const sharedStyle = {
     ...chipFolderStyle(folderColor),
-    // Full computed height — adjacent blocks touch directly. The bg-derived
-    // outline (see app.css `[data-cal-page-id]`) of A.bottom and B.top
-    // coincide at the same pixel and paint as one 1px seam. Cascaded blocks
-    // use the same outline so back-to-back and overlapping events share one
-    // consistent border treatment — no extra moat or shadow.
+    // Full computed height: adjacent blocks touch, and the bg-derived outline (app.css
+    // `[data-cal-page-id]`) of A.bottom and B.top coincide as one 1px seam. Cascaded blocks use the
+    // same outline.
     height: displayHeight,
     left: `${leftPct}%`,
     top,
     width: `calc(${widthPct}% - 2px)`,
   };
 
-  // One unified 14px icon size across chip + stacked layouts. Vertical offsets align
-  // the hollow-square checkbox with the text's glyph cap-height, not the flex
-  // line-box edge (which sits ~2-3px above cap-top for type-body-sm). They and the
-  // block's insets ride `--calendar-zoom`: tuned in px at one size, a fixed offset
-  // left the checkbox riding above the title and the title hugging the top edge
-  // once the text grew.
+  // One 14px icon size across chip and stacked layouts. Vertical offsets align the checkbox with the
+  // text's cap-height, not the line-box edge, and ride `--calendar-zoom` with the block's insets: a
+  // fixed px offset left the checkbox above the title once the text grew.
   const iconOffset = isRenderingCompact
     ? "mt-[calc(1px*var(--calendar-zoom,1))]"
     : "mt-[calc(3px*var(--calendar-zoom,1))]";
@@ -286,9 +246,8 @@ export function PageBlock({
   );
 
   const resizeHandle = resizeEnabled ? (
-    // touch-none: the strip's only gesture is the resize, so the browser must
-    // not claim a touch drag here for a scroll. The block body deliberately
-    // does not set it — a touch drag there still scrolls the grid.
+    // touch-none: the strip's only gesture is the resize; the block body doesn't set it, so a touch
+    // drag there still scrolls the grid.
     <div
       aria-hidden
       className="absolute right-0 bottom-0 left-0 cursor-row-resize! touch-none"
@@ -371,21 +330,16 @@ export function PageBlock({
                   <p
                     className={cn(
                       "type-body-sm min-w-0 text-left leading-tight font-medium text-foreground",
-                      // `break-words` because the clamp only ellipsizes where it
-                      // clamps: a single word wider than the column was sliced at the
-                      // edge with nothing to show it had been, which a large calendar
-                      // text size reaches easily. `hyphens-auto` so the break it makes
-                      // reads as one ("Imple-ment") rather than as a typo.
+                      // `break-words`: the clamp only ellipsizes where it clamps, so a single word wider
+                      // than the column was sliced at the edge. `hyphens-auto` makes that break read as one.
                       useTwoLineTitle ? "line-clamp-2 break-words hyphens-auto" : "truncate"
                     )}
                   >
                     {page.title || "Untitled"}
                   </p>
                 )}
-                {/* mt-1 (4px) added to the row's 2px top inset (py-0.5) = 6px,
-                    matching the 6px right inset (px-1.5) so the icon is evenly
-                    spaced from the top and right corner. Stays in flow so a long
-                    title reserves space and never runs under it. */}
+                {/* Stays in flow so a long title reserves space and never runs under it. mt-1 plus the
+                    row's py-0.5 is 6px, matching the px-1.5 right inset. */}
                 {hasRoomForTitle && (
                   <SyncSourceIcon className="mt-1 ml-auto h-3 w-3" syncState={page.syncState} />
                 )}

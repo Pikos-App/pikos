@@ -14,13 +14,10 @@ interface CalendarHeaderProps {
   onPrevWeek: () => void;
   onToday: () => void;
   referenceDate: Date;
-  /** Which calendar shape is rendered — drives the label, the nav wording and
-   * the "current period" test behind the Today button. */
   viewMode: CalendarViewMode;
   onViewModeChange: (v: CalendarViewMode) => void;
 }
 
-/** Inner navigation content for the calendar — rendered as children of RightPanelHeader. */
 export function CalendarHeader({
   dayCount,
   onNextWeek,
@@ -35,8 +32,7 @@ export function CalendarHeader({
   const first = visibleDays[0]!;
   const last = visibleDays[visibleDays.length - 1]!;
   const today = startOfDay(useNow());
-  // Month view's Today button disables on the visible MONTH, not the visible
-  // week — otherwise it stays live all month long while today is already on screen.
+  // Month view's Today button tracks the visible month, not the week, or it stays live all month.
   const isCurrentPeriod = isMonth
     ? isSameMonth(today, referenceDate)
     : isWithinInterval(today, { end: last, start: first });
@@ -44,8 +40,6 @@ export function CalendarHeader({
 
   const isOneDay = isSameDay(first, last);
 
-  // Time grid shows its visible range ("Mar 16 – 22, 2026" / "Mar 30 – Apr 5,
-  // 2026"), or the day alone when it shows one; month view names the month it is padded around.
   const rangeLabel = isMonth
     ? format(referenceDate, "MMMM yyyy")
     : isOneDay

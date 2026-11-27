@@ -1,7 +1,3 @@
-// MetadataHeader — synced (locked) + detached provenance rendering.
-// Verifies: a locked title is read-only; a detached page shows the disconnected
-// notice; the reminder bell shows on a locked page whether or not it recurs.
-
 import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
@@ -103,7 +99,6 @@ describe("MetadataHeader — locked title", () => {
     expect(title).not.toHaveAttribute("role", "button");
 
     fireEvent.click(title);
-    // No textarea editor appears — the title stays a static div.
     expect(screen.queryByRole("textbox", { name: "Page title" })).not.toBeInTheDocument();
   });
 
@@ -113,11 +108,9 @@ describe("MetadataHeader — locked title", () => {
   });
 });
 
-// The other half of the lock, and the half nothing else asserts. A synced page is
-// meant to be first-class apart from its title and schedule, so the byline keeps
-// every control the calendar does not own. Widening the lock to the whole header
-// is the easy regression — it looks safer, it reads as "synced means read-only",
-// and the read-only tests above all keep passing while the page goes inert.
+// The other half of the lock: a synced page is first-class apart from its title and schedule, so the
+// byline keeps every control the calendar does not own. Widening the lock to the whole header is the
+// easy regression, and the read-only tests above would keep passing while the page goes inert.
 describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own", () => {
   const mirror = () => makePage({ scheduleLocked: true, syncState: "active", tags: ["work"] });
 
@@ -137,11 +130,9 @@ describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own
   });
 });
 
-// The notice splits on whether the detach can be undone, not on what caused it —
-// that is the only part the reader can act on. Both arms name the thing as a
-// calendar: the folder carries the same name and stays in the sidebar, so a
-// notice saying only "Removed from Work" reads as contradicting the folder chip
-// beside it. Two screen reviews filed that as a bug.
+// The notice splits on whether the detach can be undone, not on its cause: that is the only part the
+// reader can act on. Both arms name the thing as a calendar, since the folder carries the same name and
+// a notice saying only "Removed from Work" reads as contradicting the folder chip beside it.
 describe("MetadataHeader — pages linking here", () => {
   const linker = (id: string) => makePage({ id, title: `Linker ${id}` });
 
@@ -203,7 +194,6 @@ describe("MetadataHeader — read-only mirror metadata", () => {
       })
     );
     expect(screen.getByText("Room 4B")).toBeInTheDocument();
-    // Multiple attendees collapse to a count.
     expect(screen.getByText("2 guests")).toBeInTheDocument();
   });
 
@@ -226,7 +216,6 @@ describe("MetadataHeader — calendar description-changed notice", () => {
       })
     );
     expect(screen.getByText(/calendar description changed/i)).toBeInTheDocument();
-    // Parked text is hidden until the user opens it.
     expect(screen.queryByText("New agenda for the meeting.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View" }));
     expect(screen.getByText("New agenda for the meeting.")).toBeInTheDocument();
@@ -363,8 +352,7 @@ describe("MetadataHeader — why a locked field can't be edited", () => {
     );
   });
 
-  // The lock is the one trigger. Resting on a locked field used to pop a tooltip
-  // of its own, which then parked over whatever sat below it.
+  // The lock is the one trigger: a tooltip on a locked field would park over whatever sits below it.
   it("leaves the locked title and schedule themselves silent", async () => {
     await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
 
@@ -385,9 +373,8 @@ describe("MetadataHeader — why a locked field can't be edited", () => {
   });
 });
 
-// The caret is placed once, when the field swaps from its div to its textarea.
-// Re-placing it on every value change is what made typing into the middle of a
-// title impossible: each keystroke threw the caret back to the end.
+// The caret is placed once, when the field swaps from its div to its textarea; re-placing it on every
+// value change threw it to the end on each keystroke.
 describe("MetadataHeader — the caret stays where you put it", () => {
   async function focusField(name: string) {
     await renderHeader(makePage({ scheduleLocked: false, subtitle: "Weekly", syncState: null }));
@@ -461,11 +448,8 @@ describe.each([
   });
 });
 
-// The 800ms auto-save debounce is meant to flush on blur. It did not:
-// the only flush listened on `window`'s blur, which fires when the whole app
-// loses focus and never when focus moves between elements inside it. So moving
-// from the title into the body left the rename unwritten, and anything reading
-// storage in that window — search, the CLI, a quit — saw the old title.
+// The 800ms auto-save debounce flushes when focus moves between elements inside the app, not only on
+// window blur.
 describe("MetadataHeader — leaving a field commits it", () => {
   async function editField(label: string, value: string) {
     // The harness renders a page object without seeding it into the adapter, so

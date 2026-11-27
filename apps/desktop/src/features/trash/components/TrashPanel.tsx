@@ -1,19 +1,10 @@
-// The trash. Until this existed, a soft delete was recoverable only for as long
-// as the undo toast stayed on screen; after that the row was still on disk and
-// unreachable from anywhere in the app. This is the surface that reaches it.
+// It occupies the page-list column rather than a dialog: the trash is a place you look through, and
+// restoring several pages one at a time is the normal case, which a modal turns into repeated reopenings.
 //
-// It occupies the page-list column rather than a dialog, because it is a place
-// you go and look through rather than a question you answer and dismiss —
-// restoring several pages one at a time is the normal case, and a modal makes
-// that a sequence of reopenings.
-//
-// Two things it refuses to pretend about:
-//   - A page whose calendar still owns it cannot be destroyed here. Its row
-//     carries the tombstone that stops the next sync pass re-creating the event,
-//     so "Delete forever" is offered but disabled, and the row says why.
-//   - Restoring such a page hands it back to the calendar, which takes back its
-//     title, time and folder — the same bargain the Calendar Sync panel names
-//     when a calendar is turned back on. So that one asks first.
+// A page whose calendar still owns it can't be destroyed here: its row carries the tombstone that stops
+// the next sync pass re-creating the event, so "Delete forever" is offered but disabled, and the row says
+// why. Restoring it hands it back to the calendar, which takes back its title, time and folder (the
+// bargain the Calendar Sync panel names when a calendar is turned back on), so that one asks first.
 
 import type { TrashedPage } from "@pikos/core";
 import { RotateCcw, Trash2 } from "lucide-react";
@@ -89,8 +80,7 @@ export function TrashPanel({
   const { deleteForever, emptyTrash, entries, error, loading, restore } = useTrash(true);
   const now = useNow();
 
-  // Each pending confirmation holds the row it was raised for, so the panel
-  // can name it — and so dismissing one can't act on a different row.
+  // Each pending confirmation holds the row it was raised for, so the panel can name it and dismissing one can't act on another.
   const [pendingDelete, setPendingDelete] = useState<TrashedPage | null>(null);
   const [pendingRestore, setPendingRestore] = useState<TrashedPage | null>(null);
   const [emptyOpen, setEmptyOpen] = useState(false);
@@ -152,7 +142,6 @@ export function TrashPanel({
         </ul>
       )}
 
-      {/* Drag handle — right edge */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}
       <div
         aria-label="Resize page list"

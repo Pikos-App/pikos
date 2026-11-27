@@ -2,8 +2,6 @@ import { expect } from "@playwright/test";
 
 import { test as appTest, mod, quickAdd } from "./fixtures";
 
-// ─── Search pages (Cmd+K) ──────────────────────────────────────────────────
-
 appTest("search pages via Cmd+K @smoke", async ({ app }) => {
   await quickAdd(app, "alpha project");
   await quickAdd(app, "beta report");
@@ -26,12 +24,8 @@ appTest("search pages via Cmd+K @smoke", async ({ app }) => {
   );
 });
 
-// ─── Fresh-boot empty state ────────────────────────────────────────────────
-//
-// On first launch (or any workspace with no opened pages yet), the palette
-// has no recent-pages list to surface — it falls back to the "No recent
-// pages" empty state. A regression that crashed the recent-list branch
-// would leave the palette blank instead of guiding the user.
+// A workspace with no opened pages has no recent-pages list, so the palette falls back to the "No recent
+// pages" empty state; a crash in the recent-list branch would leave it blank.
 
 appTest(
   "Cmd+K on fresh boot shows 'No recent pages' empty state",
@@ -44,13 +38,8 @@ appTest(
   }
 );
 
-// ─── Arrow-key navigation ──────────────────────────────────────────────────
-//
-// The palette tracks a `selectedIdx` that arrow keys move; Enter commits the
-// highlighted item, not the first one. Default + Enter selects the first
-// bm25-ranked match; ArrowDown + Enter must select a different match. We
-// don't pin which page bm25 ranks first — we just prove that arrow keys
-// shifted the highlight away from the default position.
+// Enter commits the highlighted item, not the first one. This pins that ArrowDown moves the highlight
+// off the default, not which page bm25 ranks first.
 
 appTest(
   "Cmd+K arrow keys move highlight; Enter opens the highlighted result",
@@ -59,12 +48,10 @@ appTest(
     await quickAdd(app, "alpha second");
     await quickAdd(app, "alpha third");
 
-    // Pass 1: open palette, query, Enter — opens whatever bm25 ranks first.
     await app.keyboard.press(mod("Mod+k"));
     const dialog = app.getByRole("dialog", { name: "Search pages" });
     await expect(dialog).toBeVisible();
     await app.keyboard.type("alpha");
-    // All three matches present before any keypress.
     await expect(dialog.getByText("alpha first", { exact: true })).toBeVisible();
     await expect(dialog.getByText("alpha second", { exact: true })).toBeVisible();
     await expect(dialog.getByText("alpha third", { exact: true })).toBeVisible();
@@ -75,8 +62,7 @@ appTest(
       (await app.locator("[data-page-list-item][data-active='true']").textContent())?.trim() ?? "";
     expect(firstOpened).toMatch(/^alpha /);
 
-    // Pass 2: reopen, same query, ArrowDown twice, Enter — must open a
-    // different page than pass 1, proving the highlight actually moved.
+    // Pass 2: ArrowDown twice, then Enter, must open a different page than pass 1.
     await app.keyboard.press(mod("Mod+k"));
     await expect(dialog).toBeVisible();
     await app.keyboard.type("alpha");
@@ -93,13 +79,8 @@ appTest(
   }
 );
 
-// ─── Multi-token query narrows ─────────────────────────────────────────────
-//
-// FTS5's default tokenizer treats whitespace as an implicit AND between
-// tokens. A single-token query returns all matches; adding a second token
-// drops anything that doesn't contain both. Guards against a regression
-// where the palette quotes or escapes the raw query in a way that turns
-// multi-token searches into substring or OR matches.
+// FTS5's default tokenizer treats whitespace as an implicit AND, so a second token drops anything lacking
+// both. Guards against the palette quoting or escaping the raw query into substring or OR matches.
 
 appTest(
   "Cmd+K multi-token query narrows to pages containing all tokens",
@@ -120,9 +101,6 @@ appTest(
     await expect(result("wallet drift")).toBeVisible();
     await expect(result("wallet drift compass")).toBeVisible();
 
-    // Adding "drift" drops the "wallet report" match. The remaining two pages
-    // both contain "wallet" and "drift" — FTS5's default whitespace-delimited
-    // tokenizer treats the space as an implicit AND.
     await app.keyboard.type(" drift");
     await expect(result("wallet drift")).toBeVisible();
     await expect(result("wallet drift compass")).toBeVisible();
@@ -130,12 +108,9 @@ appTest(
   }
 );
 
-// ─── Operators ─────────────────────────────────────────────────────────────
-//
-// A query carrying `tag:` / `is:` / `priority:` / `due:` / `folder:` leaves the
-// FTS5 path entirely and becomes a structured listPages filter. These pin the
-// switch: an operator query narrows by metadata the index alone can't express,
-// and an operator mixed with free text narrows by both.
+// A query carrying `tag:` / `is:` / `priority:` / `due:` / `folder:` leaves the FTS5 path and becomes a
+// structured listPages filter: it narrows by metadata the index can't express, and mixed with free text
+// narrows by both.
 
 appTest("Cmd+K tag: operator narrows to tagged pages", async ({ app }) => {
   await quickAdd(app, "alpha report #ledger");
@@ -166,8 +141,7 @@ appTest("Cmd+K mixes an operator with free text", async ({ app }) => {
   await expect(dialog.getByText("beta compass", { exact: true })).not.toBeVisible();
 });
 
-// `is:done` asks for completed pages outright, so they appear without the
-// "Show completed" toggle being pressed — and the toggle says so instead of
+// `is:done` shows completed pages without "Show completed" pressed, and the toggle says so rather than
 // offering to hide what the operator asked for.
 
 appTest(
@@ -192,11 +166,8 @@ appTest(
   }
 );
 
-// ─── Command mode ──────────────────────────────────────────────────────────
-//
-// A leading ">" turns the palette into the command list, sourced from the
-// keyboard registry. It works on the first character — the two-character floor
-// is a property of the search index, not of the palette.
+// A leading ">" turns the palette into the command list from the keyboard registry. It works on the first
+// character; the two-character floor belongs to the search index, not the palette.
 
 appTest(
   "Cmd+K > lists commands and Enter runs the highlighted one",
@@ -208,7 +179,6 @@ appTest(
     await app.keyboard.type(">");
     await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
 
-    // Filtering runs on the text after the ">".
     await app.keyboard.type("keyboard");
     const command = dialog.getByRole("button", { name: /Keyboard shortcuts/ });
     await expect(command).toBeVisible();
@@ -221,10 +191,8 @@ appTest(
   }
 );
 
-// Cmd+Shift+K opens straight into command mode. Radix's focus scope selects an
-// input's contents when it autofocuses, so the prefix survived being rendered
-// but not the first keystroke — typing replaced it and the palette fell back to
-// searching pages.
+// Cmd+Shift+K opens straight into command mode. Radix's focus scope selects an input's contents on autofocus,
+// so the first keystroke replaced the prefix and the palette fell back to searching pages.
 
 appTest(
   "Cmd+Shift+K opens in command mode and typing keeps the prefix",

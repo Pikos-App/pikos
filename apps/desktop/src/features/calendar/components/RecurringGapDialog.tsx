@@ -4,11 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 
-/**
- * YYYY-MM-DD → e.g. "Tue May 5". No comma between weekday and date so a
- * comma-separated list of these reads cleanly. Constructed at noon local
- * time to dodge the parseISO-treats-bare-date-as-UTC pitfall.
- */
+/** "Tue May 5" form of a YYYY-MM-DD, built at noon local so parseISO cannot read a bare date as UTC. */
 function formatDateLabel(yyyymmdd: string): string {
   const [y, m, d] = yyyymmdd.split("-").map(Number);
   if (!y || !m || !d) return yyyymmdd;
@@ -53,20 +49,14 @@ function ChoiceCard({ helper, onClick, title }: ChoiceCardProps) {
   );
 }
 
-/**
- * Scope prompt for a recurring gesture that lands on a backlog. Mounted once at
- * the app level; subscribes to RecurringGapDialogContext.pending and renders
- * card-shaped actions. Each card is a single-click commit (no separate confirm
- * button); Escape or clicking outside dismisses.
- */
+/** Scope prompt for a recurring gesture that lands on a backlog. Escape or an outside click dismisses. */
 export function RecurringGapDialog() {
   const { cancel, confirm, pending } = useRecurringGapDialog();
   const open = pending !== null;
   const others = pending?.missedDates.length ?? 0;
   const isDelete = pending?.kind === "delete";
-  // The title names the page and the day the gesture acts on, which for a native
-  // series is its head rather than the day clicked, and the body lists every day the
-  // bulk option acts on. Listing only the other days left the count uncheckable.
+  // The title names the page and the day the gesture acts on (a native series' head, not the day
+  // clicked); the body lists every day the bulk option acts on, so the count is checkable.
   const name = pending ? `“${pending.pageTitle}”` : "";
   const day = pending ? formatDateLabel(pending.occurrenceDate) : "";
   const allDates = pending ? [pending.occurrenceDate, ...pending.missedDates].sort() : [];

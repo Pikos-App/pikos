@@ -46,9 +46,7 @@ interface PageListItemProps {
   onRenameStart: () => void;
   /** On in the date views, where rows from every folder sit together. */
   showsFolder?: boolean;
-  /** How many pages this row's context menu will act on — the selection it belongs
-   *  to, or 1. A menu that reads the same on one page and on five cannot say what a
-   *  click is about to do, and Delete is in it. */
+  /** How many pages this row's context menu acts on: its selection, or 1. The menu must say what a click will do, and Delete is in it. */
   menuActsOn?: number;
   onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
@@ -157,19 +155,15 @@ export function PageListItem({
               });
             }
           }}
-          // Strip dnd-kit's injected role="button". The row contains nested
-          // interactive children (checkbox, date, context menu); leaving
-          // role="button" trips axe's nested-interactive at runtime. The row
-          // is still keyboard-reachable via tabIndex (also from {...attributes})
-          // and labeled via aria-label; the parent's onKeyDown handles
-          // Enter/Space. Proper listbox/option modeling lands with the post-launch a11y refactor.
+          // Strip dnd-kit's injected role="button": the row holds nested interactive children, so it trips
+          // axe's nested-interactive. It stays keyboard-reachable via tabIndex and aria-label, and the
+          // parent's onKeyDown handles Enter/Space.
           role={undefined}
           tabIndex={isActive ? 0 : -1}
         >
-          {/* Checkbox — border color encodes priority when not done.
-              Centred on the title's line rather than the row's top edge: the row is
-              `items-start` so a two-line row keeps the box beside the title instead of
-              floating to the middle, and on a one-line row that left it sitting high. */}
+          {/* Border color encodes priority when not done. Centred on the title's line, not the row's top
+              edge: the row is `items-start`, so a two-line row keeps the box beside the title instead of
+              floating to the middle. */}
           <span className="type-body flex h-[1em] shrink-0 items-center leading-none">
             <TaskCheckbox
               borderColor={isOpen(page) ? PRIORITY_CHECKBOX_COLORS[page.priority] : undefined}
@@ -178,7 +172,6 @@ export function PageListItem({
             />
           </span>
 
-          {/* Content */}
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -239,14 +232,11 @@ export function PageListItem({
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = isDone(page);
-                    // A synced event's stored time is its source calendar's, so the
-                    // row reads the viewer's — otherwise a London 5pm meeting reads
-                    // as still to come at 5pm long after it happened at 9am here.
+                    // A synced event's stored time is its source calendar's, so the row reads the viewer's:
+                    // otherwise a London 5pm meeting reads as upcoming long after it happened here.
                     const start = viewerStart(page)!;
                     const end = viewerEnd(page);
-                    // Multi-day all-day span: show the explicit range ("May 2 – 10").
-                    // Falls back to single-date formatting for timed events or
-                    // when end is missing/equal to start.
+                    // A multi-day all-day span shows the explicit range; timed events and a missing or equal end use the single date.
                     const isAllDaySpan =
                       isAllDayIso(start) &&
                       typeof end === "string" &&
@@ -263,8 +253,6 @@ export function PageListItem({
                         })()
                       : formatPageDate(start, now);
                     const dueSoon = !isCompleted && !isPast && isDueSoon(start, now);
-                    // Where someone looks after Move to today leaves a page behind;
-                    // the toast only has room for the count.
                     const title = page.scheduleLocked
                       ? `${tooltip} · Its calendar sets this date`
                       : tooltip;
