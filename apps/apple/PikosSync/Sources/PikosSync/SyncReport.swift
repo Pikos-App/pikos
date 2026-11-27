@@ -35,9 +35,13 @@ public enum SyncReport {
     /// This launch's sync log lines, read from the app's own log, since a tester's device has no
     /// debugger attached.
     public static func readLog() -> [String] {
-        guard let store = try? OSLogStore(scope: .currentProcessIdentifier),
-            let entries = try? store.getEntries()
-        else { return ["The log couldn't be read."] }
+        let entries: AnySequence<OSLogEntry>
+        do {
+            entries = try OSLogStore(scope: .currentProcessIdentifier).getEntries()
+        } catch {
+            let ns = error as NSError
+            return ["The log couldn't be read: \(ns.domain) \(ns.code), \(error.localizedDescription)"]
+        }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"

@@ -17,9 +17,21 @@ public enum SyncStatus: Equatable, Sendable {
     case encryptionReset
     /// The account's iCloud storage is full: changes wait on this device until there's room.
     case storageFull
-    /// Settled, except for this many records iCloud refused or this device couldn't build.
-    case unsent(Int)
+    /// iCloud is busy or asked this device to slow down. Sync tries again by itself, after this
+    /// many seconds when CloudKit said.
+    case retrying(after: TimeInterval?)
+    /// Settled, except for this many records iCloud refused or this device couldn't build, and
+    /// the reason most of them share.
+    case unsent(Int, cause: UnsentCause?)
     case failed(String)
+}
+
+/// Why records weren't sent.
+public enum UnsentCause: Hashable, Sendable {
+    /// iCloud refused them with this code.
+    case refused(CKError.Code)
+    /// This device couldn't build them from the workspace.
+    case unbuildable
 }
 
 /// The CloudKit transport, over Apple's sync engine. It owns batching, retries, change tokens and
@@ -100,9 +112,15 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     }
 
     public func start() async throws {
-        let saved = try await store.engineState()
-        let state = saved.flatMap {
-            try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0)
+        var state: CKSyncEngine.State.Serialization?
+        if let saved = try await store.engineState() {
+            do {
+                state = try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: saved)
+            } catch {
+                Self.log.error(
+                    "saved sync state (\(saved.count) bytes) didn't read, so this device fetches everything again: \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
         let configuration = CKSyncEngine.Configuration(
             database: database,
@@ -132,7 +150,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             try await engine.sendChanges()
         } catch {
             await coordinator.sendFailed(ids)
-            Self.log.error("sending changes failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("send", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
@@ -147,7 +166,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
             engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
             return ids
         } catch {
-            Self.log.error("queueing changes failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("queueing changes", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
             return nil
         }
     }
@@ -163,12 +183,13 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
         do {
             try await engine?.fetchChanges()
         } catch {
-            onStatus(.failed(error.localizedDescription))
+            Self.log.error("\(SyncFailure.logLine("fetch", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
     public func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
-        Self.log.info("event: \(String(describing: event), privacy: .public)")
+        Self.log.info("event: \(Self.summary(of: event), privacy: .public)")
         defer { Self.log.info("event handled") }
         guard await coordinator.paused == nil else { return }
 
@@ -182,6 +203,16 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 try await coordinator.fetched(changes.modifications.map(\.record))
             case .sentRecordZoneChanges(let sent):
                 try await handleSent(sent, engine: syncEngine)
+            case .sentDatabaseChanges(let sent):
+                // A zone that couldn't be saved means nothing in it can be sent either.
+                for failure in sent.failedZoneSaves {
+                    let phase = "saving zone \(failure.zone.zoneID.zoneName)"
+                    Self.log.error("\(SyncFailure.logLine(phase, failure.error), privacy: .public)")
+                    onStatus(SyncFailure.status(for: failure.error))
+                }
+                for (id, error) in sent.failedZoneDeletes {
+                    Self.log.error("\(SyncFailure.logLine("deleting zone \(id.zoneName)", error), privacy: .public)")
+                }
             case .fetchedDatabaseChanges(let changes):
                 for deletion in changes.deletions {
                     if let status = try await coordinator.zoneDeleted(deletion.zoneID, reason: deletion.reason) {
@@ -203,9 +234,68 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 break
             }
         } catch {
-            Self.log.error("sync event failed: \(error.localizedDescription, privacy: .public)")
-            onStatus(.failed(error.localizedDescription))
+            Self.log.error("\(SyncFailure.logLine("handling \(Self.kind(of: event))", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
+    }
+
+    /// An event's name without its payload, whose description prints the records it carries.
+    static func kind(of event: CKSyncEngine.Event) -> String {
+        switch event {
+        case .stateUpdate: "stateUpdate"
+        case .accountChange: "accountChange"
+        case .fetchedDatabaseChanges: "fetchedDatabaseChanges"
+        case .fetchedRecordZoneChanges: "fetchedRecordZoneChanges"
+        case .sentDatabaseChanges: "sentDatabaseChanges"
+        case .sentRecordZoneChanges: "sentRecordZoneChanges"
+        case .willFetchChanges: "willFetchChanges"
+        case .willFetchRecordZoneChanges: "willFetchRecordZoneChanges"
+        case .didFetchRecordZoneChanges: "didFetchRecordZoneChanges"
+        case .didFetchChanges: "didFetchChanges"
+        case .willSendChanges: "willSendChanges"
+        case .didSendChanges: "didSendChanges"
+        @unknown default: "unknownEvent"
+        }
+    }
+
+    /// What the log says about an event: its kind, how many records or zones it carried and the
+    /// records' names. An event's own description prints every value its records hold, and an
+    /// account change's prints the iCloud user's record ID.
+    static func summary(of event: CKSyncEngine.Event) -> String {
+        let kind = kind(of: event)
+        switch event {
+        case .fetchedRecordZoneChanges(let changes):
+            let ids = changes.modifications.map(\.record.recordID) + changes.deletions.map(\.recordID)
+            return "\(kind) \(changes.modifications.count) modified, \(changes.deletions.count) deleted\(names(ids))"
+        case .sentRecordZoneChanges(let sent):
+            let ids =
+                sent.savedRecords.map(\.recordID) + sent.failedRecordSaves.map(\.record.recordID)
+                + sent.deletedRecordIDs + Array(sent.failedRecordDeletes.keys)
+            return
+                "\(kind) \(sent.savedRecords.count) saved, \(sent.failedRecordSaves.count) failed, \(sent.deletedRecordIDs.count) deleted, \(sent.failedRecordDeletes.count) failed to delete\(names(ids))"
+        case .fetchedDatabaseChanges(let changes):
+            return "\(kind) \(changes.modifications.count) zones changed, \(changes.deletions.count) deleted"
+        case .sentDatabaseChanges(let sent):
+            return
+                "\(kind) \(sent.savedZones.count) zones saved, \(sent.failedZoneSaves.count) failed, \(sent.deletedZoneIDs.count) deleted, \(sent.failedZoneDeletes.count) failed to delete"
+        case .accountChange(let change):
+            switch change.changeType {
+            case .signIn: return "\(kind) signIn"
+            case .signOut: return "\(kind) signOut"
+            case .switchAccounts: return "\(kind) switchAccounts"
+            @unknown default: return "\(kind) unknown"
+            }
+        default:
+            return kind
+        }
+    }
+
+    private static func names(_ ids: [CKRecord.ID]) -> String {
+        guard !ids.isEmpty else { return "" }
+
+        let shown = ids.prefix(SyncFailure.partialLimit).map(\.recordName).joined(separator: ", ")
+        let more = ids.count > SyncFailure.partialLimit ? " and \(ids.count - SyncFailure.partialLimit) more" : ""
+        return ": \(shown)\(more)"
     }
 
     public func nextRecordZoneChangeBatch(
@@ -237,7 +327,8 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                 try await refetch(upkeep.refetch)
             }
         } catch {
-            Self.log.error("sync upkeep failed: \(error.localizedDescription, privacy: .public)")
+            Self.log.error("\(SyncFailure.logLine("upkeep", error), privacy: .public)")
+            onStatus(SyncFailure.status(for: error))
         }
     }
 
@@ -245,7 +336,15 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
     /// one is asked for by id. One that doesn't come stays held until the next upkeep.
     private func refetch(_ ids: [CKRecord.ID]) async throws {
         let results = try await database.records(for: ids)
-        let records = results.values.compactMap { try? $0.get() }
+        var records: [CKRecord] = []
+        for (id, result) in results {
+            switch result {
+            case .success(let record):
+                records.append(record)
+            case .failure(let error):
+                Self.log.error("\(SyncFailure.logLine("refetching \(id.recordName)", error), privacy: .public)")
+            }
+        }
         Self.log.info("fetched \(records.count) of \(ids.count) held images again")
         try await coordinator.fetched(records)
     }
@@ -278,6 +377,11 @@ public final class CloudKitSync: CKSyncEngineDelegate, @unchecked Sendable {
                     again.append(id)
                 }
             }
+        }
+        // Deletes are only of tombstones past retention, which every device deletes too, so one
+        // that fails here is logged and left to the others.
+        for (id, error) in sent.failedRecordDeletes where error.code != .unknownItem {
+            Self.log.error("\(SyncFailure.logLine("deleting \(id.recordName)", error), privacy: .public)")
         }
         if !again.isEmpty {
             engine.state.add(pendingRecordZoneChanges: again.map { .saveRecord($0) })

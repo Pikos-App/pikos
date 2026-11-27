@@ -59,8 +59,8 @@
                 Self.log.info("started in \(joined, privacy: .public)")
                 return engine
             } failed: { error in
-                Self.log.error("start failed: \(error.localizedDescription, privacy: .public)")
-                await report(.failed(error.localizedDescription))
+                Self.log.error("\(SyncFailure.logLine("start", error), privacy: .public)")
+                await report(SyncFailure.status(for: error))
             }
             self.starter = starter
 
@@ -107,7 +107,12 @@
             if case .failed(let message) = status {
                 lastFailure = .init(message: message, at: Date())
             }
-            let summary = try? await store.summary()
+            var summary: (pending: Int, needsUpdate: Bool, lastFetch: Date?, lastSent: Date?, lastReceived: Date?)?
+            do {
+                summary = try await store.summary()
+            } catch {
+                Self.log.error("reading what waits to send failed: \(error.localizedDescription, privacy: .public)")
+            }
             let line = SyncStatusLine(
                 status: status,
                 queue: .init(
@@ -117,7 +122,14 @@
                     lastSent: summary?.lastSent,
                     lastReceived: summary?.lastReceived,
                     lastFailure: lastFailure))
-            try? await store.report(line)
+            do {
+                try await store.report(line)
+            } catch {
+                // The line is how a failure reaches Settings, so the log is all that's left.
+                Self.log.error(
+                    "handing the status line to Settings failed: \(error.localizedDescription, privacy: .public); it would have said: \(line.text, privacy: .public)"
+                )
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import PikosCore
 import PikosSupport
 // Before the iOS 26 SDK its settings and delivered notifications are not marked Sendable.
 @preconcurrency import UserNotifications
+import os
 
 /// Reminders, as local notifications planned ahead.
 ///
@@ -42,6 +43,7 @@ public final class ReminderScheduler {
 
     private let workspace: @MainActor () -> Workspace?
     private let preferences: () -> Preferences
+    private nonisolated static let log = Logger(subsystem: "app.pikos", category: "reminders")
 
     /// Takes the workspace as a closure for the same reason the sync store
     /// does: it opens asynchronously after construction.
@@ -70,6 +72,7 @@ public final class ReminderScheduler {
         } catch {
             // Denied, or the prompt could not be shown. The status read below
             // says which, and the settings row shows it.
+            Self.log.notice("asking for notification permission failed: \(FailureText.kind(error), privacy: .public)")
         }
         await refreshAuthorization()
     }
@@ -136,6 +139,9 @@ public final class ReminderScheduler {
         } catch {
             // A workspace that cannot answer leaves the last plan standing:
             // stale reminders beat none, and the next write re-plans.
+            Self.log.error(
+                "planning reminders failed, so the last plan stands: \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+            )
             return
         }
 
@@ -166,6 +172,9 @@ public final class ReminderScheduler {
             } catch {
                 // One bad request — a fire in the past by the time it was
                 // added, say — must not stop the rest being planned.
+                Self.log.error(
+                    "scheduling a reminder for \(reminder.pageId, privacy: .public) failed: \(FailureText.kind(error), privacy: .public)"
+                )
             }
         }
         plannedCount = added
@@ -194,10 +203,13 @@ public final class ReminderScheduler {
             do {
                 let page = try await workspace.getPage(id: id)
                 if page.status == "done" { finished.insert(id) }
-            } catch let error as WorkspaceError {
-                if case .NotFound = error { finished.insert(id) }
+            } catch WorkspaceError.NotFound {
+                finished.insert(id)
             } catch {
                 // Left alone, as the doc says.
+                Self.log.notice(
+                    "reading \(id, privacy: .public) to tidy its reminders failed: \(FailureText.kind(error), privacy: .public)"
+                )
             }
         }
         guard !finished.isEmpty else { return }
@@ -248,7 +260,11 @@ public final class ReminderScheduler {
         request.earliestBeginDate = Date(timeIntervalSinceNow: 12 * 60 * 60)
         // Replaces a pending request of the same identifier. A refused submission (Simulator, or the
         // identifier missing from Info.plist) isn't worth surfacing: the app re-plans whenever opened.
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            log.notice("asking for a background refresh failed: \(FailureText.kind(error), privacy: .public)")
+        }
     }
 }
 

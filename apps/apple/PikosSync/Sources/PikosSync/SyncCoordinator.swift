@@ -34,6 +34,8 @@ public actor SyncCoordinator {
     /// Records iCloud refused for good or that couldn't be built, by store name. They aren't queued
     /// again for the rest of this launch, so an edit or update that fixes one goes at the next.
     private var refusedForGood: Set<String> = []
+    /// Why each of `refusedForGood` was refused, so the status line can say.
+    private var refusedCauses: [String: UnsentCause] = [:]
     /// Set when a save was refused because the account's iCloud storage is full, and cleared by
     /// the next save that goes through. Meanwhile only a fetch queues records again, so a full
     /// account is tried every few minutes rather than after every send.
@@ -90,6 +92,7 @@ public actor SyncCoordinator {
             built = try await store.buildRecords(names: [name]).first
         } catch {
             refusedForGood.insert(id.recordName)
+            refusedCauses[id.recordName] = .unbuildable
             throw error
         }
         guard let outgoing = built else { return nil }
@@ -146,15 +149,22 @@ public actor SyncCoordinator {
     public func failed(_ id: CKRecord.ID, code: CKError.Code) -> Bool {
         inFlight[id.recordName] = nil
         failing.insert(id.recordName)
+        let name = id.recordName
+        let type = RecordCodec.recordType(of: name)
         if code == .quotaExceeded {
+            Self.log.error("send of \(name, privacy: .public) (\(type, privacy: .public)) failed: quotaExceeded, waits for room")
             storageFull = true
             return false
         }
 
         let isTransient = Self.transientFailures.contains(code)
+        let outcome = isTransient ? "transient, sent again" : "refused for good"
+        Self.log.error(
+            "send of \(name, privacy: .public) (\(type, privacy: .public)) failed: \(SyncFailure.name(code), privacy: .public), \(outcome, privacy: .public)"
+        )
         if !isTransient {
-            Self.log.error("iCloud refused \(id.recordName, privacy: .public) for good: \(code.rawValue)")
-            refusedForGood.insert(id.recordName)
+            refusedForGood.insert(name)
+            refusedCauses[name] = .refused(code)
         }
 
         return isTransient
@@ -163,8 +173,22 @@ public actor SyncCoordinator {
     /// What the status line says once a send or fetch finishes.
     public var settled: SyncStatus {
         if storageFull { return .storageFull }
+        guard !refusedForGood.isEmpty else { return .upToDate }
 
-        return refusedForGood.isEmpty ? .upToDate : .unsent(refusedForGood.count)
+        return .unsent(refusedForGood.count, cause: topUnsentCause)
+    }
+
+    /// The cause most refused records share. A tie goes to the lowest code, so the line doesn't
+    /// change between two reads of the same state.
+    private var topUnsentCause: UnsentCause? {
+        let causes = refusedForGood.compactMap { refusedCauses[$0] }
+        let counts = Dictionary(grouping: causes, by: { $0 }).mapValues(\.count)
+        func order(_ cause: UnsentCause) -> Int {
+            if case .refused(let code) = cause { return code.rawValue }
+            return Int.max
+        }
+
+        return counts.max { ($0.value, order($1.key)) < ($1.value, order($0.key)) }?.key
     }
 
     /// A send that failed as a whole, such as offline. Records it built may still be confirmed by a
@@ -184,15 +208,22 @@ public actor SyncCoordinator {
 
         var decoded: [SyncRecord] = []
         var metadata: [(name: String, data: Data)] = []
+        var unreadable: [String] = []
         for record in records {
             serverCopies[record.recordID.recordName] = record
             if let sync = RecordCodec.decode(record) {
                 names[record.recordID.recordName] = sync.name
                 decoded.append(sync)
                 metadata.append((sync.name, RecordCodec.systemFields(of: record)))
+            } else {
+                unreadable.append("\(record.recordID.recordName) (\(record.recordType))")
             }
         }
         Self.log.info("fetched \(records.count) records, \(decoded.count) readable")
+        if !unreadable.isEmpty {
+            let shown = unreadable.prefix(SyncFailure.partialLimit).joined(separator: ", ")
+            Self.log.notice("skipped \(unreadable.count) fetched records with no workspace name: \(shown, privacy: .public)")
+        }
         if !decoded.isEmpty {
             do {
                 try await store.applyRecords(decoded)

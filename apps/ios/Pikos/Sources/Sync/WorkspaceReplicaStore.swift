@@ -1,5 +1,6 @@
 import Foundation
 import PikosCore
+import PikosSupport
 import PikosSync
 
 /// The sync package's view of the workspace, over its Rust bridge. Both modules name a record
@@ -13,12 +14,36 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
         self.onApplied = onApplied
     }
 
+    /// Names the call and carries the workspace's message: the sync package reads only
+    /// `localizedDescription`, which for `WorkspaceError` is its Swift spelling.
+    struct Failure: LocalizedError {
+        let op: String
+        let kind: String
+        let message: String
+        var errorDescription: String? { "\(message) (\(op))" }
+    }
+
+    static func readable(_ error: Error, op: String) -> Error {
+        guard error is WorkspaceError else { return error }
+
+        return Failure(op: op, kind: FailureText.kind(error), message: FailureText.message(error))
+    }
+
+    private func call<T>(_ op: String, _ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch {
+            throw Self.readable(error, op: op)
+        }
+    }
+
     func pendingRecords(limit: Int) async throws -> [PikosSync.RecordAddress] {
-        try await workspace.pendingRecords(limit: UInt32(limit)).map(Self.address)
+        try await call("pendingRecords") { try await workspace.pendingRecords(limit: UInt32(limit)) }
+            .map(Self.address)
     }
 
     func buildRecords(names: [String]) async throws -> [OutgoingRecord] {
-        try await workspace.buildRecords(names: names).map { built in
+        try await call("buildRecords") { try await workspace.buildRecords(names: names) }.map { built in
             OutgoingRecord(
                 record: PikosSync.SyncRecord(
                     name: built.record.name,
@@ -32,44 +57,47 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
     }
 
     func recordsSent(_ sent: [(name: String, builtAt: String)]) async throws -> [String] {
-        try await workspace.recordsSent(
-            sent: sent.map { SentRecord(name: $0.name, builtAt: $0.builtAt) })
+        try await call("recordsSent") {
+            try await workspace.recordsSent(sent: sent.map { SentRecord(name: $0.name, builtAt: $0.builtAt) })
+        }
     }
 
     func applyRecords(_ records: [PikosSync.SyncRecord]) async throws {
-        _ = try await workspace.applyRecords(
-            records: records.map {
-                PikosCore.SyncRecord(name: $0.name, fields: $0.fields.mapValues(Self.incoming))
-            })
+        _ = try await call("applyRecords") {
+            try await workspace.applyRecords(
+                records: records.map {
+                    PikosCore.SyncRecord(name: $0.name, fields: $0.fields.mapValues(Self.incoming))
+                })
+        }
         await onApplied()
     }
 
     func engineState() async throws -> Data? {
-        try await workspace.engineState()
+        try await call("engineState") { try await workspace.engineState() }
     }
 
     func setEngineState(_ state: Data) async throws {
-        try await workspace.setEngineState(state: state)
+        try await call("setEngineState") { try await workspace.setEngineState(state: state) }
     }
 
     func heldFor() async throws -> String? {
-        try await workspace.syncHeldFor()
+        try await call("heldFor") { try await workspace.syncHeldFor() }
     }
 
     func hold(_ reason: String) async throws {
-        try await workspace.holdSync(reason: reason)
+        try await call("hold") { try await workspace.holdSync(reason: reason) }
     }
 
     func fetchFinished() async throws {
-        try await workspace.fetchFinished()
+        try await call("fetchFinished") { try await workspace.fetchFinished() }
     }
 
     func expire() async throws -> [PikosSync.RecordAddress] {
-        try await workspace.expireSync().map(Self.address)
+        try await call("expire") { try await workspace.expireSync() }.map(Self.address)
     }
 
     func retryHeld() async throws -> [PikosSync.RecordAddress] {
-        let applied = try await workspace.retryHeldRecords()
+        let applied = try await call("retryHeld") { try await workspace.retryHeldRecords() }
         if applied.changed > 0 {
             await onApplied()
         }
@@ -78,12 +106,14 @@ final class WorkspaceReplicaStore: ReplicaStore, @unchecked Sendable {
     }
 
     func saveSystemFields(_ fields: [(name: String, data: Data)]) async throws {
-        try await workspace.saveSystemFields(
-            records: fields.map { SystemFields(name: $0.name, data: $0.data) })
+        try await call("saveSystemFields") {
+            try await workspace.saveSystemFields(
+                records: fields.map { SystemFields(name: $0.name, data: $0.data) })
+        }
     }
 
     func join(zones: [String]) async throws -> String {
-        try await workspace.joinSync(zones: zones)
+        try await call("join") { try await workspace.joinSync(zones: zones) }
     }
 
     private static func address(_ address: PikosCore.RecordAddress) -> PikosSync.RecordAddress {

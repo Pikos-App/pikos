@@ -194,7 +194,11 @@ struct YourDataSettings: View {
         // The home screen's search must forget the titles too: a phone wiped
         // of its notes that keeps offering them from Spotlight has not been
         // wiped.
-        await SpotlightIndexer.clear()
+        do {
+            try await SpotlightIndexer.clear()
+        } catch {
+            store.failure = FailureNotice(doing: "remove your pages from the home screen's search", error: error)
+        }
         closeSettings()
     }
 }

@@ -4,6 +4,7 @@ import PikosEditorBridge
 import PikosSupport
 import SwiftUI
 import UIKit
+import os
 
 /// A page, open for editing.
 ///
@@ -236,10 +237,15 @@ struct EditorScreen: View {
         Task { @MainActor in headerFocus = .title }
     }
 
+    private static let log = Logger(subsystem: "app.pikos", category: "editor")
+
     private func load() async {
         do {
             assetsURL = try WorkspaceLocation.assetsURL()
         } catch {
+            Self.log.error(
+                "opening \(pageId, privacy: .public) failed, the images folder is unreachable: \(FailureText.kind(error), privacy: .public)"
+            )
             loadFailed = true
             return
         }
@@ -279,6 +285,7 @@ struct EditorScreen: View {
                 guard let image = UIImage(data: data),
                     let jpeg = image.jpegData(compressionQuality: 0.85)
                 else {
+                    Self.log.error("a picked photo for \(pageId, privacy: .public) didn't decode: \(item.supportedContentTypes.map(\.identifier), privacy: .public)")
                     store.errorMessage = String(localized: "That image could not be read.")
                     return
                 }
@@ -288,7 +295,8 @@ struct EditorScreen: View {
             try bytes.write(to: assets.appendingPathComponent(name), options: .atomic)
             controller.insertImage(assetPath: "assets/\(name)")
         } catch {
-            store.errorMessage = String(localized: "The photo could not be added: \(error.localizedDescription)")
+            Self.log.error("adding a photo to \(pageId, privacy: .public) failed: \(FailureText.kind(error), privacy: .public)")
+            store.failure = FailureNotice(doing: "add the photo", error: error)
         }
     }
 
