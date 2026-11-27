@@ -101,3 +101,7 @@ tauri = { version = "2", features = ["test"] }
 # one rebuild of SQLite.
 [profile.dev.package.libsqlite3-sys]
 opt-level = 3
+
+# The workspace's rule, repeated: this crate sits outside the workspace.
+[lints.clippy]
+map_err_ignore = "warn"

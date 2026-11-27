@@ -14,3 +14,6 @@ pikos-recurrence = { path = "../pikos-recurrence" }
 # used by scripts/build-recurrence-wasm.sh.
 wasm-bindgen = "=0.2.104"
 serde_json = "1"
+
+[lints]
+workspace = true
