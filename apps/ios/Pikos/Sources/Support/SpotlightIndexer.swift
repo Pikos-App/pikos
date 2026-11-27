@@ -2,6 +2,7 @@ import CoreSpotlight
 import Foundation
 import PikosCore
 import PikosSupport
+import os
 
 /// Pages, findable from the home screen's search. What each entry holds is `SpotlightItem`.
 ///
@@ -16,55 +17,50 @@ import PikosSupport
 @MainActor
 final class SpotlightIndexer {
     private let workspace: @MainActor () -> Workspace?
+    private nonisolated static let log = Logger(subsystem: "app.pikos", category: "spotlight")
 
     init(workspace: @escaping @MainActor () -> Workspace?) {
         self.workspace = workspace
     }
 
-    /// Bring the index up to date with the open pages as they are now.
+    /// Bring the index up to date with the open pages as they are now. A failed pass is logged, not
+    /// shown: it keeps the old mark, so the next pass tries the same pages again.
     func reindex() async {
         guard CSSearchableIndex.isIndexingAvailable(), let workspace = workspace() else { return }
-        let folders = (try? await workspace.listFolders()) ?? []
+
+        let folders: [Folder]
+        let changes: IndexChanges
+        let catchUp = SpotlightCatchUp()
+        let shape: String
+        do {
+            folders = try await workspace.listFolders()
+            shape = folders.map { "\($0.id)=\($0.name)" }.sorted().joined(separator: "\n")
+            changes = try await workspace.indexChanges(since: catchUp.since(folderShape: shape))
+        } catch {
+            Self.log.error("reading what changed failed: \(FailureText.kind(error), privacy: .public)")
+            return
+        }
         let names = Dictionary(folders.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        let shape = folders.map { "\($0.id)=\($0.name)" }.sorted().joined(separator: "\n")
-        let defaults = UserDefaults.standard
-        let since: IndexMark? =
-            defaults.string(forKey: Self.foldersKey) == shape
-            ? defaults.string(forKey: Self.epochKey).map {
-                IndexMark(seq: Int64(defaults.integer(forKey: Self.seqKey)), epoch: $0)
-            } : nil
-        guard let changes = try? await workspace.indexChanges(since: since) else { return }
-        // Best-effort throughout: an index briefly behind is a search that misses one page.
-        await Task.detached(priority: .utility) {
-            let index = CSSearchableIndex.default()
-            if changes.everything {
-                try? await index.deleteSearchableItems(withDomainIdentifiers: [SpotlightItem.domain])
-            } else if !changes.removed.isEmpty {
-                try? await index.deleteSearchableItems(withIdentifiers: changes.removed)
-            }
-            for batch in stride(from: 0, to: changes.pages.count, by: Self.batchSize) {
-                let items = changes.pages[batch..<min(batch + Self.batchSize, changes.pages.count)].map {
-                    SpotlightItem.make(for: $0, folderName: $0.folderId.flatMap { names[$0] })
-                }
-                try? await index.indexSearchableItems(items)
-            }
-        }.value
-        defaults.set(Int(changes.mark.seq), forKey: Self.seqKey)
-        defaults.set(changes.mark.epoch, forKey: Self.epochKey)
-        defaults.set(shape, forKey: Self.foldersKey)
+        do {
+            try await Task.detached(priority: .utility) {
+                try await catchUp.apply(changes, folderNames: names, folderShape: shape)
+            }.value
+        } catch {
+            Self.log.error(
+                "indexing \(changes.pages.count) pages and removing \(changes.removed.count) failed, so they're tried again next pass: \(FailureText.kind(error), privacy: .public)"
+            )
+        }
     }
 
-    private static let seqKey = "pikos.spotlight.seq"
-    private static let epochKey = "pikos.spotlight.epoch"
-    private static let foldersKey = "pikos.spotlight.folders"
-    private nonisolated static let batchSize = 1_000
-
-    /// Forget everything, for "Delete all data": a stale index would keep offering the titles of
-    /// a wiped phone's notes.
-    static func clear() async {
-        for key in [seqKey, epochKey, foldersKey] { UserDefaults.standard.removeObject(forKey: key) }
-        try? await CSSearchableIndex.default().deleteSearchableItems(
-            withDomainIdentifiers: [SpotlightItem.domain])
+    /// Forget everything, for "Delete all data". Throws when the index couldn't be emptied, which
+    /// the person has to hear: their wiped notes' titles would stay in search.
+    static func clear() async throws {
+        do {
+            try await SpotlightCatchUp().clear()
+        } catch {
+            log.error("emptying the index failed: \(FailureText.kind(error), privacy: .public)")
+            throw error
+        }
     }
 
     static func pageId(from activity: NSUserActivity) -> String? {
