@@ -631,11 +631,7 @@ fn to_result(row: SearchRow, tokens: &[String]) -> SearchResult {
     }
     .to_string();
 
-    let tags: Vec<String> = row
-        .tags
-        .as_deref()
-        .and_then(|t| serde_json::from_str(t).ok())
-        .unwrap_or_default();
+    let tags = crate::pages::stored_json(&row.id, "tags", row.tags.as_deref()).unwrap_or_default();
 
     let content_preview = build_content_preview(
         row.content_text.as_deref(),
