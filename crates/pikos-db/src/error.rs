@@ -4,9 +4,9 @@
 //! variant payload: frontends discriminate on `kind`, not the enum tag.
 //!
 //! `Display` output from foreign systems (sqlx in particular) can echo SQL fragments and
-//! parameter values, which may include user input. When logging, use a stable classifier
-//! (see `notifications::scheduler::classify_sqlx`). Returning the message to the frontend is
-//! acceptable; the kind tag is what code branches on.
+//! parameter values, which may include user input. When logging, use `AppError::log_summary`,
+//! which says what failed without any of that text, and add the ids the call site knows.
+//! Returning the message to the frontend is acceptable; the kind tag is what code branches on.
 
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 
@@ -66,6 +66,74 @@ impl AppError {
             AppError::TooNew { .. } => "TooNew",
             AppError::Internal(_) => "Internal",
         }
+    }
+
+    /// What failed, for a log line, with no text a foreign system or the person wrote: the kind,
+    /// then the sqlx class and SQLite result code, the io error kind, or serde's category and
+    /// position. A locked database (`Db/database code=5`) and a missing file (`Io/NotFound`) read
+    /// differently, where `kind()` calls both a storage error.
+    pub fn log_summary(&self) -> String {
+        match self {
+            AppError::Db(e) => format!("Db/{}", classify_sqlx(e)),
+            AppError::Io(e) => format!("Io/{:?}", e.kind()),
+            AppError::Serde(e) => {
+                format!("Serde/{:?} at {}:{}", e.classify(), e.line(), e.column())
+            }
+            AppError::TooNew { applied, supported } => {
+                format!("TooNew applied=v{applied} supported=v{supported}")
+            }
+            other => other.kind().to_string(),
+        }
+    }
+
+    /// An io error that says what was being done and to which file, so "No such file or
+    /// directory" becomes "copying the backup ~/…/backup.sqlite: No such file or directory". The
+    /// io kind survives for `log_summary`, and the home folder is written `~`.
+    pub fn io_at(doing: &str, path: &std::path::Path, err: std::io::Error) -> Self {
+        let shown = scrub_home(&path.display().to_string());
+        AppError::Io(std::io::Error::new(
+            err.kind(),
+            format!("{doing} {shown}: {err}"),
+        ))
+    }
+}
+
+/// A sqlx error's class, plus the SQLite extended result code when there is one. Both are numbers
+/// and fixed names, never the message, which can echo SQL and its parameters.
+pub fn classify_sqlx(e: &sqlx::Error) -> String {
+    use sqlx::Error::*;
+    let class = match e {
+        Configuration(_) => "configuration",
+        Database(_) => "database",
+        Io(_) => "io",
+        Tls(_) => "tls",
+        Protocol(_) => "protocol",
+        RowNotFound => "row_not_found",
+        TypeNotFound { .. } => "type_not_found",
+        ColumnIndexOutOfBounds { .. } => "column_index_out_of_bounds",
+        ColumnNotFound(_) => "column_not_found",
+        ColumnDecode { .. } => "column_decode",
+        Encode(_) => "encode",
+        Decode(_) => "decode",
+        AnyDriverError(_) => "any_driver",
+        PoolTimedOut => "pool_timed_out",
+        PoolClosed => "pool_closed",
+        WorkerCrashed => "worker_crashed",
+        Migrate(_) => "migrate",
+        _ => "other",
+    };
+
+    let code = match e {
+        Database(db) => db.code().map(|c| format!(" code={c}")),
+        _ => None,
+    };
+    format!("{class}{}", code.unwrap_or_default())
+}
+
+fn scrub_home(shown: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() => shown.replacen(&home, "~", 1),
+        _ => shown.to_string(),
     }
 }
 

@@ -193,32 +193,7 @@ fn until_next_minute(now: chrono::DateTime<chrono::Local>) -> Duration {
     Duration::from_secs(secs) - Duration::from_nanos(nanos.min(secs * 1_000_000_000))
 }
 
-/// Stable, content-free label for an `sqlx::Error`. Use at log sites instead
-/// of `e.to_string()` — the Display impl can echo SQL fragments and parameter
-/// values which may include user-derived data (titles, tags, search input).
-fn classify_sqlx(e: &sqlx::Error) -> &'static str {
-    use sqlx::Error::*;
-    match e {
-        Configuration(_) => "configuration",
-        Database(_) => "database",
-        Io(_) => "io",
-        Tls(_) => "tls",
-        Protocol(_) => "protocol",
-        RowNotFound => "row_not_found",
-        TypeNotFound { .. } => "type_not_found",
-        ColumnIndexOutOfBounds { .. } => "column_index_out_of_bounds",
-        ColumnNotFound(_) => "column_not_found",
-        ColumnDecode { .. } => "column_decode",
-        Encode(_) => "encode",
-        Decode(_) => "decode",
-        AnyDriverError(_) => "any_driver",
-        PoolTimedOut => "pool_timed_out",
-        PoolClosed => "pool_closed",
-        WorkerCrashed => "worker_crashed",
-        Migrate(_) => "migrate",
-        _ => "other",
-    }
-}
+pub(super) use pikos_db::error::classify_sqlx;
 
 fn is_quiet_hours(settings: &NotificationSettings, now: &chrono::DateTime<chrono::Local>) -> bool {
     if !settings.quiet_hours_enabled {

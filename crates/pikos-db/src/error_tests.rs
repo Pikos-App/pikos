@@ -35,6 +35,39 @@ fn from_io_error() {
 }
 
 #[test]
+fn an_io_error_names_what_was_being_done_and_the_file() {
+    let home = std::env::var("HOME").unwrap();
+    let path = std::path::Path::new(&home).join("Pikos/backup.sqlite");
+    let io = std::io::Error::new(std::io::ErrorKind::NotFound, "No such file or directory");
+
+    let err = AppError::io_at("copying the backup", &path, io);
+
+    assert_eq!(
+        err.to_string(),
+        "io: copying the backup ~/Pikos/backup.sqlite: No such file or directory"
+    );
+    assert_eq!(err.log_summary(), "Io/NotFound");
+}
+
+#[test]
+fn a_log_summary_tells_failures_of_one_kind_apart_without_their_text() {
+    let locked = AppError::from(sqlx::Error::Database(Box::new(FakeSqlite("5"))));
+    assert_eq!(locked.log_summary(), "Db/database code=5");
+    assert_eq!(
+        AppError::Db(sqlx::Error::PoolTimedOut).log_summary(),
+        "Db/pool_timed_out"
+    );
+
+    let bad: Result<serde_json::Value, _> = serde_json::from_str("{\"title\": \"secret");
+    let serde = AppError::from(bad.unwrap_err()).log_summary();
+    assert!(serde.starts_with("Serde/Eof at 1:"), "{serde}");
+    assert!(!serde.contains("secret"), "{serde}");
+
+    let network = AppError::Network("https://example.com/?user=me@example.com".into());
+    assert_eq!(network.log_summary(), "Network");
+}
+
+#[test]
 fn serializes_network_kind() {
     let err = AppError::Network("connection refused".into());
     let v = serde_json::to_value(&err).unwrap();
