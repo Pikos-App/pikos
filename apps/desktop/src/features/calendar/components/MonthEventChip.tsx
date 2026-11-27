@@ -10,6 +10,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockDeleteShortcut } from "./BlockDeleteShortcut";
 import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
@@ -50,6 +51,11 @@ export function MonthEventChip({
     e.stopPropagation();
     suppressPendingClick();
     toggleStatus();
+  }
+
+  function handleDelete() {
+    setPopoverOpen(false);
+    deleteBlock();
   }
 
   const done = isDone(page);
@@ -102,23 +108,18 @@ export function MonthEventChip({
         {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             page={page as VirtualOccurrence}
           />
         ) : (
           <PageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             onRemoveDate={() => setPopoverOpen(false)}
             page={page}
           />
         )}
+        {popoverOpen && <BlockDeleteShortcut onDelete={handleDelete} />}
       </BlockPopoverContent>
     </Popover>
   );

@@ -569,6 +569,21 @@ appTest("a block's open popover goes when a double-click opens its page", async 
   await expect(app.getByRole("dialog")).toHaveCount(0);
 });
 
+appTest("delete in a block's popover opened from another's deletes the open one", async ({ app }) => {
+  await quickAdd(app, "Review today 2pm");
+  await quickAdd(app, "Retro today 4pm");
+  await openCalendarMode(app);
+  const calendar = calendarRegion(app);
+
+  await calendar.getByRole("button", { name: /^Review/ }).click();
+  await expect(app.getByRole("dialog")).toBeVisible();
+  await calendar.getByRole("button", { name: /^Retro/ }).click({ button: "right" });
+  await app.keyboard.press(mod("Mod+Shift+Backspace"));
+
+  await expect(calendar.getByRole("button", { name: /^Retro/ })).toHaveCount(0);
+  await expect(calendar.getByRole("button", { name: /^Review/ })).toBeVisible();
+});
+
 appTest("the current-time line moves as time passes @mock-only", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T10:00:00") });
   await page.clock.resume();

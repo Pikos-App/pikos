@@ -9,7 +9,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
 
-import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
 import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
@@ -56,7 +55,6 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
   }
 
   useKeyboardScope("modal");
-  useBlockDeleteShortcut(onDelete);
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);

@@ -22,6 +22,7 @@ import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { BLOCK_TIME_TEXT_CLASS, CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockDeleteShortcut } from "./BlockDeleteShortcut";
 import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
@@ -211,6 +212,11 @@ export function PageBlock({
     toggleStatus();
   }
 
+  function handleDelete() {
+    setPopoverOpen(false);
+    deleteBlock();
+  }
+
   const sharedStyle = {
     ...chipFolderStyle(folderColor),
     // Full computed height: adjacent blocks touch, and the bg-derived outline (app.css
@@ -369,25 +375,20 @@ export function PageBlock({
         {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             page={page as VirtualOccurrence}
           />
         ) : (
           <PageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             onRemoveDate={() => {
               setPopoverOpen(false);
             }}
             page={page}
           />
         )}
+        {popoverOpen && <BlockDeleteShortcut onDelete={handleDelete} />}
       </BlockPopoverContent>
     </Popover>
   );

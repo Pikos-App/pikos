@@ -13,6 +13,7 @@ import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
+import { BlockDeleteShortcut } from "./BlockDeleteShortcut";
 import { BlockPopoverContent } from "./BlockPopoverContent";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
@@ -105,6 +106,11 @@ export function AllDayBar({
     e.stopPropagation();
     suppressPendingClick();
     toggleStatus();
+  }
+
+  function handleDelete() {
+    setPopoverOpen(false);
+    deleteBlock();
   }
 
   function startEdgeResize(edge: "start" | "end") {
@@ -203,23 +209,18 @@ export function AllDayBar({
         {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             page={page as VirtualOccurrence}
           />
         ) : (
           <PageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onDelete={() => {
-              setPopoverOpen(false);
-              deleteBlock();
-            }}
+            onDelete={handleDelete}
             onRemoveDate={() => setPopoverOpen(false)}
             page={page}
           />
         )}
+        {popoverOpen && <BlockDeleteShortcut onDelete={handleDelete} />}
       </BlockPopoverContent>
     </Popover>
   );

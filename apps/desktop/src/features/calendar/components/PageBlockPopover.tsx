@@ -21,7 +21,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope } from "@/shared/keyboard/useKeyboard";
 
-import { useBlockDeleteShortcut } from "../hooks/useBlockDeleteShortcut";
 import { blockTitleEdit } from "../utils/blockTitleEdit";
 import { occurrenceDeleteLabel } from "../utils/occurrenceDeleteLabel";
 interface PageBlockPopoverProps {
@@ -47,7 +46,6 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
-  useBlockDeleteShortcut(() => onDelete?.());
 
   const [titleValue, setTitleValue] = useState(page.title);
   const [openingTitle] = useState(page.title);
