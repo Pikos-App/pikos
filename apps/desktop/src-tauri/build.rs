@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "a build script fails the build by panicking"
+)]
+
 use std::process::Command;
 
 fn main() {

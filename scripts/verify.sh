@@ -114,8 +114,35 @@ run_check "screen-review"     node --test scripts/check-screen-review.test.mjs &
 run_check "pr-description"    node --test scripts/check-pr-body.test.mjs &
 # A behaviour lands with a test claiming its QA row. The master is gitignored, so CI has none to
 # read and this gate is local, which is where rows are added.
-if [ -f .agent/qa/full-qa-checklist.md ]; then
-  run_check "qa-rows"         node scripts/qa-marks.mjs --owed &
+#
+# Listing every Playwright test takes about 8s, so it runs only when the change touches what the
+# check reads: the specs and their configs, the qa scripts and owed list, a `// qa:` claim line in
+# any file, the workflows and release.sh that decide whether a claim counts, or the master. The
+# master is gitignored, so no diff shows its edits; a stamp from the last pass stands in.
+qa_master=.agent/qa/full-qa-checklist.md
+qa_stamp=$(git rev-parse --git-path qa-rows-passed)
+changed_lines() {
+  if [ -n "$DIFF_BASE" ]; then
+    git diff -U0 "$DIFF_BASE" 2>/dev/null
+  else
+    git diff -U0 HEAD 2>/dev/null
+    git ls-files -z --others --exclude-standard 2>/dev/null | xargs -0 cat 2>/dev/null
+  fi
+}
+# Not `grep -q`: it exits on the first match, the writer upstream dies of SIGPIPE, and under
+# pipefail the pipeline reads as no match.
+qa_rows_affected() {
+  [ -z "$files" ] || [ "$qa_master" -nt "$qa_stamp" ] \
+    || printf '%s\n' "$files" \
+      | grep -E '^(apps/desktop/(e2e/|playwright[^/]*\.config\.ts$)|scripts/(qa-|release\.sh$)|\.github/workflows/)' >/dev/null \
+    || changed_lines | grep -E '^[-+]?[[:space:]]*// qa: ' >/dev/null
+}
+if [ -f "$qa_master" ]; then
+  if qa_rows_affected; then
+    run_check "qa-rows"       node scripts/qa-marks.mjs --owed &
+  else
+    echo "skip" > "$tmpdir/qa-rows.status"
+  fi
 fi
 
 # SKIP_UNIT_TESTS=1 omits the unit run; CI sets it so the coverage job is the single test pass.
@@ -138,6 +165,8 @@ for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
     pass "$name"
+  elif [ "$status" = "skip" ]; then
+    pass "$name" "skipped, nothing it reads changed"
   else
     fail "$name"
     if [ "$name" = "tests" ]; then
@@ -153,6 +182,10 @@ for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body
     overall=1
   fi
 done
+
+if [ "$(cat "$tmpdir/qa-rows.status" 2>/dev/null)" = "pass" ]; then
+  touch "$qa_stamp"
+fi
 
 echo ""
 if [ $overall -eq 0 ]; then

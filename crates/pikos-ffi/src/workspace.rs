@@ -1932,7 +1932,12 @@ impl Workspace {
                     .await
                 {
                     // A page with no rule would pass as an ordinary one-off. Take it back.
-                    let _ = self.trash_page(page.id.clone()).await;
+                    if let Err(trash_error) = self.trash_page(page.id.clone()).await {
+                        log::warn!(
+                            "quick add: could not take back page {} after its repeat failed: {trash_error}",
+                            page.id
+                        );
+                    }
                     return Err(error);
                 }
                 Ok(vec![self.get_page(page.id).await?])

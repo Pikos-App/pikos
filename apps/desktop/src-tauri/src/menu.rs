@@ -203,7 +203,9 @@ fn help_url(id: &str) -> Option<String> {
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let id = event.id().0.clone();
     if let Some(url) = help_url(&id) {
-        let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
+        if let Err(e) = tauri_plugin_opener::open_url(&url, None::<&str>) {
+            log::warn!("menu: could not open {url}: {e}");
+        }
         return;
     }
     if id == QUIT {

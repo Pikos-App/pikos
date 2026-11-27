@@ -32,6 +32,7 @@ const EVERYTHING = [
   /^rust-toolchain(\.toml)?$/,
   /^\.?rustfmt\.toml$/,
   /^clippy\.toml$/,
+  /^scripts\/clippy\.sh$/,
   /^\.husky\/pre-push$/,
   /^scripts\/rust-affected\.mjs$/,
 ];

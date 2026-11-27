@@ -105,3 +105,9 @@ opt-level = 3
 # The workspace's rule, repeated: this crate sits outside the workspace.
 [lints.clippy]
 map_err_ignore = "warn"
+let_underscore_must_use = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+cast_possible_truncation = "warn"
+await_holding_lock = "warn"
+large_futures = "warn"

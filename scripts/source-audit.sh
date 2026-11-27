@@ -13,10 +13,11 @@ RESET='\033[0m'
 overall=0
 
 pass() { printf "${GREEN}✓${RESET} %s${DIM} %s${RESET}\n" "$1" "$2"; }
+# The findings come as one quoted string, a line per hit: unquoted, the shell splits a hit into
+# words and expands a `*` in it to the repo's root files.
 fail() {
   printf "${RED}✗${RESET} %s\n" "$1"
-  shift
-  printf "  %s\n" "$@"
+  [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/  /'
   overall=1
 }
 
@@ -85,7 +86,7 @@ else
     | grep -v 'packages/recurrence-wasm/pkg/' || true)
 
   if [ -n "$hits" ]; then
-    fail "Possible secrets detected (install gitleaks for better coverage)" $hits
+    fail "Possible secrets detected (install gitleaks for better coverage)" "$hits"
   else
     pass "No secrets" "fallback grep (install gitleaks for 800+ patterns)"
   fi
@@ -97,7 +98,7 @@ hits=$(src_files \
   | grep -v 'node_modules' || true)
 
 if [ -n "$hits" ]; then
-  fail "Hardcoded personal paths" $hits
+  fail "Hardcoded personal paths" "$hits"
 else
   pass "No hardcoded personal paths"
 fi
@@ -109,7 +110,7 @@ hits=$({ src_files; published_docs; } \
   | grep -v 'node_modules' || true)
 
 if [ -n "$hits" ]; then
-  fail "References to gitignored records or paths" $hits
+  fail "References to gitignored records or paths" "$hits"
 else
   pass "No references nobody outside can follow"
 fi
@@ -124,7 +125,7 @@ hits=$(src_files 'apps/ios/**' 'apps/apple/**' \
   || true)
 
 if [ -n "$hits" ]; then
-  fail "Comments carrying version tags or history (say what is true now)" $hits
+  fail "Comments carrying version tags or history (say what is true now)" "$hits"
 else
   pass "No history in comments"
 fi
@@ -133,7 +134,7 @@ hits=$(ts_src_files \
   | xargs grep -nE '(^\s*console\.log\(|^\s*debugger\b)' 2>/dev/null || true)
 
 if [ -n "$hits" ]; then
-  fail "JS/TS debug leftovers (console.log / debugger)" $hits
+  fail "JS/TS debug leftovers (console.log / debugger)" "$hits"
 else
   pass "No JS/TS debug leftovers"
 fi
@@ -144,7 +145,7 @@ hits=$(app_rust_src_files \
   | grep -v '#\[test\]' || true)
 
 if [ -n "$hits" ]; then
-  fail "Rust debug leftovers (dbg! / println!)" $hits
+  fail "Rust debug leftovers (dbg! / println!)" "$hits"
 else
   pass "No Rust debug leftovers"
 fi
@@ -171,21 +172,21 @@ dep_hits=$(git ls-files -- 'Cargo.toml' '*/Cargo.toml' \
   | xargs grep -nE '^[[:space:]]*(reqwest|hyper|ureq|surf|attohttpc|isahc)[[:space:]]*=' 2>/dev/null \
   | grep -vE '^apps/desktop/src-tauri/Cargo\.toml:[0-9]+:hyper = \{ version = "1", features = \["http1", "server"\], optional = true \}$' || true)
 
-all_network="$hits$rust_hits"
+all_network=$(printf '%s\n' "$hits" "$rust_hits" | grep -v '^$' || true)
 if [ -n "$all_network" ]; then
-  fail "Unauthorized network calls detected" $all_network
+  fail "Unauthorized network calls detected" "$all_network"
 else
   pass "No unauthorized network calls" "outside the sync crate"
 fi
 
 if [ -n "$build_hits" ]; then
-  fail "HTTP client built outside $HTTP_CHOKEPOINT (clone the shared client instead)" $build_hits
+  fail "HTTP client built outside $HTTP_CHOKEPOINT (clone the shared client instead)" "$build_hits"
 else
   pass "One HTTP client chokepoint"
 fi
 
 if [ -n "$dep_hits" ]; then
-  fail "HTTP client dependency outside the sync crate" $dep_hits
+  fail "HTTP client dependency outside the sync crate" "$dep_hits"
 else
   pass "One crate depends on an HTTP client"
 fi
@@ -198,7 +199,7 @@ hits=$(git ls-files -- '*.swift' \
   | xargs grep -nE '^[[:space:]]*(@[a-zA-Z]+[[:space:]]+)*import[[:space:]]+CloudKit\b' 2>/dev/null || true)
 
 if [ -n "$hits" ]; then
-  fail "CloudKit imported outside the sync package" $hits
+  fail "CloudKit imported outside the sync package" "$hits"
 else
   pass "CloudKit only in the sync package"
 fi
@@ -207,7 +208,7 @@ hits=$(ts_src_files \
   | xargs grep -nEi '(from ['\''"](@sentry|sentry|mixpanel|posthog|amplitude|@segment|@google-analytics|@fullstory|logrocket|hotjar)|import.*(Sentry|Mixpanel|Posthog|Amplitude)|analytics\.(init|track|identify|page)\(|\bgtag\s*\(|umami\.track)' 2>/dev/null || true)
 
 if [ -n "$hits" ]; then
-  fail "Analytics/telemetry SDK references in desktop app" $hits
+  fail "Analytics/telemetry SDK references in desktop app" "$hits"
 else
   pass "No analytics/telemetry SDKs"
 fi
@@ -218,7 +219,7 @@ hits=$(ts_src_files \
   | grep -vE '^\S+:\s*(//|\*|/\*)' || true)
 
 if [ -n "$hits" ]; then
-  fail "XSS vectors (eval/innerHTML/dangerouslySetInnerHTML)" $hits
+  fail "XSS vectors (eval/innerHTML/dangerouslySetInnerHTML)" "$hits"
 else
   pass "No XSS vectors"
 fi
@@ -229,7 +230,7 @@ hits=$(rust_src_files \
   | grep -v '// SAFETY:' || true)
 
 if [ -n "$hits" ]; then
-  fail "Unsafe Rust blocks (add '// SAFETY:' comment if intentional)" $hits
+  fail "Unsafe Rust blocks (add '// SAFETY:' comment if intentional)" "$hits"
 else
   pass "No unsafe Rust"
 fi
@@ -259,7 +260,7 @@ for path in sys.stdin.read().split("\n"):
 ' 2>/dev/null || true)
 
 if [ -n "$hits" ]; then
-  fail "Possible SQL injection (use sqlx parameterized queries or add '// sql-ok:' if interpolated value is constant)" $hits
+  fail "Possible SQL injection (use sqlx parameterized queries or add '// sql-ok:' if interpolated value is constant)" "$hits"
 else
   pass "No raw SQL string interpolation"
 fi
@@ -345,7 +346,7 @@ if [ -n "$cap_files" ]; then
     | xargs grep -nEi '(shell:execute|shell:allow-execute|shell:allow-open|fs:allow-write-all|fs:allow-rename|http:default|http:allow-fetch)' 2>/dev/null || true)
 
   if [ -n "$hits" ]; then
-    fail "High-risk Tauri capabilities detected" $hits
+    fail "High-risk Tauri capabilities detected" "$hits"
   else
     pass "No high-risk Tauri capabilities"
   fi

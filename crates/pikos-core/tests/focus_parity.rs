@@ -1,6 +1,12 @@
 //! The focus timer's floor and its two duration formats, graded against
 //! `packages/core/src/format/focusDuration.ts`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::fs;
 use std::path::PathBuf;
 

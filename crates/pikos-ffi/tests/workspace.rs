@@ -2,6 +2,12 @@
 //! tri-state folder fields become enums, not-found is a distinct error, and the read-only handle is
 //! read-only. Storage behaviour is tested in `pikos-db`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use pikos_ffi::workspace::FocusOutcome;
 use pikos_ffi::workspace::{
     CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, PageRepeat,

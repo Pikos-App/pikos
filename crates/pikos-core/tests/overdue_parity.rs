@@ -8,6 +8,12 @@
 //! `NaiveDateTime` cannot. The label is graded too, since it is the only place the user is told
 //! something stayed behind.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::fs;
 use std::path::PathBuf;
 

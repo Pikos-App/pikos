@@ -55,7 +55,7 @@ step "cargo fmt --check" "workspace + desktop"
 (cd "$SRC_TAURI" && cargo fmt --check)
 
 step "cargo clippy (workspace)" "zero warnings"
-(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
+(cd "$ROOT" && bash scripts/clippy.sh --workspace --all-targets)
 
 step "cargo test (workspace)" "parser bridge rebuilt first"
 (cd "$ROOT" && pnpm --filter @pikos/bridge build >/dev/null)
@@ -65,7 +65,7 @@ step "cargo check (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && RUSTFLAGS="-D warnings" cargo check)
 
 step "cargo clippy (desktop)" "zero warnings"
-(cd "$SRC_TAURI" && cargo clippy --all-targets -- -D warnings)
+(cd "$SRC_TAURI" && bash "$ROOT/scripts/clippy.sh" --all-targets)
 
 step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)

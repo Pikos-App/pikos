@@ -30,6 +30,7 @@
     "qa:release": "node scripts/qa-release-copy.mjs",
     "fix:notifications": "bash scripts/reset-launch-services.sh",
     "audit:source": "bash scripts/source-audit.sh",
+    "knip": "knip --no-exit-code",
     "check:ios-ffi": "python3 scripts/check-swift-ffi-usage.py",
     "release": "bash scripts/release.sh",
     "release:retry": "bash scripts/release-retry.sh"
@@ -44,6 +45,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "husky": "^9.1.7",
+    "knip": "6.45.1",
     "lint-staged": "^16.3.3",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",

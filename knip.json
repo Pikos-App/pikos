@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["sqlite3", "mitmdump", "xcodegen", "swift"],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"]
+    },
+    "apps/desktop": {
+      "entry": ["playwright.*.config.ts", "scripts/seed-workspace/{main,invoke,logger}.ts"]
+    },
+    "apps/marketing": {
+      "entry": ["functions/**/*.ts", "scripts/*.mjs", "src/pages/**/_*.astro"]
+    },
+    "packages/core": {
+      "entry": ["src/types.conformance.ts", "scripts/**/*.ts"],
+      "ignore": ["src/generated/**"]
+    },
+    "packages/recurrence-wasm": {
+      "ignore": ["pkg/**"]
+    }
+  }
+}

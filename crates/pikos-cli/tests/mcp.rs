@@ -4,6 +4,12 @@
 //! Not a unit test of the handler: a client that knows nothing about this crate must be able to
 //! initialize, discover the tools, and drive a temp workspace through them.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: a panic is how a test fails"
+)]
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
