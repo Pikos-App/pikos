@@ -50,9 +50,16 @@ pub fn attach(app: AppHandle, pool: SqlitePool) {
                 log::error!("icloud: setting the images folder failed: {e}");
             }
         }
-        let resuming = pikos_db::replica::meta(&pool)
-            .await
-            .is_ok_and(|meta| meta.started && !meta.paused);
+        let resuming = match pikos_db::replica::meta(&pool).await {
+            Ok(meta) => meta.started && !meta.paused,
+            Err(e) => {
+                log::error!(
+                    "icloud: reading whether sync was on failed, so it isn't resumed: {}",
+                    e.log_summary()
+                );
+                false
+            }
+        };
         if resuming {
             if let Err(e) = hand_over(&pool).await {
                 log::error!("icloud: resuming sync failed: {e}");
@@ -261,10 +268,10 @@ enum Request {
 
 async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
     let (pool, app) = WORKSPACE.get().ok_or("sync hasn't started")?;
-    let body: serde_json::Value = serde_json::from_slice(input).map_err(|e| e.to_string())?;
-    let request: Request = serde_json::from_value(serde_json::json!({ op: body }))
-        .map_err(|e| format!("{op}: {e}"))?;
-    let failed = |e: pikos_db::error::AppError| e.to_string();
+    let body: serde_json::Value = serde_json::from_slice(input).map_err(|e| unreadable(op, &e))?;
+    let request: Request =
+        serde_json::from_value(serde_json::json!({ op: body })).map_err(|e| unreadable(op, &e))?;
+    let failed = |e: pikos_db::error::AppError| format!("{}: {e}", e.log_summary());
 
     match request {
         Request::Pending { limit } => {
@@ -393,6 +400,17 @@ async fn dispatch(op: &str, input: &[u8]) -> Result<serde_json::Value, String> {
     }
 }
 
+/// serde's own text can quote the request, which carries record fields, so only its category
+/// and position go back to Swift and into the log.
+fn unreadable(op: &str, e: &serde_json::Error) -> String {
+    format!(
+        "{op}: unreadable request (Serde/{:?} at {}:{})",
+        e.classify(),
+        e.line(),
+        e.column()
+    )
+}
+
 fn json<T: Serialize>(value: &T) -> Result<serde_json::Value, String> {
     serde_json::to_value(value).map_err(|e| e.to_string())
 }
@@ -446,4 +464,31 @@ fn from_wire(fields: BTreeMap<String, Wire>) -> FieldMap {
             (key, value)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unreadable_request_names_the_op_without_quoting_the_records() {
+        let body = serde_json::json!({
+            "records": [{ "name": "page:1", "fields": { "title": { "i": "Buy milk" } } }]
+        });
+        let err = serde_json::from_value::<Request>(serde_json::json!({ "apply": body }))
+            .err()
+            .unwrap();
+        assert!(
+            err.to_string().contains("Buy milk"),
+            "serde quotes the value: {err}"
+        );
+
+        let message = unreadable("apply", &err);
+
+        assert!(
+            message.starts_with("apply: unreadable request (Serde/Data"),
+            "{message}"
+        );
+        assert!(!message.contains("Buy milk"), "{message}");
+    }
 }
