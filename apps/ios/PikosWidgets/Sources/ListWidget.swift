@@ -6,9 +6,9 @@ import WidgetKit
 
 /// One list of pages, chosen in the widget's settings: Today, Upcoming, the Inbox or a folder.
 ///
-/// One widget rather than one per list, because each of the earlier ones showed a little and none
-/// earned a home-screen slot on its own. Every row completes in place, and the header adds a page
-/// to the list it shows, so a list can be worked from the home screen without opening the app.
+/// One widget rather than one per list, since each would show little and earn no home-screen slot.
+/// Every row completes in place, and the header adds a page to the list it shows, so a list can be
+/// worked without opening the app.
 ///
 /// It keeps the Today widget's kind, so a Today widget already on a home screen becomes this one,
 /// set to Today.

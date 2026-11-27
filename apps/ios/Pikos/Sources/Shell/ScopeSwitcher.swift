@@ -5,8 +5,7 @@ import SwiftUI
 /// Every place the list can be: the desktop's sidebar, drawn in from the left on a phone and
 /// beside the list where the window has room for three panels.
 ///
-/// It also carries what the corner buttons used to hide, the trash and Settings, so the top of the
-/// screen is a name and two tools, and nothing else.
+/// It also carries the trash and Settings, so the top of the screen is a name and two tools.
 struct ScopeSwitcher: View {
     enum Style {
         case drawer
@@ -39,7 +38,6 @@ struct ScopeSwitcher: View {
         }
     }
 
-    /// The desktop sidebar's tone, in the drawer as beside the list.
     private let ground = Color.surfaceTertiary
 
     private var rows: some View {
@@ -257,7 +255,6 @@ struct ScopeSwitcher: View {
     }
 }
 
-/// Where a page dropped on a switcher row goes.
 private enum PageDropTarget {
     /// Filed into the folder, or the Inbox for nil. A calendar's folder is never one: the
     /// workspace refuses a page filed into one.

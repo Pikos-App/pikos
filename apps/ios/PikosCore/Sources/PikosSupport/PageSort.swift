@@ -1,17 +1,11 @@
 import Foundation
 
-/// How a folder's list is ordered, and the ordering itself.
+/// How a folder's list is ordered, and the ordering itself: the desktop's four modes (`SortMode` in
+/// `@pikos/core`), with the same rules. Here rather than in the app so they test on the host; the
+/// two that go wrong quietly are the unscheduled sinking and the all-day placement.
 ///
-/// The desktop's four modes (`SortMode` in `@pikos/core`), with the same
-/// rules: manual is the hand-arranged `sort_order`; date puts the unscheduled
-/// last and an all-day page after its day's timed pages; priority runs urgent
-/// to low with "none" last and dates breaking ties; title is the reader's own
-/// collation. Here rather than in the app so the rules can be tested on the
-/// host — the two that go wrong quietly are the unscheduled sinking and the
-/// all-day placement, and neither needs a simulator to check.
-///
-/// Generic over the page, because the summary type is generated and lives in
-/// a package this one cannot see; the caller hands over the four facts.
+/// Generic over the page, because the summary type is generated and lives in a package this one
+/// cannot see.
 public enum PageSort {
     public enum Mode: String, CaseIterable, Sendable {
         case manual, date, title, priority

@@ -2,15 +2,9 @@ import SwiftUI
 
 /// Preferences, and what the app can tell you about itself, as a list of pages.
 ///
-/// Deliberately shorter than the desktop's. That one has five tabs, and three
-/// of them describe things a phone does not have: keyboard shortcuts, window
-/// state, and an editor line width for a column that is always the screen's.
-/// What is here is what changes something on this device — and every row that
-/// is here is wired to something, because a settings screen is the one place a
-/// control that does nothing is indistinguishable from one that is broken.
-///
-/// `apps/ios/README.md` records what was left out and why, so the next person
-/// to notice a missing preference finds a decision rather than an oversight.
+/// Deliberately shorter than the desktop's, whose tabs include keyboard shortcuts, window state
+/// and an editor line width, none of which a phone has. Every row here is wired to something,
+/// because a control that does nothing is indistinguishable from one that is broken.
 struct SettingsScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(CalendarSyncStore.self) private var sync
@@ -110,12 +104,9 @@ struct SettingsScreen: View {
         }
     }
 
-    /// How many calendars are mirroring, so the row says something without
-    /// being opened.
-    ///
-    /// Counts enabled calendars rather than accounts: an account with every
-    /// calendar switched off is connected and syncing nothing, and "1 account"
-    /// would describe that as working.
+    /// How many calendars are mirroring, so the row says something without being opened. Counts
+    /// enabled calendars rather than accounts: an account with every calendar off syncs nothing,
+    /// and "1 account" would read as working.
     private var calendarSummary: String {
         let enabled = sync.accounts.flatMap(\.calendars).filter(\.enabled).count
         if sync.accounts.isEmpty { return String(localized: "None") }

@@ -8,9 +8,7 @@ import WidgetKit
 /// overlapping ones side by side as the grid lays them out, each with a box that completes it in place.
 /// An empty hour opens quick add at that hour.
 ///
-/// It replaced the Now widget, which told the time left and suggested a page; Alex found a picture
-/// of the day more use than a sentence about it. The lock-screen sizes keep Now's sentence, since a
-/// grid doesn't fit beside the clock.
+/// The lock-screen sizes show Now's sentence, since a grid doesn't fit beside the clock.
 ///
 /// It keeps Next Up's kind, so a Next Up or Now widget already on a home screen becomes this one.
 struct CalendarWidget: Widget {

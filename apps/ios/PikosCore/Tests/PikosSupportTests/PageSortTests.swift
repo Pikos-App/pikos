@@ -19,8 +19,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .manual), ["a", "b", "c"])
     }
 
-    /// Unscheduled pages sink; an all-day page follows its day's timed pages
-    /// and precedes the next day's.
     func testDatePutsTheUnscheduledLastAndAllDayAfterItsDaysTimedPages() {
         let keys = [
             page("nothing"),
@@ -32,7 +30,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .date), ["sooner", "lunch", "that day", "next day", "nothing"])
     }
 
-    /// Urgent first, none last, and the date breaks ties within a tier.
     func testPriorityRunsUrgentToLowWithNoneLast() {
         let keys = [
             page("none", priority: 0, at: "2026-09-15"),
@@ -52,8 +49,6 @@ final class PageSortTests: XCTestCase {
         XCTAssertEqual(titles(keys, by: .title), ["Apple", "banana", "cherry"])
     }
 
-    /// Equal keys keep their incoming order, so a re-sort never shuffles
-    /// rows that tie.
     func testTheSortIsStable() {
         let keys = [page("first", order: 1), page("second", order: 1), page("third", order: 1)]
         XCTAssertEqual(titles(keys, by: .manual), ["first", "second", "third"])

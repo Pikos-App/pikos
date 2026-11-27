@@ -2,10 +2,9 @@ import XCTest
 
 /// The flows that must work, mirroring the desktop's `@tier1` Playwright set.
 ///
-/// Chosen so that a failure here means the app is unusable rather than
-/// imperfect: it launched, a page can be made, ticked, found, opened and
-/// scheduled. Anything narrower is a question the Rust tests or `PikosSupport`
-/// answer in milliseconds.
+/// Chosen so that a failure here means the app is unusable rather than imperfect: it launched, a
+/// page can be made, ticked, found, opened and scheduled. Anything narrower is a question the Rust
+/// tests or `PikosSupport` answer in milliseconds.
 final class TierOneTests: PikosUITestCase {
     // qa: IOS-01
     func testTheAppLaunchesOnTodayWithTheBar() {
@@ -412,8 +411,7 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-07:3
-    /// The desktop's week-of-the-month preset and an end, both saved and read back through the rule
-    /// layer, which could hold neither before.
+    /// The desktop's week-of-the-month preset and an end, both saved and read back through the rule layer.
     func testAMonthlyWeekdayRepeatWithAnEndIsKept() {
         quickAdd("Book club today")
         assertRowExists("Book club")
@@ -955,7 +953,7 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-16:2
-    /// `PKOS-0150`: a left swipe offers the likeliest day, When and Folder.
+    /// A left swipe offers the likeliest day, When and Folder.
     func testARowSwipesLeftToADayWhenOrAFolder() {
         showView("Inbox")
         quickAdd("Book the car in")
@@ -1019,7 +1017,7 @@ final class TierOneTests: PikosUITestCase {
     }
 
     // qa: IOS-67
-    /// `PKOS-0204`: Delete ends the left swipe and goes to the trash with Undo.
+    /// Delete ends the left swipe and goes to the trash with Undo.
     func testARowSwipesLeftToDeleteWithUndo() {
         showView("Inbox")
         quickAdd("Return the library book")

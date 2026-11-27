@@ -8,10 +8,8 @@ import UIKit
 /// A page, open for editing.
 ///
 /// The document is the shared Tiptap editor in a webview, so a page written here is byte-identical
-/// to one written on the desktop. Above it sits the desktop's page header, native: the title, the
-/// one-sentence subtitle, and the byline of status, folder, date, priority and tags, each of which
-/// changes itself. The header gives its height back while the document has the keyboard or a focus
-/// session runs, and comes back when the bar's title is tapped.
+/// to one written on the desktop. The native header above it gives its height back while the
+/// document has the keyboard or a focus session runs, and returns when the bar's title is tapped.
 struct EditorScreen: View {
     let pageId: String
 
@@ -28,9 +26,8 @@ struct EditorScreen: View {
     @State private var typing = TypingTimes()
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
-    /// The header asked back while it would be hidden, by tapping the bar's title. Cleared when the
-    /// title and subtitle let go of the keyboard, the keyboard goes, or a focus session starts or
-    /// stops, so going back to the document gives the header's height back again.
+    /// The header asked back by tapping the bar's title. Cleared when the title and subtitle let go
+    /// of the keyboard, the keyboard goes, or a focus session starts or stops.
     @State private var isHeaderRevealed = false
     @State private var focusStartedAt: Date?
     @State private var isPickingPhoto = false
@@ -42,10 +39,10 @@ struct EditorScreen: View {
     @State private var openBody: OpenPageBody?
     @State private var pageWidth: CGFloat = 0
 
-    /// The width kept clear on each side of the bar's title, enough for the widest right-hand side:
-    /// a running focus timer and the page menu. The bar lays its centre item out at full length
-    /// and never shrinks it, so without a cap a long title ran off both edges. The cap goes on the
-    /// button's label, since the bar ignores a frame set on the button itself.
+    /// The width kept clear on each side of the bar's title, enough for a running focus timer and
+    /// the page menu. The bar never shrinks its centre item, so without a cap a long title runs
+    /// off both edges. The cap goes on the button's label, since the bar ignores a frame set on
+    /// the button itself.
     private static let barSideRoom: CGFloat = 130
 
     var body: some View {
@@ -63,16 +60,14 @@ struct EditorScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        // The store bumps its version after every write it makes and every sync
-        // that lands. The facts are re-read so the title and the strip follow, and
-        // a body changed elsewhere is offered to the editor once nothing typed is
-        // waiting to be saved.
+        // The store bumps its version after every write and every sync that lands. Facts are
+        // re-read so the title and strip follow, and a body changed elsewhere is offered to the
+        // editor once nothing typed is waiting to be saved.
         .onChange(of: store.dataVersion) { _, _ in
             Task { await reloadFacts() }
             openBody?.storedMayHaveChanged()
         }
-        // The list is not refreshed on every keystroke — see WorkspaceStore —
-        // so it is refreshed once, here, when the editor goes away.
+        // The list is not refreshed per keystroke (see WorkspaceStore), so once, on the way out.
         .onDisappear { Task { await store.refresh() } }
         .pageActionSheets($actions)
     }
@@ -111,10 +106,9 @@ struct EditorScreen: View {
                 colorScheme: colorScheme,
                 accentColor: Brand.linkHex(dark: colorScheme == .dark),
                 isEditable: editable,
-                // Every callback hops to the main actor explicitly. They are
-                // invoked from WebKit delegate callbacks, and whether those are
-                // main-actor-isolated depends on the SDK's audit state — hopping
-                // is correct either way and costs nothing.
+                // Every callback hops to the main actor explicitly: whether WebKit's delegate
+                // callbacks are main-actor-isolated depends on the SDK, and hopping is correct
+                // either way.
                 onDocumentChanged: { _, json, _ in
                     guard editable else { return }
                     Task { @MainActor in openBody?.typed(json) }
@@ -126,8 +120,8 @@ struct EditorScreen: View {
                     }
                 },
                 onLinkTapped: { url in
-                    // The webview never navigates; the app decides. That keeps a
-                    // tapped link from replacing the editor with a web page.
+                    // The webview never navigates; the app decides, so a tapped link cannot
+                    // replace the editor with a web page.
                     Task { @MainActor in openURL(url) }
                 },
                 onImageRequested: {
@@ -144,12 +138,9 @@ struct EditorScreen: View {
                 }
             )
         }
-        // The formatting bar sits in the safe area's bottom inset, which the
-        // keyboard shrinks — so it rides up with the keyboard and goes away with
-        // it. Not a `.keyboard` toolbar item: that attaches to the input
-        // accessory of a SwiftUI text field, and a webview brings its own
-        // responder and its own accessory view, so a toolbar placed there is
-        // one nobody would ever see above this editor.
+        // The formatting bar sits in the safe area's bottom inset, which the keyboard shrinks, so it
+        // rides with the keyboard. Not a `.keyboard` toolbar item: that attaches to a SwiftUI text
+        // field's input accessory, and the webview brings its own responder and accessory view.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if editable && isDocumentFocused {
                 FormattingToolbar(
@@ -169,9 +160,7 @@ struct EditorScreen: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = $0 }
         .animation(.snappy, value: isDocumentFocused)
         .animation(.snappy, value: isHeaderHidden)
-        // The system picker runs out of process, so no photo-library
-        // permission is asked for: the app only ever sees the one picture
-        // chosen.
+        // The system picker runs out of process, so no photo-library permission is asked for.
         .photosPicker(isPresented: $isPickingPhoto, selection: $pickedPhoto, matching: .images)
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
@@ -229,7 +218,6 @@ struct EditorScreen: View {
         .modifier(FocusTimer(pageId: page.id, title: page.title, startedAt: $focusStartedAt))
     }
 
-    /// The document has the keyboard, as opposed to the title or subtitle above it.
     private var isDocumentFocused: Bool {
         isKeyboardVisible && headerFocus == nil
     }
@@ -241,8 +229,6 @@ struct EditorScreen: View {
         return (isDocumentFocused || (isFocusing && !isEditingHeader)) && !isHeaderRevealed
     }
 
-    /// Bring the header back with the title taking the keyboard from the document.
-    ///
     /// The focus moves on the next turn: the title field only exists once the header is drawn, and
     /// focus set on a field that isn't there yet is dropped.
     private func editTitle() {
@@ -278,11 +264,9 @@ struct EditorScreen: View {
 
     /// Write a picked photo into the workspace and put it in the document.
     ///
-    /// The document stores `assets/<file>`, the form the desktop stores, so a
-    /// page reads the same in both apps — never an absolute path, which would
-    /// be wrong after a restore to a new device. JPEG, PNG and GIF are stored as they are;
-    /// anything else — a HEIC from the camera roll, most often — is re-encoded
-    /// as JPEG so it renders here and on the desktop.
+    /// The document stores `assets/<file>`, the form the desktop stores, never an absolute path,
+    /// which would be wrong after a restore to a new device. JPEG, PNG and GIF are stored as they
+    /// are; anything else, most often a HEIC, is re-encoded as JPEG so it renders on both apps.
     private func insert(photo item: PhotosPickerItem, into assets: URL) async {
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
@@ -308,11 +292,8 @@ struct EditorScreen: View {
         }
     }
 
-    /// Re-read the page after a write from the menu.
-    ///
-    /// Only once it has loaded — the first load owns the failure state, and a
-    /// version bump arriving mid-load must not flip the screen to "deleted"
-    /// over a page that is fine.
+    /// Re-read the page after a write from the menu, only once it has loaded: the first load owns
+    /// the failure state, and a version bump mid-load must not flip a fine page to "deleted".
     private func reloadFacts() async {
         guard page != nil, let latest = await store.page(id: pageId) else { return }
         page = latest

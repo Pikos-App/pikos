@@ -3,13 +3,7 @@ import Foundation
 import PikosCore
 import PikosSupport
 
-/// Pages, findable from the home screen's search.
-///
-/// A notes app whose notes cannot be found by pulling down on the home screen
-/// is one the phone treats as a stranger: Notes, Reminders, Things and Bear
-/// all index, and a reader who searches for "dentist" and sees every app's
-/// answer but this one's concludes the page is not there. What each entry
-/// holds is `SpotlightItem`.
+/// Pages, findable from the home screen's search. What each entry holds is `SpotlightItem`.
 ///
 /// Caught up rather than rebuilt. Every write bumps the store's version, and the index follows a
 /// few seconds later with the pages the workspace's change counter says were written since its
@@ -18,8 +12,7 @@ import PikosSupport
 /// It still starts over when the counter's epoch changes or a folder is renamed, since every
 /// item names its folder.
 ///
-/// Nothing leaves the phone. Core Spotlight's index is on-device, and the
-/// privacy manifest's claims about the binary remain true.
+/// Nothing leaves the phone: Core Spotlight's index is on-device.
 @MainActor
 final class SpotlightIndexer {
     private let workspace: @MainActor () -> Workspace?
@@ -66,19 +59,14 @@ final class SpotlightIndexer {
     private static let foldersKey = "pikos.spotlight.folders"
     private nonisolated static let batchSize = 1_000
 
-    /// Forget everything, for "Delete all data".
-    ///
-    /// The one place a stale index would be worse than a missing one: a phone
-    /// wiped of its notes must not keep offering their titles from the home
-    /// screen.
+    /// Forget everything, for "Delete all data": a stale index would keep offering the titles of
+    /// a wiped phone's notes.
     static func clear() async {
         for key in [seqKey, epochKey, foldersKey] { UserDefaults.standard.removeObject(forKey: key) }
         try? await CSSearchableIndex.default().deleteSearchableItems(
             withDomainIdentifiers: [SpotlightItem.domain])
     }
 
-    /// The page a Spotlight result names, or nil for an activity that is not
-    /// one of ours.
     static func pageId(from activity: NSUserActivity) -> String? {
         guard activity.activityType == CSSearchableItemActionType else { return nil }
         return activity.userInfo?[CSSearchableItemActivityIdentifier] as? String

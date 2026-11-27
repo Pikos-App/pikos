@@ -5,32 +5,17 @@ import UIKit
 
 /// Create a page without leaving the list.
 ///
-/// ## Typing and tapping, not one or the other
+/// The line is parsed as it is typed, by the same Rust parser the desktop's is graded against, so
+/// a line means the same thing on both. The parse fills in the native controls rather than
+/// replacing them, and touching a control wins: once a date is picked by hand, a later keystroke
+/// will not move it.
 ///
-/// The line is parsed as it is typed — "call the plumber tomorrow at 3pm
-/// #home !urgent" becomes a page titled "call the plumber", tagged, urgent, and
-/// scheduled — by the same Rust parser the desktop's is graded against, so a
-/// line means the same thing on both.
+/// The words the parser read are coloured where they were typed, so whatever stays in the ordinary
+/// colour is the title that will be saved. A parser that quietly takes half a sentence for a date
+/// is worse than one that misses it.
 ///
-/// The native controls stay. On a phone a date picker beats typing "tomorrow at
-/// 3pm" with a thumb, and nobody should have to learn a syntax to use quick
-/// add. So the parse *fills in* the controls rather than replacing them, and
-/// touching a control wins: once you have picked a date by hand, a later
-/// keystroke will not move it out from under you.
-///
-/// ## Why the line is coloured
-///
-/// A parser that quietly takes half a sentence for a date is worse than one
-/// that misses it, because the title loses words with no sign that anything
-/// happened. The words it read are coloured where they were typed, so whatever
-/// is left in the ordinary colour is the title that will be saved. A separate
-/// summary of the title did the same job one line further from the eye.
-///
-/// ## Where it opens
-///
-/// On the view it was opened from: Today opens on today, a folder on that
-/// folder, the calendar on the day it shows. A page typed into a view should
-/// land in it, and anything typed in the line still overrules the view.
+/// It opens on the view it was opened from (a folder, the day the calendar shows), and anything
+/// typed in the line still overrules the view.
 struct QuickAddSheet: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
@@ -51,33 +36,24 @@ struct QuickAddSheet: View {
     /// How long a timed page runs, when a calendar slot was dragged out to a length.
     @State private var minutes: Int?
     @State private var isSaving = false
-    /// Set once the user touches a control, after which the parse stops
-    /// steering it.
+    /// Set once the user touches a control, after which the parse stops steering it.
     @State private var scheduleIsManual = false
     @State private var folderIsManual = false
-    /// What the parse last wrote into each control.
-    ///
-    /// The parse writes to the same controls the user does, and `onChange`
-    /// cannot tell the two apart — it fires on the next update pass, so a flag
-    /// raised around the write is already lowered by the time it runs. Without
-    /// this the first parsed date would convince the sheet the user had taken
-    /// over, and every keystroke after it would be ignored. Comparing the new
-    /// value against what the parse put there does not depend on when the
-    /// handler runs.
+    /// What the parse last wrote into each control. The parse writes to the same controls the user
+    /// does and `onChange` cannot tell the two apart: it fires on the next update pass, so a flag
+    /// raised around the write is already lowered. Comparing the new value against what the parse
+    /// put there does not depend on when the handler runs.
     @State private var appliedSchedule: Schedule = .none
     @State private var appliedDate: Date?
     @State private var appliedFolderId: String?
     @State private var parsed: ParsedLine?
-    /// The priority, from the line or from the chip. Manual once the chip
-    /// has been used, like the schedule and the folder.
+    /// The priority, from the line or from the chip. Manual once the chip has been used.
     @State private var priority: Priority?
     @State private var priorityIsManual = false
 
-    /// `prefill` arrives from a `pikos://quick-add` link and is parsed on
-    /// appearance, exactly as if it had been typed. `prefillDate` arrives
-    /// from a long press on a calendar slot and counts as a choice already
-    /// made: the picker opens on it, and a date the line happens to mention
-    /// does not move it — the reader pressed *there*.
+    /// `prefill` arrives from a `pikos://quick-add` link and is parsed on appearance, as if typed.
+    /// `prefillDate` arrives from a long press on a calendar slot and counts as a choice already
+    /// made: a date the line happens to mention does not move it.
     init(
         prefill: String = "", prefillDate: Date? = nil, prefillMinutes: Int? = nil,
         context: Route.QuickAddContext = .init()
@@ -254,7 +230,6 @@ struct QuickAddSheet: View {
         return parsed?.content == nil ? "\(line) // \(typedNote)" : "\(line)\n\(typedNote)"
     }
 
-    /// The `//` body typed in the line, then the note.
     private var pageContent: String? {
         let parts = [parsed?.content, typedNote].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
@@ -271,7 +246,6 @@ struct QuickAddSheet: View {
         return matched ? nil : query
     }
 
-    /// Whether the date pickers are unfolded under the row.
     @State private var isPickingDate = false
 
     @ViewBuilder
@@ -403,30 +377,20 @@ struct QuickAddSheet: View {
         store.fileableFolders.first { $0.id == folderId }?.name ?? String(localized: "Inbox")
     }
 
-    /// The title as it will actually be saved.
-    ///
-    /// Always the parsed title once there is a parse, even when the date came
-    /// from the picker instead — stripping `#work` out of the title is the
-    /// parser's job either way, and taking the raw line here would file a page
-    /// called "#work buy milk" that was also tagged `work`.
-    ///
-    /// A line of nothing but markers parses to an empty title, which leaves the
-    /// Add button disabled and the summary saying so. That is the honest
-    /// outcome: there is nothing to call the page.
+    /// The title as it will actually be saved: always the parsed title once there is a parse, even
+    /// when the date came from the picker, since taking the raw line would file a page called
+    /// "#work buy milk" that was also tagged `work`. A line of nothing but markers parses to an
+    /// empty title, which leaves Add disabled.
     private var savedTitle: String {
         if let parsed { return parsed.title }
         return line.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Whether saving goes through the quick-add path, which is the only one
-    /// that can produce a recurrence or a series.
-    ///
-    /// A hand-picked date overrules a parsed one — except on a line that also
-    /// asked for a recurrence, where there is no way to express "this rule but
-    /// that start" and dropping the rule is the larger loss. The summary row
-    /// shows the recurrence, so it is visible that it won. A line naming no date
-    /// in a view that has one is saved from the picker too, or the line's
-    /// silence would undate a page the view had dated.
+    /// Whether saving goes through the quick-add path, the only one that can produce a recurrence
+    /// or a series. A hand-picked date overrules a parsed one, except on a line that also asked for
+    /// a recurrence: there is no way to express "this rule but that start", and dropping the rule
+    /// is the larger loss. A line naming no date in a view that has one is saved from the picker,
+    /// or its silence would undate a page the view had dated.
     private var usesParse: Bool {
         guard let parsed else { return false }
         if parsed.repeats != nil { return true }
@@ -445,8 +409,6 @@ struct QuickAddSheet: View {
         applyToControls()
     }
 
-    /// Move the pickers to match the parse, for as long as the user has left
-    /// them alone.
     private func applyToControls() {
         guard let parsed else { return }
 
@@ -479,7 +441,6 @@ struct QuickAddSheet: View {
         }
     }
 
-    /// A save that made no page always says so, so a line can never seem to land and vanish.
     private func sayNothingWasSaved() {
         if store.errorMessage == nil {
             store.errorMessage = String(localized: "Pikos couldn't save that page. Try again in a moment.")
@@ -491,26 +452,19 @@ struct QuickAddSheet: View {
         isSaving = true
         isFinished = true
         defer { isSaving = false }
-        // Felt before the sheet goes: the page lands in a list the user may
-        // not be looking at (the notice says where), and a tap that is felt
-        // to land does not need to be seen to. A generator call rather than
-        // `.sensoryFeedback`, whose trigger would be on a view that is
-        // dismissing.
+        // Felt before the sheet goes, since the page lands in a list the user may not be looking at.
+        // A generator call rather than `.sensoryFeedback`, whose trigger would be on a dismissing view.
         UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         if usesParse {
-            // A folder picked by hand is still honoured — the parser only ever
-            // reports a folder *name*, and matching it to one is this side's
-            // job, so passing the id through covers both cases.
-            // The same reference the summary was computed from, not the clock
-            // at the moment Add was tapped. `createFromQuickAdd` takes one for
-            // exactly this reason, and defaulting it here would let a line
-            // typed at 23:59 land on a different day than the one shown.
+            // A folder picked by hand is still honoured: the parser only reports a folder name, and
+            // matching it to one is this side's job.
+            // The same reference the summary was computed from, not the clock when Add was tapped,
+            // or a line typed at 23:59 could land on a different day than the one shown.
             let created = await store.createFromQuickAdd(
                 lineWithNote, reference: parsed?.reference ?? Date(), folderId: folderId)
-            // The chip overrules the line, the way a picked date does: a
-            // priority chosen by hand after typing "!high" is the later
-            // decision, and "None" chosen by hand is a real one.
+            // The chip overrules the line, as a picked date does: a priority chosen by hand after
+            // typing "!high" is the later decision, and "None" is a real one.
             if priorityIsManual, let first = created.first, priority != parsed?.priority {
                 await store.setPriority(pageId: first.id, priority: priority)
             }
@@ -519,9 +473,8 @@ struct QuickAddSheet: View {
             return
         }
 
-        // The date came from the picker, so the page is built here. Everything
-        // else the line said still applies — the body after "//" becomes the
-        // document, through the same builder the workspace uses.
+        // The date came from the picker, so the page is built here; the body after "//" becomes the
+        // document through the builder the workspace uses.
         let created = await store.createPage(
             NewPage(
                 title: savedTitle,
@@ -536,26 +489,19 @@ struct QuickAddSheet: View {
             dismiss()
             return
         }
-        // Priority is not a field on a new page, so it takes a second write —
-        // and it has to happen, or "!urgent" is silently dropped on any line
-        // whose date was picked by hand. The chip's answer, when there is
-        // one, is already in `priority`; otherwise it is the line's.
+        // Priority is not a field on a new page, so it takes a second write, or "!urgent" is
+        // dropped on any line whose date was picked by hand.
         if let priority {
             await store.setPriority(pageId: created.id, priority: priority)
         }
-        // Reminders are rows of their own, and were resolved by the parser
-        // against the shape the *line* had. The picker may have chosen the
-        // other shape, so they are re-shaped here the way the parser would
-        // have: an all-day page carries the day-before anchor and nothing
-        // else, a timed one carries minutes — with "the day before" read as
-        // a day's worth of them.
+        // Reminders were resolved against the shape the line had, and the picker may have chosen
+        // the other: an all-day page carries the day-before anchor alone, a timed one carries minutes.
         for minutes in manualReminders {
             await store.addReminder(pageId: created.id, minutesBefore: minutes)
         }
         dismiss()
     }
 
-    /// The parsed reminders, re-shaped for the schedule the picker chose.
     private var manualReminders: [Int64] {
         guard let leads = parsed?.reminders, !leads.isEmpty, schedule != .none else { return [] }
         if schedule == .allDay { return [ParsedLine.dayBeforeMinutes] }
@@ -563,7 +509,6 @@ struct QuickAddSheet: View {
         return Array(Set(minutes)).sorted()
     }
 
-    /// The picked date as the wall-clock string the workspace stores.
     private var manualScheduledStart: String? {
         guard schedule != .none else { return nil }
         guard schedule == .timed else {
@@ -582,11 +527,9 @@ struct QuickAddSheet: View {
         return formatter.string(from: date)
     }
 
-    /// Read a stored wall-clock string back into a `Date` for the picker.
-    ///
-    /// No timezone conversion in either direction: the string is a wall clock,
-    /// and the picker shows a wall clock. `nonisolated` so the parse helper,
-    /// which is not main-actor bound, can use it too.
+    /// Read a stored wall-clock string back into a `Date` for the picker, with no timezone
+    /// conversion either way. `nonisolated` so the parse helper, which is not main-actor bound,
+    /// can use it.
     nonisolated static func wallClock(_ iso: String) -> Date? {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -595,38 +538,27 @@ struct QuickAddSheet: View {
     }
 }
 
-/// What the parser made of one line, flattened to what the sheet shows.
-///
-/// The parse itself returns one page, several, or a recurring one; the sheet
-/// only ever displays the first, because that is what the summary is for —
-/// telling the user what their words did, not reproducing the whole result.
+/// What the parser made of one line, flattened to what the sheet shows: the first page only,
+/// since the summary tells the user what their words did.
 struct ParsedLine {
     var title: String = ""
     var scheduledStart: String?
     var tags: [String] = []
     var folderQuery: String?
     var priority: Priority?
-    /// Set when the line produced a rule or a series, with a phrase describing
-    /// it ("every weekday", "3 pages").
+    /// Set when the line produced a rule or a series, with a phrase for it ("every weekday").
     var repeats: String?
-    /// Reminder leads in minutes before the start, or the day-before anchor.
-    /// Empty when none were asked for, or when there was no date to anchor
-    /// them to — the words stay in the title then, and the parser says so by
-    /// leaving them there.
+    /// Reminder leads in minutes before the start, or the day-before anchor. Empty when none were
+    /// asked for or there was no date to anchor them to; the words stay in the title then.
     var reminders: [Int64] = []
-    /// The body typed after "//", kept exactly as typed.
     var content: String?
 
-    /// The `minutes_before` value that means "the day before" on an all-day
-    /// page rather than a count of minutes — the data layer's sentinel, which
-    /// the parser hands over for any lead on an all-day page.
+    /// The `minutes_before` value that means "the day before" on an all-day page: the data layer's
+    /// sentinel, which the parser hands over for any lead on an all-day page.
     static let dayBeforeMinutes: Int64 = -2
 
-    /// The clock this line was read against.
-    ///
-    /// Kept so saving can resolve against the same instant the summary was
-    /// computed from. "tomorrow" typed at 23:59:58 and saved three seconds
-    /// later must not mean two different days.
+    /// The clock this line was read against, so saving resolves against the same instant as the
+    /// summary: "tomorrow" typed at 23:59:58 must not mean two days.
     let reference: Date
 
     init(line: String, reference: Date) {
@@ -676,7 +608,6 @@ struct ParsedLine {
         repeats != nil || !reminders.isEmpty || content != nil
     }
 
-    /// The reminders in words: "30 min before", "the day before".
     var reminderLabel: String? {
         guard !reminders.isEmpty else { return nil }
         let parts = reminders.map { minutes -> String in
@@ -786,7 +717,7 @@ private struct ExtrasRow: View {
     }
 }
 
-/// A parsed fact, in the desktop's chip: a small rounded tag on the inset surface.
+/// A parsed fact, in the desktop's chip.
 private struct Chip: View {
     let text: String
     let icon: String?

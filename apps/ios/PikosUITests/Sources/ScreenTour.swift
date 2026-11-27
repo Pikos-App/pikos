@@ -7,8 +7,8 @@ import XCTest
 /// PDF script sorts and captions by. A surface the tour cannot reach is recorded in a `missed`
 /// attachment and fails the run at the end, so one moved label does not cost the other sixty shots
 /// but does not pass either. Each surface also gets the system accessibility audit, its findings
-/// in an `accessibility` attachment and reported rather than failing: the first runs' touch-target
-/// and contrast findings were mostly the widget gallery and glass surfaces, too noisy to gate on.
+/// in an `accessibility` attachment and reported rather than failing: the touch-target and contrast
+/// findings are mostly the widget gallery and glass surfaces, too noisy to gate on.
 final class ScreenTour: PikosUITestCase {
     override class var launchEnvironment: [String: String] { ["PIKOS_DEMO": "1"] }
 
@@ -710,7 +710,7 @@ final class ScreenTour: PikosUITestCase {
     }
 
     /// A fresh Today with two rows selected. Each selection verb starts from here, since closing a
-    /// menu by tapping elsewhere is not reliable and once chose one of its items.
+    /// menu by tapping elsewhere is not reliable and can choose one of its items.
     private func selectTwo() -> Bool {
         relaunch()
         guard tap(button("Select"), "select") else {

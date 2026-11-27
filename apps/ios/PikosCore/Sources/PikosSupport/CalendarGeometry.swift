@@ -4,34 +4,24 @@ import PikosCore
 
 /// Turning a wall-clock schedule into a position in a day column.
 ///
-/// The shared Rust decides *structure* — which cascade column a timed event
-/// occupies, which row and span an all-day bar gets — and deliberately stops
-/// there. Pixel mapping encodes one renderer's font metrics and row heights,
-/// and inheriting the desktop's would be a bug dressed as reuse. This is iOS
-/// making that call for itself.
+/// The shared Rust decides structure (which cascade column a timed event occupies, which row and
+/// span an all-day bar gets) and deliberately stops there: pixel mapping encodes one renderer's
+/// font metrics and row heights, so inheriting the desktop's would be a bug dressed as reuse.
 ///
-/// Everything here is string arithmetic on wall-clock values, with no
-/// `DateFormatter` and no `Calendar`. Two reasons. It is called once per block
-/// per frame, and a formatter costs about a hundred microseconds. More
-/// importantly, these values *are* wall clocks — `09:00` on a column headed
-/// `2026-03-23` means nine in the morning, full stop — and routing them through
-/// a type that carries a time zone is how an event lands an hour out twice a
-/// year.
+/// Everything here is string arithmetic on wall-clock values, with no `DateFormatter` and no
+/// `Calendar`. A formatter costs about a hundred microseconds per block per frame, and these
+/// values are wall clocks: routing them through a type that carries a time zone is how an event
+/// lands an hour out twice a year.
 public enum CalendarGeometry {
 
     /// How tall an hour is, and the floors that keep short events legible.
     ///
-    /// Not the desktop's numbers. Its `HOUR_HEIGHT` of 64px makes a 15-minute
-    /// slot 16px, which is fine for a mouse and well under the 44pt touch
-    /// target a finger needs. Rather than pick a bigger constant and call it
-    /// solved — an hour tall enough to tap a 15-minute event would put barely
-    /// six hours on a phone screen — short events keep their true position and
-    /// gain a minimum *height*, so they stay both readable and roughly where
-    /// they belong.
+    /// Not the desktop's numbers: its 64px hour makes a 15-minute slot 16px, well under the 44pt a
+    /// finger needs. A taller hour tall enough to tap would put barely six hours on a phone, so
+    /// short events keep their true position and gain a minimum height instead.
     public struct Metrics: Equatable, Sendable {
         public var hourHeight: CGFloat
-        /// Floor on a timed block's height. A zero-length event still needs to
-        /// be visible and hittable.
+        /// Floor on a timed block's height, so a zero-length event stays visible and hittable.
         public var minBlockHeight: CGFloat
         /// Pitch of one row in the all-day section.
         public var allDayRowHeight: CGFloat
@@ -121,7 +111,7 @@ public enum CalendarGeometry {
 
         /// The desktop's band height.
         public static let bandHeight: CGFloat = 40
-        /// Nothing folded: every hour its full height, as the grid was before bands.
+        /// Nothing folded: every hour its full height.
         public static let none = Collapse(topHour: 0, bottomHour: 24, topCollapsed: false, bottomCollapsed: false)
         public static let earliestTopHour = 1
         public static let latestTopHour = 12
@@ -158,12 +148,9 @@ public enum CalendarGeometry {
 
     // MARK: - Reading wall-clock strings
 
-    /// The `YYYY-MM-DD` part of a wall-clock string.
-    ///
-    /// Dates compare correctly as strings when they are zero-padded ISO, which
-    /// is what the storage format guarantees — the same property the Rust
-    /// all-day packer relies on. Returns nil for anything too short to be a
-    /// date rather than trusting the caller.
+    /// The `YYYY-MM-DD` part of a wall-clock string, or nil for anything too short to be a date.
+    /// Zero-padded ISO dates compare correctly as strings, the property the Rust all-day packer also
+    /// relies on.
     public static func day(of iso: String) -> String? {
         iso.count >= 10 ? String(iso.prefix(10)) : nil
     }
@@ -173,11 +160,8 @@ public enum CalendarGeometry {
         !iso.contains("T")
     }
 
-    /// Minutes from midnight, for the time half of a wall-clock string.
-    ///
-    /// Nil for an all-day value, which has no time to read, and for anything
-    /// malformed. Seconds are floored rather than rounded: a block's top edge
-    /// should never render below its stated minute.
+    /// Minutes from midnight, for the time half of a wall-clock string. Nil for an all-day value or
+    /// anything malformed. Seconds are floored, so a block's top edge never renders below its minute.
     public static func minutesIntoDay(_ iso: String) -> Int? {
         guard iso.count >= 16 else { return nil }
         let characters = Array(iso)
@@ -194,14 +178,9 @@ public enum CalendarGeometry {
 
     /// Where a timed event sits in the column headed `day`, in points.
     ///
-    /// Both edges are clamped into the day, so an event that began yesterday
-    /// starts at the top and one running into tomorrow ends at the bottom. The
-    /// Rust already reports which of those happened — `isContinuationBefore` and
-    /// `isContinuationAfter` — so the renderer can cut the corresponding edge
-    /// square and show that the block carries on.
-    ///
-    /// Returns nil when the event does not touch this day at all, which is a
-    /// caller error rather than something to render as a zero-height sliver.
+    /// Both edges are clamped into the day. The Rust already reports `isContinuationBefore` and
+    /// `isContinuationAfter`, so the renderer can cut the matching edge square. Nil when the event
+    /// does not touch this day, which is a caller error rather than a zero-height sliver.
     public static func placement(
         start: String,
         end: String?,
@@ -230,9 +209,8 @@ public enum CalendarGeometry {
     }
 
     /// The minutes of `day` a timed event covers, or nil when it doesn't touch the day.
-    ///
-    /// `end` is the *stored* end. Absent means a point in time, which gets the minimum height —
-    /// not a zero-height block, and not an assumed duration the user never typed.
+    /// `end` is the stored end; absent means a point in time, which gets the minimum height rather
+    /// than a zero-height block or an assumed duration.
     static func minuteSpan(start: String, end: String?, on day: String) -> (start: Int, end: Int)? {
         guard let startDay = self.day(of: start) else { return nil }
         let endDay = end.flatMap { self.day(of: $0) }
@@ -277,12 +255,11 @@ public enum CalendarGeometry {
     /// The horizontal slot for each block of one day, parallel to `blocks`.
     ///
     /// Overlapping blocks sit side by side in lanes, as Apple's Calendar draws them: each cluster
-    /// splits the column into one equal lane per depth it uses, and a block takes its depth's lane.
-    /// Nothing is drawn over anything, so every title stays on its own block. A cascade was tried
-    /// and dropped: three pages within half an hour stacked into a pile whose titles lay over the
-    /// neighbouring blocks, and splitting only the close pairs made one
-    /// day mix two layouts. Lanes are narrow on a crowded hour in a multi-day view, where a block
-    /// too narrow for its title shows its colour alone.
+    /// splits the column into one equal lane per depth it uses. Nothing is drawn over anything, so
+    /// every title stays on its own block. A cascade was rejected: three pages within half an hour
+    /// piled their titles over the neighbouring blocks, and splitting only close pairs made one day
+    /// mix two layouts. Lanes are narrow on a crowded hour in a multi-day view, where a block too
+    /// narrow for its title shows its colour alone.
     public static func slots(for blocks: [SlotInput], columnWidth: CGFloat) -> [Slot] {
         var slots = blocks.map { _ in Slot(x: 0, width: columnWidth) }
 
@@ -317,16 +294,10 @@ public enum CalendarGeometry {
 
     /// The minute a touch in a day column lands on, snapped to a slot.
     ///
-    /// A long press on empty grid means "a page here", and "here" has to be a
-    /// time somebody would actually type. Nobody schedules anything for 14:37,
-    /// so the touch is snapped down to the nearest `slotMinutes` — half an hour
-    /// by default, which is what a calendar's own picker offers. Down rather
-    /// than to the nearest, because a finger resting a little below the 3pm
-    /// rule meant 3pm, and rounding it up to 3:30 would put the page after the
-    /// line the finger was on.
-    ///
-    /// Clamped into the day, so a press at the very bottom of the grid yields
-    /// the last slot rather than midnight tomorrow.
+    /// A press on empty grid means "a page here", at a time somebody would type, so the touch snaps
+    /// down to the nearest `slotMinutes`. Down rather than nearest: a finger resting a little below
+    /// the 3pm rule meant 3pm. Clamped into the day, so the bottom of the grid yields the last slot
+    /// rather than midnight tomorrow.
     public static func slotMinute(
         atY y: CGFloat, metrics: Metrics, slotMinutes: Int = 30
     ) -> Int {
@@ -358,11 +329,8 @@ public enum CalendarGeometry {
         return (Int(range.start), Int(range.end))
     }
 
-    /// The wall-clock string for a minute of a day — `2026-09-14T15:30:00`.
-    ///
-    /// The inverse of `minutesIntoDay`, for the one caller that starts from a
-    /// position rather than a stored value. Seconds are always zero: a slot
-    /// is a whole minute by construction.
+    /// The wall-clock string for a minute of a day, `2026-09-14T15:30:00`; the inverse of
+    /// `minutesIntoDay`. Seconds are always zero.
     public static func wallClock(day: String, minute: Int) -> String {
         let clamped = min(max(0, minute), 24 * 60 - 1)
         return String(format: "%@T%02d:%02d:00", day, clamped / 60, clamped % 60)
@@ -403,10 +371,8 @@ public enum CalendarGeometry {
 
     // MARK: - The now indicator
 
-    /// Where "now" sits in a day column, or nil if that day is not today.
-    ///
-    /// Takes both as wall-clock strings so it is testable without waiting for a
-    /// particular minute to come round.
+    /// Where "now" sits in a day column, or nil if that day is not today. Takes both as wall-clock
+    /// strings so it is testable without waiting for a particular minute.
     public static func nowOffset(now: String, on day: String, metrics: Metrics) -> CGFloat? {
         guard self.day(of: now) == day, let minute = minutesIntoDay(now) else { return nil }
         return metrics.y(atMinute: Double(minute))

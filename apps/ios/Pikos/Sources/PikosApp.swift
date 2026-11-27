@@ -9,35 +9,29 @@ import WidgetKit
 
 @main
 struct PikosApp: App {
-    // No default values: `store` and `sync` are built together in `init` so the
-    // second can read the first, and a default here would construct a
-    // `WorkspaceStore` that is then thrown away.
+    // No default values: `store` and `sync` are built together in `init` so the second can read
+    // the first, and a default would construct a `WorkspaceStore` that is thrown away.
     @State private var store: WorkspaceStore
     @State private var settings = SettingsStore()
     @State private var sync: CalendarSyncStore
     @State private var exports: ExportStore
     @State private var reminders: ReminderScheduler
     @State private var route = Route.shared
-    /// The home screen's search, kept in step with the workspace. Not in the
-    /// environment: nothing but the shell talks to it.
+    /// The home screen's search, kept in step with the workspace. Only the shell talks to it.
     @State private var spotlight: SpotlightIndexer
     @State private var deviceSync: DeviceSync
 
-    /// Held for the life of the app: the notification center keeps only a
-    /// weak reference to its delegate, and a delegate that is dropped is a
-    /// tap on a reminder that opens the app to wherever it last was.
+    /// Held for the life of the app: the notification center keeps only a weak reference to its
+    /// delegate, and a dropped one would leave a reminder's tap opening the app wherever it was.
     private let notificationDelegate: ReminderNotificationDelegate
 
     init() {
-        // App Intents run in this process and reach the router through
-        // `@Dependency`. Registered here, at the one point that runs before any
-        // intent can — an intent may be what launched the app.
+        // App Intents run in this process and reach the router through `@Dependency`. Registered
+        // here because an intent may be what launched the app.
         AppDependencyManager.shared.add { Route.shared }
 
-        // The sync store reads the workspace through a closure rather than
-        // holding it: `WorkspaceStore.start()` opens it asynchronously, so
-        // there is nothing to hand over at construction time and capturing nil
-        // once would leave sync permanently unable to do anything.
+        // The sync store reads the workspace through a closure: `WorkspaceStore.start()` opens it
+        // asynchronously, so capturing nil once would leave sync permanently unable to do anything.
         let pages = WorkspaceStore()
         _store = State(initialValue: pages)
         let calendars = CalendarSyncStore(workspace: { pages.handle })
@@ -56,8 +50,6 @@ struct PikosApp: App {
             await device.resume()
         }
 
-        // The in-place hints. Configured before any view exists so the first
-        // list can already ask whether its tip is due.
         PikosTips.configure()
 
         #if DEBUG
@@ -67,10 +59,8 @@ struct PikosApp: App {
             }
         #endif
 
-        // Reminders. The delegate routes a tap through the same link a widget
-        // uses, and "Complete" through the same store method the checkbox
-        // uses, so a notification is another entry point and not a second
-        // code path.
+        // The delegate routes a tap through the same link a widget uses, and "Complete" through the
+        // same store method as the checkbox, so a notification is not a second code path.
         let delegate = ReminderNotificationDelegate(
             onOpen: { pageId in
                 if let url = URL(string: "pikos://page/\(pageId)") {
@@ -85,13 +75,10 @@ struct PikosApp: App {
         UNUserNotificationCenter.current().delegate = delegate
         ReminderScheduler.registerCategories()
 
-        // The background refresh has to be registered before launch finishes,
-        // which in a SwiftUI app means here. The handler pulls the connected
-        // calendars, then re-plans the reminder horizon over what arrived,
-        // then asks for the next refresh; the workspace may not be open yet
-        // in a background launch, so it is opened on demand. The order is the
-        // point: a meeting that landed in the sync gets its reminder planned
-        // in the same wake.
+        // Registered before launch finishes. The handler pulls the connected calendars, then
+        // re-plans the reminder horizon over what arrived, then asks for the next refresh, so a
+        // meeting that just synced gets its reminder in the same wake. The workspace may not be
+        // open in a background launch, so it is opened on demand.
         // The main queue: the handler is main-actor code, and on the scheduler's own queue the
         // isolation check stopped the app every time a refresh ran.
         BGTaskScheduler.shared.register(
@@ -155,13 +142,11 @@ struct PikosApp: App {
             ) { _ in
                 Task { await deviceSync.localChangesHappened() }
             }
-            // Opening the workspace runs migrations, so it happens once, in
-            // the app process. A widget must never be the process that
-            // migrates.
+            // Opening the workspace runs migrations, so it happens once, in the app process: a
+            // widget must never be the one that migrates.
             .task {
                 await store.ensureStarted()
-                // An intent or deep link may have arrived while the
-                // workspace was still opening.
+                // An intent or deep link may have arrived while the workspace was opening.
                 route.applyPending(to: store)
                 #if DEBUG
                     await DemoWorkspace.applyScreen(route: route, store: store)
@@ -176,9 +161,8 @@ struct PikosApp: App {
                 }
             }
             .onOpenURL { url in route.handle(url, store: store) }
-            // A page chosen from the home screen's search. Routed through
-            // the same link a widget tap uses, so Spotlight is another
-            // entry point and not a second code path.
+            // A page chosen from the home screen's search goes through the same link a widget tap
+            // uses, so Spotlight is not a second code path.
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
                 guard let pageId = SpotlightIndexer.pageId(from: activity),
                     let url = URL(string: "pikos://page/\(pageId)")
@@ -212,11 +196,9 @@ struct RootView: View {
     @Environment(\.horizontalSizeClass) private var widthClass
     @Environment(\.verticalSizeClass) private var heightClass
 
-    /// The page that was open when the app was last put away, and when.
-    ///
-    /// Scene storage rather than a preference: it is this window's state,
-    /// which on iPad is one of several, and it is meant to be forgotten with
-    /// the scene rather than kept forever. See `restoreOpenPage`.
+    /// The page that was open when the app was last put away, and when. Scene storage rather
+    /// than a preference: it is this window's state, one of several on iPad, and is forgotten with
+    /// the scene. See `restoreOpenPage`.
     @SceneStorage("pikos.openPage") private var openPage = ""
     @SceneStorage("pikos.openPageAt") private var openPageAt: Double = 0
 
@@ -249,16 +231,12 @@ struct RootView: View {
         .sheet(isPresented: $route.isSettingsPresented) { SettingsScreen() }
         .sheet(isPresented: $route.isTrashPresented) { TrashSheet() }
         .sheet(isPresented: $route.isFolderManagerPresented) { FolderManagerSheet() }
-        // One sheet for quick add, wherever it was asked for. The toolbar
-        // button, the empty state and a `pikos://quick-add` link all set the
-        // same flag, so there is one place the prefill is read and one place
-        // it is cleared.
+        // One sheet for quick add, wherever it was asked for, so the prefill is read and cleared
+        // in one place.
         .sheet(
             isPresented: $route.isQuickAddPresented,
-            // Otherwise the next manual open would inherit the last link's
-            // text, or the last calendar slot's time. `onDismiss` is declared
-            // before `content`, so it cannot be written as a second trailing
-            // closure.
+            // Otherwise the next manual open would inherit the last link's text or calendar slot.
+            // `onDismiss` is declared before `content`, so it cannot be a second trailing closure.
             onDismiss: { route.clearQuickAddPrefill() }
         ) {
             QuickAddSheet(
@@ -267,8 +245,8 @@ struct RootView: View {
                 prefillMinutes: route.quickAddPrefillMinutes,
                 context: route.quickAddContext)
         }
-        // Errors surface here, above every tab and sheet, so a write that
-        // fails on the calendar is not an alert waiting on the page list.
+        // Errors surface above every tab and sheet, so a failed write on the calendar is not an
+        // alert waiting on the page list.
         .alert(
             "Something went wrong",
             isPresented: Binding(
@@ -287,19 +265,15 @@ struct RootView: View {
             actions: { Button("OK", role: .cancel) {} },
             message: { Text(store.startupNote ?? "") }
         )
-        // Coming back to the foreground re-reads the workspace. A page added
-        // by Siri, a widget or a Shortcut lands while the app is suspended,
-        // and without this the list shows the world as it was when the user
-        // left — and a page they just dictated is missing from it.
+        // A page added by Siri, a widget or a Shortcut lands while the app is suspended, so coming
+        // back to the foreground re-reads the workspace.
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
                 guard !store.isLoading else { return }
-                // The list first, so what is already here shows at once;
-                // then the calendars, if it has been a while, and the list
-                // again if they brought anything. That second refresh bumps
-                // the version, which is what re-plans the reminders for
-                // whatever arrived.
+                // The list first so what is here shows at once, then the calendars if it has been a
+                // while, then the list again if they brought anything: that second refresh bumps the
+                // version, which re-plans the reminders.
                 Task {
                     await store.refresh()
                     let before = calendars.lastAutomaticSyncAt
@@ -309,23 +283,17 @@ struct RootView: View {
                     }
                 }
             case .background:
-                // Leaving is the last moment this process is sure to run for
-                // a while: re-plan the horizon so it is as fresh as it can be,
-                // and ask to be woken to extend it.
+                // Leaving is the last moment this process is sure to run for a while: re-plan the
+                // horizon and ask to be woken to extend it.
                 Task { await reminders.sync() }
                 ReminderScheduler.scheduleBackgroundRefresh()
             default:
                 break
             }
         }
-        // Every write bumps the version, and every write can move, add or
-        // remove a reminder — and change what a widget shows. Re-planning is
-        // one query and a few dozen requests, and a widget reload is a
-        // request the system batches, so both simply follow the version
-        // rather than guessing which writes matter. Debounced by
-        // cancellation: a burst of writes — a bulk move — plans once, after
-        // the last one. Without the reload here, a page ticked in the app
-        // stayed on the home screen until the widget's hourly refresh.
+        // Every write can move, add or remove a reminder and change what a widget shows, so both
+        // follow the version rather than guessing which writes matter. Debounced by cancellation:
+        // a bulk move plans once, after the last write.
         .task(id: store.dataVersion) {
             guard store.dataVersion > 0 else { return }
             try? await Task.sleep(for: .seconds(1))
@@ -346,12 +314,8 @@ struct RootView: View {
         .onChange(of: settings.defaultReminderMinutes) { _, _ in
             Task { await reminders.sync() }
         }
-        // An App Intent can ask for a scope at any time, not only during
-        // launch. `Route.showToday()` has no store to move — it runs from
-        // `perform()`, which has no view — so it records the request and this
-        // applies it. Without it, "Open today" on an app that is already
-        // running switched the tab and left the list showing whatever folder
-        // the user was last in.
+        // An App Intent can ask for a scope at any time. `Route.showToday()` has no store to move
+        // (it runs from `perform()`, which has no view), so it records the request and this applies it.
         .onChange(of: route.pendingScope) { _, pending in
             guard pending != nil else { return }
             route.applyPending(to: store)
@@ -370,18 +334,11 @@ struct RootView: View {
 
     /// Land back on the page that was open, if the app was only just put away.
     ///
-    /// iOS ends a suspended app without telling it, and a person who was in
-    /// the middle of a note ten minutes ago expects to come back to that note,
-    /// not to the list. So the page is restored — but only within a few hours.
-    /// The app's promise is that it opens on Today, and a note from three days
-    /// ago appearing over the morning's list is that promise broken by a
-    /// convenience. The window is the difference between "I was interrupted"
-    /// and "I am starting a day".
-    ///
-    /// A link or an intent that arrived during launch has already pushed a
-    /// page, and wins: the path is left alone if it is not empty. A page that
-    /// has since been trashed — here with the editor closed, or on another
-    /// device — is not brought back.
+    /// iOS ends a suspended app without telling it, so the page is restored, but only within a few
+    /// hours: the app opens on Today, and a note from three days ago over the morning's list breaks
+    /// that. A link or intent that arrived during launch has already pushed a page and wins, so a
+    /// non-empty path is left alone. A page trashed since, here or on another device, is not brought
+    /// back.
     private func restoreOpenPage() async {
         guard route.path.isEmpty, !openPage.isEmpty, let workspace = store.handle else { return }
         let saved = Date(timeIntervalSince1970: openPageAt)

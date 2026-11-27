@@ -4,13 +4,9 @@ import SwiftUI
 
 /// What a page action needs to know, whichever record the page arrived as.
 ///
-/// A listed page is a `PageSummary`; an open one is a `Page`. Both carry the
-/// same handful of facts the menu and its sheets turn on — which folder, which
-/// priority, whether it repeats, whether a calendar owns it — and neither is a
-/// type this repo declares, so a conformance to share them is a name the next
-/// binding regeneration could collide with. One small value type built from
-/// either is what lets the editor offer the list's menu without a second copy
-/// of it.
+/// A listed page is a `PageSummary` and an open one a `Page`. Neither is a type this repo
+/// declares, so a conformance to share their facts could collide with the next binding
+/// regeneration. One value type built from either lets the editor offer the list's menu.
 struct PageFacts: Identifiable, Hashable {
     let id: String
     let title: String
@@ -49,10 +45,8 @@ struct PageFacts: Identifiable, Hashable {
         scheduleLocked = page.scheduleLocked
     }
 
-    /// From a calendar block. The dates are the block's own, which for a
-    /// projected occurrence are that occurrence's rather than the head's —
-    /// right for everything the menu shows, since the schedule sheet is
-    /// withheld from a repeating page anyway.
+    /// From a calendar block. The dates are the block's own, so a projected occurrence's rather
+    /// than the head's, which is right for the menu since a repeating page gets no schedule sheet.
     init(_ entry: CalendarEntry) {
         id = entry.pageId
         title = entry.title
@@ -87,8 +81,7 @@ struct PageFacts: Identifiable, Hashable {
 
 /// What a page menu has asked the screen to show.
 ///
-/// Held by the screen and handed to the menu as a binding, so the sheets are
-/// declared once per screen — SwiftUI wants a `.sheet` on a view that stays
+/// Held by the screen and handed to the menu as a binding: a `.sheet` wants a view that stays
 /// put, and a menu is not one.
 struct PageActionState {
     enum Sheet: Identifiable {
@@ -142,8 +135,7 @@ struct PageActionState {
         }
     }
 
-    /// Bound to the presence of a page rather than a separate flag, so the two
-    /// cannot disagree about whether the alert is up.
+    /// Bound to the presence of a page, so the flag and the page cannot disagree.
     var isRenaming: Bool {
         get { renaming != nil }
         set { if !newValue { renaming = nil } }
@@ -152,23 +144,18 @@ struct PageActionState {
 
 /// The long press menu: the desktop's right-click menu, with the likeliest changes first.
 ///
-/// Also the editor's page menu and a calendar block's, so a page offers the same verbs in the same
-/// places wherever it is held. The top row finishes the page or sends it to today or tomorrow, so
-/// the commonest edits are a hold and one tap; everything needing a choice from a list sits below.
+/// Also the editor's page menu and a calendar block's, so a page offers the same verbs wherever
+/// it is held. The top row finishes the page or sends it to today or tomorrow.
 ///
-/// What a calendar owns is withheld from its pages. The title, dates and placement of a mirror
-/// belong upstream and the workspace refuses all three, so an entry here would only ever produce
-/// an error alert. Tags and priority stay: they are user-layer, and the lock covers what a meeting
-/// is, not what somebody files it under. Delete stays too: a mirror can be removed locally, and
-/// that path already knows to keep the tombstone.
+/// What a calendar owns is withheld from its pages: a mirror's title, dates and placement
+/// belong upstream and the workspace refuses all three. Tags, priority and Delete stay; a
+/// mirror can be removed locally, and that path keeps the tombstone.
 struct PageActionsMenu: View {
     let page: PageFacts
     @Binding var state: PageActionState
     /// Off in the editor, where the title is edited in place.
     var showsRename = true
-    /// Runs after the page has been moved to the trash. The list needs nothing
-    /// here — its refresh removes the row — but an editor showing the page
-    /// has to leave.
+    /// Runs after the page has been moved to the trash, so an editor showing the page can leave.
     var afterDelete: () -> Void = {}
 
     @Environment(WorkspaceStore.self) private var store
@@ -303,13 +290,11 @@ struct PageWhenItems: View {
     }
 }
 
-/// The four priorities, paired with the numbers they are stored as and the
-/// colour each one shows in.
+/// The four priorities, paired with the numbers they are stored as and the colour each one
+/// shows in.
 ///
-/// Low number first — 1 urgent through 4 low — which runs the opposite way to
-/// the names. The pairing is written out here rather than derived so the
-/// menu's order, the column's meaning and the row's colour cannot drift apart.
-/// The colours follow the desktop's `PRIORITY_COLORS`, through its tokens.
+/// Low number first, 1 urgent through 4 low, the opposite way to the names. Written out rather
+/// than derived so the menu's order, the column's meaning and the row's colour cannot drift.
 enum PagePriority: Int64, CaseIterable, Identifiable {
     case urgent = 1
     case high = 2
@@ -362,26 +347,22 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
         self == .high ? .textDueSoon : color
     }
 
-    /// The priority a stored number names, or nil for none and for anything
-    /// out of range — a value this build does not know is shown as nothing
-    /// rather than as the nearest colour.
+    /// The priority a stored number names, or nil for none and anything out of range, which is
+    /// shown as nothing rather than as the nearest colour.
     init?(stored: Int64) {
         self.init(rawValue: stored)
     }
 }
 
 extension View {
-    /// Attach the sheets and the rename alert a `PageActionsMenu` can ask for.
-    ///
-    /// Applied once per screen that hosts the menu, on a view that stays put
-    /// while the menu comes and goes.
+    /// Attach the sheets and the rename alert a `PageActionsMenu` can ask for, once per screen,
+    /// on a view that stays put while the menu comes and goes.
     func pageActionSheets(_ state: Binding<PageActionState>) -> some View {
         modifier(PageActionSheets(state: state))
     }
 }
 
-/// Where to file a page, chosen in one tap: the sheet closes on the choice and the notice offers
-/// the old folder back.
+/// Where to file a page, chosen in one tap: the sheet closes on the choice.
 private struct FolderPickerSheet: View {
     let page: PageFacts
 
@@ -434,9 +415,6 @@ private struct PageActionSheets: ViewModifier {
                 case .folder(let page): FolderPickerSheet(page: page)
                 }
             }
-            // An alert rather than an inline edit: a row that becomes editable
-            // on tap competes with the tap that opens the page, and a phone has
-            // no hover to disambiguate.
             // Calendar's question: this date is a skip, which undoes, and all of them is the delete.
             .confirmationDialog(
                 deletionTitle, isPresented: $state.isAskingAboutSeries, titleVisibility: .visible,
@@ -455,6 +433,8 @@ private struct PageActionSheets: ViewModifier {
             } message: { _ in
                 Text("It repeats. Skip just this date, or delete it and every date it has left.")
             }
+            // An alert rather than an inline edit: an editable row competes with the tap that
+            // opens the page, and a phone has no hover to disambiguate.
             .alert("Rename page", isPresented: $state.isRenaming) {
                 TextField("Title", text: $state.renameText)
                 Button("Cancel", role: .cancel) { state.renaming = nil }

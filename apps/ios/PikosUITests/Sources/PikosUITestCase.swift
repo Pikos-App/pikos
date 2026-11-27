@@ -1,23 +1,14 @@
 import SQLite3
 import XCTest
 
-/// Shared setup for every UI test: a freshly launched app over an empty
-/// workspace.
+/// Shared setup for every UI test: a freshly launched app over an empty workspace.
 ///
-/// The isolation is the point. A UI test that inherits whatever the last one
-/// left behind fails in an order-dependent way, which is the failure people
-/// learn to re-run rather than read. Each test here gets its own directory,
-/// handed to the app through `WorkspaceLocation.workspaceOverrideKey` — the one
-/// seam `XCUIApplication` has, since it can set the environment of the process
-/// it launches but cannot reach inside it.
+/// Each test gets its own directory, handed to the app through `WorkspaceLocation.workspaceOverrideKey`,
+/// the one seam `XCUIApplication` has. A test that inherits the last one's state fails in an
+/// order-dependent way, and without the override the app would open the App Group container, whose
+/// entitlement an unsigned simulator build may not honour.
 ///
-/// That also keeps CI out of the provisioning question. Without the override
-/// the app would open the App Group container, and whether a simulator honours
-/// that entitlement on an unsigned build is a question about certificates
-/// rather than about the app.
-/// `@MainActor` because every `XCUIApplication` member is: the whole class,
-/// so a subclass's tests inherit it and neither this file nor theirs has to
-/// annotate a query at a time.
+/// `@MainActor` because every `XCUIApplication` member is; subclasses inherit it.
 @MainActor
 class PikosUITestCase: XCTestCase {
     private(set) var app: XCUIApplication!
@@ -38,9 +29,7 @@ class PikosUITestCase: XCTestCase {
     // everything below — the app handle included — is main-actor bound.
     override func setUp() async throws {
         try await super.setUp()
-        // A failed assertion should stop the test at the point it failed. A UI
-        // test that carries on after the screen is not what it expected reports
-        // the fifth symptom of the first problem.
+        // A failed assertion stops the test where it failed, rather than reporting later symptoms.
         continueAfterFailure = false
 
         workspaceDirectory = FileManager.default.temporaryDirectory
@@ -70,13 +59,8 @@ class PikosUITestCase: XCTestCase {
         try await super.tearDown()
     }
 
-    // MARK: - Shared steps
-
-    /// Create a page through quick add, the way a person would.
-    ///
-    /// Goes through the real sheet rather than seeding the database, because
-    /// the sheet is half of what these tests are for: a page that appears in
-    /// the list proves the parse, the write and the refresh all happened.
+    /// Create a page through quick add, the way a person would. It goes through the real sheet,
+    /// because a page in the list proves the parse, the write and the refresh all happened.
     func quickAdd(_ line: String) {
         app.buttons["New page"].firstMatch.tap()
 
@@ -102,9 +86,7 @@ class PikosUITestCase: XCTestCase {
 
     /// The row for a page, by its title.
     ///
-    /// `containing` rather than an exact label: the row is one accessibility
-    /// element combining the title with its date and tags, so an exact match
-    /// would break the moment a page gains either.
+    /// `containing` rather than an exact label: the row is one accessibility element combining title, date and tags.
     func row(titled title: String) -> XCUIElement {
         app.cells.containing(.staticText, identifier: title).firstMatch
     }

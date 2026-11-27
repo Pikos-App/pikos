@@ -5,9 +5,6 @@ import TipKit
 
 /// The list pane: the view being shown, the rest of today under it, and every verb a row has.
 /// The day under it is left out wherever the calendar is on screen beside it.
-///
-/// The title opens the switcher as a drawer, the desktop's sidebar folded away; the sort/select
-/// menu is the header's one tool. Search lives in the bottom bar, in reach from either pane.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -282,9 +279,9 @@ struct PageListScreen: View {
                 ? Color.surfaceSelected : Color.surfacePrimary)
         .listRowSeparatorTint(.borderSecondary)
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
-        // `PKOS-0150`: the likeliest day, any other day, and a folder. The checkbox completes, so
-        // nothing is on the other side. Delete comes last and a full swipe never reaches it
-        // (`PKOS-0204`), so a calendar's page, with nothing else here, takes no full swipe.
+        // The likeliest day, any other day, and a folder. The checkbox completes, so nothing is on
+        // the other side. A full swipe never reaches Delete, so a calendar's page, with nothing else
+        // here, takes no full swipe.
         .swipeActions(edge: .trailing, allowsFullSwipe: !page.scheduleLocked) {
             if !page.scheduleLocked {
                 if !page.isRecurring {
@@ -364,8 +361,6 @@ struct PageListScreen: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    /// The day a page is likeliest to go to next: today for anything not yet due by today, and
-    /// tomorrow for what is.
     private static func swipeDay(for scheduledStart: String?) -> WhenChoice {
         guard let scheduledStart else { return .today }
         return String(scheduledStart.prefix(10)) <= DayLabel.today() ? .tomorrow : .today
@@ -441,8 +436,6 @@ struct PageListScreen: View {
         orderedSections.filter { !$0.pages.isEmpty }
     }
 
-    /// Date views arrive in schedule order, and a folder or the Inbox in the reader's chosen order,
-    /// read that way a window at a time.
     private var orderedSections: [WorkspaceStore.Section] { store.sections }
 
     /// Only a manual order can be arranged by hand, as on the desktop, and a date view is always in
@@ -560,7 +553,6 @@ struct PageListScreen: View {
 
     // MARK: - Selecting several
 
-    /// Finish, date, file, delete: one store call each and one notice, whose Undo covers a delete.
     private var selectionBar: some View {
         HStack(spacing: 0) {
             verb("Complete", systemImage: "checkmark.circle") {
@@ -682,7 +674,6 @@ struct PageListScreen: View {
     }
 }
 
-/// The pages select mode is dating through the When sheet.
 private struct SelectedPages: Identifiable {
     let id = UUID()
     let pages: [PageSummary]
@@ -725,7 +716,6 @@ private struct SelectsOnTap: ViewModifier {
     }
 }
 
-/// Lifting a row carries the page to the day under the list.
 private struct SchedulableRow: ViewModifier {
     let page: PageFacts
     let isEnabled: Bool

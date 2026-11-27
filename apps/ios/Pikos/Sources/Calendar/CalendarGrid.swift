@@ -3,18 +3,14 @@ import PikosSupport
 import SwiftUI
 
 /// The day columns: an all-day band at the top, an hour grid below.
-///
-/// Takes entries already resolved for the range — real pages and the occurrences projected from
-/// recurrence rules, indistinguishable by the time they get here. Structure comes from the shared
-/// Rust; this turns it into points, drawn the way the desktop draws its week.
+/// Entries arrive already resolved: real pages and projected occurrences look alike here.
 struct CalendarGrid: View {
     let days: [String]
     let entries: [CalendarEntry]
     let now: String
-    /// Points per hour before Dynamic Type is applied — the reader's calendar density setting.
+    /// Points per hour before Dynamic Type, from the calendar density setting.
     let hourHeightBase: CGFloat
     let folderColors: [String: Color]
-    /// The sheets a block's page menu can open, owned by the screen.
     @Binding var actions: PageActionState
     let onOpen: (String) -> Void
     /// Tick or untick a one-off block, which *is* its page.
@@ -26,17 +22,12 @@ struct CalendarGrid: View {
     /// A press on empty grid, let go: the day, the minute it starts, and how long it was dragged
     /// out to, or nil when the finger never left the quarter hour it pressed.
     let onCreate: (String, Int, Int?) -> Void
-    /// A block held, moved and let go over an hour: the page, the day and the snapped minute.
     let onDrop: (PageFacts, String, Int) -> Void
-    /// A page carried onto a day's all-day strip and let go: the page and the day.
     let onDropAllDay: (PageFacts, String) -> Void
 
-    /// The press is the one gesture on the grid with no visible target, so it is felt.
-    /// The block a press on empty grid is drawing out, until the finger lifts.
     @State private var stretch: Stretch?
     @State private var allDayExpanded = false
     @State private var hover: DropHover?
-    /// The day whose all-day strip a carried page is over.
     @State private var allDayHover: String?
     @State private var drops = 0
 
@@ -94,8 +85,8 @@ struct CalendarGrid: View {
         .modifier(GridFeedback(stretch: stretch, hover: hover, drops: drops))
     }
 
-    /// The hours fade out under the floating bar rather than run into it: a label half under the
-    /// bar's edge read as clipped ("5 PN"). The bar only floats over the grid in the single layout.
+    /// The hours fade out under the floating bar, which only floats over the grid in the single
+    /// layout: a label half under its edge read as clipped ("5 PN").
     private var barFade: some View {
         LinearGradient(
             stops: [
@@ -255,7 +246,6 @@ struct CalendarGrid: View {
         .accessibilityActions { if let entry { occurrenceActions(entry) } }
     }
 
-    /// The day a carried page would become an all-day page on.
     private func allDayDropGhost(columnWidth: CGFloat, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
             .fill(.surfaceSelected)
@@ -336,8 +326,6 @@ struct CalendarGrid: View {
         }
     }
 
-    /// Opens a folded band or folds an open one, from the gutter beside it, as the desktop's band
-    /// does from its own gutter.
     private func bandToggle(_ band: CalendarGeometry.Band, isFolded: Bool) -> some View {
         Button {
             setFolded(band, !isFolded)
@@ -355,7 +343,6 @@ struct CalendarGrid: View {
                 : (isFolded ? "Open the late hours" : "Fold the late hours"))
     }
 
-    /// A folded band across every day: a tap opens it, and each day says how many pages it holds.
     private func foldedBand(_ band: CalendarGeometry.Band, columnWidth: CGFloat) -> some View {
         let height = band == .top ? metrics.topBandHeight : metrics.bottomBandHeight
         let range =
@@ -514,7 +501,7 @@ struct CalendarGrid: View {
                         }
                     )
                     .frame(width: max(slot.width - 3, 1), height: placed.height)
-                    // Without it VoiceOver and the UI tests got the block as the whole column under it.
+                    // Without it VoiceOver and the UI tests see the block as the column under it.
                     .contentShape(.accessibility, Rectangle())
                     .onTapGesture { onOpen(entry.pageId) }
                     .contextMenu { occurrenceMenu(entry) }
@@ -551,7 +538,6 @@ struct CalendarGrid: View {
         .padding(.leading, columnWidth * CGFloat(index))
     }
 
-    /// Where a carried block would land, drawn as the day under the list draws it.
     private func dropGhost(_ page: PageFacts, day: String, minute: Int, width: CGFloat) -> some View {
         let dropped = CalendarGeometry.dropSchedule(
             day: day, minute: minute, previousStart: page.scheduledStart, previousEnd: page.scheduledEnd)
@@ -590,7 +576,7 @@ struct CalendarGrid: View {
     }
 
     /// A press held on empty grid drops a quarter-hour block there, and the finger then draws it
-    /// out (`PKOS-0149`). Let go without moving off that quarter, it opens quick add on the slot
+    /// out. Let go without moving off that quarter, it opens quick add on the slot
     /// with no length, as a plain press always has.
     private func create(day: String, from start: CGPoint, to now: CGPoint) {
         let drawn = stretched(day: day, from: start, to: now)
@@ -605,7 +591,6 @@ struct CalendarGrid: View {
         return Stretch(day: day, start: range.start, end: range.end)
     }
 
-    /// The block being drawn out, with the range it would get.
     private func stretchGhost(_ stretch: Stretch, width: CGFloat) -> some View {
         let start = CalendarGeometry.wallClock(day: stretch.day, minute: stretch.start)
         let end = CalendarGeometry.wallClock(day: stretch.day, minute: min(stretch.end, 24 * 60 - 1))
@@ -692,7 +677,6 @@ struct CalendarGrid: View {
         }
     }
 
-    /// The long-press verbs as VoiceOver actions, which is where a screen reader expects them.
     @ViewBuilder
     private func occurrenceActions(_ entry: CalendarEntry) -> some View {
         Button("Open") { onOpen(entry.pageId) }
@@ -741,7 +725,6 @@ struct CalendarGrid: View {
     // MARK: - Constants and labels
 
     private static let gutterWidth: CGFloat = 52
-    /// How far above the bar the fade starts.
     private static let barFadeLead: CGFloat = 16
     private static let hourLabelClearance: CGFloat = 12
     private static let timedTopInset: CGFloat = 8
@@ -802,7 +785,6 @@ struct CalendarGrid: View {
     }
 }
 
-/// The day and quarter hour a carried block is over.
 /// What the grid's gestures feel like: a thud when a block appears under a held finger, a tick for
 /// each quarter hour it is drawn across, and a success on a drop.
 private struct GridFeedback: ViewModifier {
@@ -820,7 +802,7 @@ private struct GridFeedback: ViewModifier {
 }
 
 /// Records the hour at the top of the grid as the person scrolls. iOS 17 has no scroll geometry
-/// to read, so there the grid opens on the hour before now, as it always did.
+/// to read, so there the grid opens on the hour before now.
 private struct RemembersTopHour: ViewModifier {
     let metrics: CalendarGeometry.Metrics
     let topInset: CGFloat
@@ -850,7 +832,6 @@ private struct OpensAtHour: ViewModifier {
     let remembered: Int?
     let opening: Int
     let proxy: ScrollViewProxy
-    /// Where an hour sits in the scroll content.
     let offset: (Int) -> CGFloat
 
     func body(content: Content) -> some View {

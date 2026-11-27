@@ -56,8 +56,6 @@ struct SelectionMark: View {
 }
 
 /// One page in the list, without its checkbox — see `CompletionToggle`.
-///
-/// The desktop's row: title and date on one line, one quiet line of detail under it.
 struct PageRow: View {
     let page: PageSummary
     /// On in the date views, where rows from every folder sit together; off inside a folder.
