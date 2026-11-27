@@ -936,6 +936,58 @@ async fn exdate_merge_ops_preserve_interleaved_writes() {
 }
 
 #[tokio::test]
+async fn exdate_ops_refuse_a_stored_list_that_is_not_json_rather_than_replace_it() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("head", "Series"))
+        .await
+        .unwrap();
+    let rule = create_recurrence_rule_impl(
+        &pool,
+        NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-10".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let damaged = "[\"2026-06-10\",";
+    sqlx::query("UPDATE page_recurrence_rules SET rrule_exdates = ? WHERE id = ?")
+        .bind(damaged)
+        .bind(&rule.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let add_err = add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-06-11".into()])
+        .await
+        .unwrap_err();
+    let remove_err = remove_rule_exdate_impl(&pool, rule.id.clone(), "2026-06-12".into())
+        .await
+        .unwrap_err();
+    for err in [add_err, remove_err] {
+        let AppError::Internal(why) = err else {
+            panic!("expected Internal, got {err:?}");
+        };
+        assert!(
+            why.contains(&rule.id) && why.contains("rrule_exdates"),
+            "{why}"
+        );
+    }
+
+    let stored: String =
+        sqlx::query_scalar("SELECT rrule_exdates FROM page_recurrence_rules WHERE id = ?")
+            .bind(&rule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, damaged, "the stored list is left for repair");
+}
+
+#[tokio::test]
 async fn exdate_ops_error_on_missing_rule() {
     let pool = test_pool().await;
     let add_err = add_rule_exdates_impl(&pool, "missing".into(), vec!["2026-06-10".into()])

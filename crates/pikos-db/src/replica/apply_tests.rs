@@ -361,6 +361,72 @@ async fn an_edit_made_before_a_purge_loses_to_it() {
     assert!(get_page(&phone, &page.id).await.unwrap().is_none());
 }
 
+#[test]
+fn a_failed_apply_names_its_record_and_keeps_the_kind_of_failure() {
+    let image = RecordName::live(Entity::Asset, "a.png");
+
+    let damaged = super::naming(AppError::Corrupt("file is damaged".into()), &image);
+    let missing = super::naming(AppError::NotFound("download gone".into()), &image);
+
+    assert_eq!(damaged.kind(), "Corrupt");
+    assert_eq!(missing.kind(), "NotFound");
+    assert!(damaged.to_string().contains("asset:a.png"), "{damaged}");
+}
+
+#[test]
+fn a_tag_record_is_named_without_its_tag() {
+    let tagged = RecordName::live(Entity::PageTag, "p1/salary review");
+
+    let named = super::naming(AppError::Internal("write failed".into()), &tagged);
+
+    assert!(!named.to_string().contains("salary"), "{named}");
+}
+
+#[tokio::test]
+async fn a_child_whose_page_has_an_unreadable_tombstone_waits_rather_than_treat_it_as_none() {
+    let (mac, phone) = (device().await, device().await);
+    let page = create_page_impl(&mac, new_page("Groceries")).await.unwrap();
+    create_page_reminder(&mac, &page.id, 15).await.unwrap();
+    converge(&mac, &phone).await;
+    sqlx::query("UPDATE replica_clocks SET tomb = 'not a clock' WHERE entity = ? AND key = ?")
+        .bind(Entity::Page.prefix())
+        .bind(&page.id)
+        .execute(&phone)
+        .await
+        .unwrap();
+
+    create_page_reminder(&mac, &page.id, 30).await.unwrap();
+    let landed = send(&mac, &phone).await;
+
+    assert_eq!(landed.held, 1);
+    assert_eq!(leads(&phone, &page.id).await, vec![15]);
+}
+
+#[tokio::test]
+async fn an_edit_to_a_row_unchanged_since_sync_began_waits_when_the_base_clock_is_unreadable() {
+    let mac = device().await;
+    let phone = test_pool().await;
+    insert_test_page(&phone, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    start(&phone).await.unwrap();
+    insert_test_page(&mac, TestPage::new("p1", "Groceries, Saturday"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE replica_meta SET base_clock = 'not a clock' WHERE id = 1")
+        .execute(&phone)
+        .await
+        .unwrap();
+
+    let landed = send(&mac, &phone).await;
+
+    assert_eq!(landed.held, 2, "the page and its body");
+    assert_eq!(
+        get_page(&phone, "p1").await.unwrap().unwrap().title,
+        "Groceries"
+    );
+}
+
 #[tokio::test]
 async fn a_child_that_arrives_before_its_page_waits_for_it() {
     let (mac, phone) = (device().await, device().await);

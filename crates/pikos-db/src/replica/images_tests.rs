@@ -112,6 +112,28 @@ async fn turning_sync_on_over_pages_that_already_show_photos_sends_every_photo()
 }
 
 #[tokio::test]
+async fn an_image_whose_clock_is_unreadable_is_refused_rather_than_sent_as_new() {
+    let (mac, mac_images) = with_images().await;
+    let name = saved_image(&mac_images, b"a photo of the harbour");
+    page_showing(&mac, "Lisbon", &name).await;
+    // Building the body is what queues the image it shows.
+    build(&mac, &pending(&mac, 1_000).await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE replica_clocks SET clocks = 'not a clock' WHERE entity = ? AND key = ?")
+        .bind(Entity::Asset.prefix())
+        .bind(&name)
+        .execute(&mac)
+        .await
+        .unwrap();
+
+    let names = pending(&mac, 1_000).await.unwrap();
+    let err = build(&mac, &names).await.err().expect("refused");
+
+    assert!(err.to_string().contains(&name), "{err}");
+}
+
+#[tokio::test]
 async fn an_image_is_sent_once_and_never_back() {
     let (mac, mac_images) = with_images().await;
     let (phone, _) = with_images().await;

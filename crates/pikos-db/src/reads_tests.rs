@@ -176,6 +176,18 @@ async fn badges_count_a_synced_page_on_the_day_it_falls_in_the_viewers_zone() {
     assert_eq!(tokyo.today, 3, "Paris has moved to the 16th");
 }
 
+#[tokio::test]
+async fn badges_in_a_zone_nothing_knows_are_refused_rather_than_leave_out_synced_pages() {
+    let pool = test_pool().await;
+    page(&pool, "paris", None, Some("2026-06-15T09:00:00"), None).await;
+    synced(&pool, "paris", "Europe/Paris").await;
+
+    let today = NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let err = count_views(&pool, "Mars/Olympus", today).await.unwrap_err();
+
+    assert!(matches!(err, crate::error::AppError::Invalid(_)), "{err:?}");
+}
+
 async fn ids_in(
     pool: &SqlitePool,
     start: Option<&str>,

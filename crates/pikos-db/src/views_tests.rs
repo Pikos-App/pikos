@@ -573,3 +573,22 @@ async fn an_all_day_page_sorts_after_its_days_timed_pages_and_before_the_next_da
     let tomorrow = paged(&pool, &dated(Some(day(16)), day(17)), 50).await;
     assert_eq!(tomorrow, ["next-midnight"]);
 }
+
+#[tokio::test]
+async fn a_dated_view_in_a_zone_nothing_knows_is_refused_rather_than_leave_out_synced_pages() {
+    let pool = workspace().await;
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let key = ViewKey {
+        scope: ViewScope::Everywhere,
+        sort: ViewSort::Date,
+        zone: "Mars/Olympus".into(),
+        dates: Some(DateBounds {
+            from: Some(today),
+            until: today.succ_opt().unwrap(),
+        }),
+    };
+
+    let err = list_view_ids(&pool, &key, None, None).await.unwrap_err();
+
+    assert!(matches!(err, AppError::Invalid(_)), "{err:?}");
+}

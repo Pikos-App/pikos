@@ -27,8 +27,8 @@ pub use engine::{
 };
 pub use label::{rrule_to_label, rrule_to_short_label};
 pub use rule::{
-    build_rrule, extract_until, parse_rrule, rewrite_until_with, rrule_edit_would_degrade, Freq,
-    RecurrenceError, RecurrenceOptions,
+    build_rrule, extract_until, parse_rrule, rewrite_until_with, rrule_edit_would_degrade,
+    unread_parts, Freq, RecurrenceError, RecurrenceOptions,
 };
 
 /// A naive wall-clock value: a date, optionally with a time. Time-less values are

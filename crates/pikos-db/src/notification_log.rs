@@ -11,11 +11,16 @@ use pikos_recurrence::{zoned, WallClock};
 use sqlx::SqlitePool;
 
 /// Recurrence-derivation failures reach the scheduler as a content-free `sqlx::Error`
-/// (see the module doc); a real DB error carries through as itself.
+/// (see the module doc); a real DB error carries through as itself. The scheduler logs only the
+/// class of any other, so it is logged here with what failed.
 fn derivation_error(e: crate::error::AppError) -> sqlx::Error {
     match e {
         crate::error::AppError::Db(e) => e,
-        _ => sqlx::Error::Protocol("recurrence derivation failed".into()),
+        other => {
+            let summary = other.log_summary();
+            log::warn!("recurrence derivation failed: {summary}");
+            sqlx::Error::Protocol(format!("recurrence derivation failed: {summary}"))
+        }
     }
 }
 

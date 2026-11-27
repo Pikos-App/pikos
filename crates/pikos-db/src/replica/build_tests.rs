@@ -36,6 +36,31 @@ async fn a_record_is_built_from_the_row_as_it_is_now() {
 }
 
 #[tokio::test]
+async fn an_unreadable_clock_slot_refuses_the_build_rather_than_shift_the_rest() {
+    let pool = started().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET title = 'Groceries, Saturday' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE replica_clocks
+         SET clocks = substr(clocks, 1, 20) || 'not-a-clock-at-all!!' || substr(clocks, 41)
+         WHERE entity = ? AND key = 'p1'",
+    )
+    .bind(Entity::Page.prefix())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let err = build(&pool, &[page("p1")]).await.err().expect("refused");
+
+    assert!(err.to_string().contains("page:p1"), "{err}");
+}
+
+#[tokio::test]
 async fn an_edit_made_while_a_record_was_in_flight_stays_pending() {
     let pool = started().await;
     insert_test_page(&pool, TestPage::new("p1", "Groceries"))

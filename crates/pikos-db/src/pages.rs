@@ -150,12 +150,20 @@ pub struct Page {
 
 impl From<PageRow> for Page {
     fn from(row: PageRow) -> Self {
-        let tags: Vec<String> = serde_json::from_str(&row.tags).unwrap_or_default();
-        let links: Vec<String> = row
-            .links
-            .as_deref()
-            .and_then(|s| serde_json::from_str(s).ok())
-            .unwrap_or_default();
+        let id = &row.id;
+        let tags = stored_json(id, "tags", Some(&row.tags)).unwrap_or_default();
+        let links = stored_json(id, "links", row.links.as_deref()).unwrap_or_default();
+        let completed_occurrences = stored_json(
+            id,
+            "completed_occurrences",
+            row.completed_occurrences.as_deref(),
+        );
+        let skipped_occurrences = stored_json(
+            id,
+            "skipped_occurrences",
+            row.skipped_occurrences.as_deref(),
+        );
+        let mirror_attendees = stored_json(id, "mirror_attendees", row.mirror_attendees.as_deref());
         Page {
             detach_is_reversible: row.detach_is_reversible,
             id: row.id,
@@ -180,10 +188,10 @@ impl From<PageRow> for Page {
             schedule_locked: row.schedule_locked,
             sync_state: row.sync_state,
             timezone: row.timezone,
-            completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
-            skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
+            completed_occurrences,
+            skipped_occurrences,
             mirror_location: row.mirror_location,
-            mirror_attendees: parse_attendees(row.mirror_attendees),
+            mirror_attendees,
             pending_description: row.pending_description,
             synced_since: row
                 .sync_created_at
@@ -196,24 +204,21 @@ impl From<PageRow> for Page {
     }
 }
 
-/// Parse the `mirror_attendees` JSON array the reconciler stores; both `None`
-/// (no attendees) and malformed JSON yield `None`.
-fn parse_attendees(raw: Option<String>) -> Option<Vec<String>> {
-    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
-}
-
-/// Parse the `completed_occurrences` JSON object built by `json_group_object` over
-/// `completed_set`; `NULLIF(..., '{}')` already maps an empty set to `None`.
-fn parse_completed_occurrences(
-    raw: Option<String>,
-) -> Option<std::collections::HashMap<String, String>> {
-    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
-}
-
-/// Parse the `skipped_occurrences` JSON array built by `json_group_array` over
-/// `skip_set`; `NULLIF(..., '[]')` already maps an empty set to `None`.
-fn parse_skipped_occurrences(raw: Option<String>) -> Option<Vec<String>> {
-    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
+/// A JSON column of a page row as shown: `None` when the column is NULL or doesn't parse, and
+/// one that doesn't parse is logged with the page and column, never the value.
+pub(crate) fn stored_json<T: serde::de::DeserializeOwned>(
+    page_id: &str,
+    column: &str,
+    raw: Option<&str>,
+) -> Option<T> {
+    match serde_json::from_str(raw?) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            let summary = AppError::from(e).log_summary();
+            log::warn!("page {page_id}: {column} is unreadable ({summary}), shown as empty");
+            None
+        }
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -307,12 +312,20 @@ pub struct PageSummary {
 
 impl From<PageSummaryRow> for PageSummary {
     fn from(row: PageSummaryRow) -> Self {
-        let tags: Vec<String> = serde_json::from_str(&row.tags).unwrap_or_default();
-        let links: Vec<String> = row
-            .links
-            .as_deref()
-            .and_then(|s| serde_json::from_str(s).ok())
-            .unwrap_or_default();
+        let id = &row.id;
+        let tags = stored_json(id, "tags", Some(&row.tags)).unwrap_or_default();
+        let links = stored_json(id, "links", row.links.as_deref()).unwrap_or_default();
+        let completed_occurrences = stored_json(
+            id,
+            "completed_occurrences",
+            row.completed_occurrences.as_deref(),
+        );
+        let skipped_occurrences = stored_json(
+            id,
+            "skipped_occurrences",
+            row.skipped_occurrences.as_deref(),
+        );
+        let mirror_attendees = stored_json(id, "mirror_attendees", row.mirror_attendees.as_deref());
         PageSummary {
             detach_is_reversible: row.detach_is_reversible,
             id: row.id,
@@ -334,10 +347,10 @@ impl From<PageSummaryRow> for PageSummary {
             schedule_locked: row.schedule_locked,
             sync_state: row.sync_state,
             timezone: row.timezone,
-            completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
-            skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
+            completed_occurrences,
+            skipped_occurrences,
             mirror_location: row.mirror_location,
-            mirror_attendees: parse_attendees(row.mirror_attendees),
+            mirror_attendees,
             pending_description: row.pending_description,
             synced_since: row
                 .sync_created_at
@@ -787,11 +800,22 @@ async fn merge_over_stored_body(
         return Ok(false);
     };
 
-    let not_a_document = |_| AppError::Invalid(format!("page {id}'s body is not a document"));
-    let stored_doc = serde_json::from_str(&stored).map_err(not_a_document)?;
-    let my_doc = serde_json::from_str(mine).map_err(not_a_document)?;
+    let not_a_document = |side: &str, e: serde_json::Error| {
+        AppError::Invalid(format!(
+            "page {id}'s {side} body is not a document ({})",
+            AppError::from(e).log_summary()
+        ))
+    };
+    let stored_doc = serde_json::from_str(&stored).map_err(|e| not_a_document("stored", e))?;
+    let my_doc = serde_json::from_str(mine).map_err(|e| not_a_document("edited", e))?;
     // An unreadable base reads as an empty page, so both sides are kept whole.
-    let base_doc = serde_json::from_str(base).unwrap_or(serde_json::Value::Null);
+    let base_doc = serde_json::from_str(base).unwrap_or_else(|e| {
+        log::warn!(
+            "page {id}: the base body is not a document ({}), merged as empty",
+            AppError::from(e).log_summary()
+        );
+        serde_json::Value::Null
+    });
 
     let merged = pikos_core::body_merge::merge_bodies(&base_doc, &stored_doc, &my_doc).to_string();
     updates.content = Some(merged);

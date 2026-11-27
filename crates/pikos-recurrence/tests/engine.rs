@@ -651,3 +651,15 @@ fn all_day_recurrence_preserves_a_multi_day_span() {
         "the derived occurrence keeps the base's seven days"
     );
 }
+
+#[test]
+fn unread_parts_name_the_values_the_engine_ignores() {
+    use pikos_recurrence::unread_parts;
+
+    assert_eq!(
+        unread_parts("FREQ=DAILY;COUNT=abc;INTERVAL=x;UNTIL=soon"),
+        vec!["COUNT", "INTERVAL", "UNTIL"]
+    );
+    assert!(unread_parts("FREQ=WEEKLY;INTERVAL=2;COUNT=5;BYDAY=MO;WKST=MO").is_empty());
+    assert!(unread_parts("FREQ=DAILY;UNTIL=20260315T100000Z").is_empty());
+}
