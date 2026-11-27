@@ -1,6 +1,8 @@
 import Observation
 import PikosCore
+import PikosSupport
 import SwiftUI
+import os
 
 /// Connected calendars, and the operations the phone can perform on them.
 ///
@@ -28,6 +30,7 @@ public final class CalendarSyncStore {
     public private(set) var busyAccountID: String?
 
     private let workspace: @MainActor () -> Workspace?
+    private static let log = Logger(subsystem: "app.pikos", category: "calendar")
 
     /// Takes the workspace as a closure: `WorkspaceStore` opens it asynchronously, so capturing
     /// `nil` once would leave this unable to do anything.
@@ -41,7 +44,7 @@ public final class CalendarSyncStore {
         do {
             accounts = try await workspace.syncStatus()
         } catch {
-            record(error)
+            record(error, doing: "read the accounts")
         }
         isLoading = false
     }
@@ -64,7 +67,7 @@ public final class CalendarSyncStore {
             await load()
             return true
         } catch {
-            record(error)
+            record(error, doing: "connect an account")
             return false
         }
     }
@@ -78,7 +81,7 @@ public final class CalendarSyncStore {
         do {
             _ = try await workspace.reconnectCaldav(accountId: accountID, password: password)
         } catch {
-            record(error)
+            record(error, doing: "reconnect", account: accountID)
             return false
         }
 
@@ -94,7 +97,7 @@ public final class CalendarSyncStore {
             try await workspace.disconnectSyncAccount(accountId: accountID)
             await load()
         } catch {
-            record(error)
+            record(error, doing: "disconnect", account: accountID)
         }
     }
 
@@ -108,7 +111,7 @@ public final class CalendarSyncStore {
             _ = try await workspace.setCalendarEnabled(
                 syncCalendarId: calendarID, enabled: enabled)
         } catch {
-            record(error)
+            record(error, doing: "turn a calendar \(enabled ? "on" : "off")", account: accountID)
             return
         }
 
@@ -133,7 +136,7 @@ public final class CalendarSyncStore {
             await load()
             reportIfAnythingWentWrong(results)
         } catch {
-            record(error)
+            record(error, doing: full ? "resync fully" : "sync", account: accountID)
         }
     }
 
@@ -147,16 +150,16 @@ public final class CalendarSyncStore {
         do {
             accounts = try await workspace.syncStatus()
         } catch {
-            if !quiet { record(error) }
+            record(error, doing: "read the accounts", shown: !quiet)
             return
         }
         for entry in accounts where !entry.account.reconnectNeeded {
             busyAccountID = entry.account.id
             do {
                 let results = try await workspace.syncAccountNow(accountId: entry.account.id)
-                if !quiet { reportIfAnythingWentWrong(results) }
+                reportIfAnythingWentWrong(results, shown: !quiet)
             } catch {
-                if !quiet { record(error) }
+                record(error, doing: "sync", account: entry.account.id, shown: !quiet)
             }
             busyAccountID = nil
         }
@@ -187,7 +190,12 @@ public final class CalendarSyncStore {
 
     /// A sync can report per-calendar trouble without throwing. Saying nothing there makes
     /// "Sync" look like it works.
-    private func reportIfAnythingWentWrong(_ results: [CalendarSyncResult]) {
+    private func reportIfAnythingWentWrong(_ results: [CalendarSyncResult], shown: Bool = true) {
+        for result in results where result.status != "synced" {
+            Self.log.notice("calendar \(result.calendarId, privacy: .public) didn't sync: \(result.status, privacy: .public)")
+        }
+        guard shown else { return }
+
         if results.contains(where: { $0.status == "reconnectNeeded" }) {
             problem = Problem(
                 message: String(localized: "The server rejected the saved password. Reconnect the account to fix it."),
@@ -200,15 +208,21 @@ public final class CalendarSyncStore {
     }
 
     /// `Network` is separated: the only failure both routine and worth retrying unchanged, and
-    /// the data layer's message for it names a URL rather than the problem.
-    private func record(_ error: Error) {
+    /// the data layer's message for it names a URL rather than the problem. Logged even when an
+    /// automatic pass keeps it off screen, since the log is then its only trace.
+    private func record(_ error: Error, doing: String, account: String? = nil, shown: Bool = true) {
+        Self.log.error(
+            "couldn't \(doing, privacy: .public)\(account.map { " \($0)" } ?? "", privacy: .public): \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+        )
+        guard shown else { return }
+
         // Capitalised, as UniFFI spells it.
         if let error = error as? WorkspaceError, case .Network = error {
             problem = Problem(
                 message: String(localized: "Could not reach the server. Check the address and your connection."),
                 isRetryable: true)
         } else {
-            problem = Problem(message: error.localizedDescription, isRetryable: false)
+            problem = Problem(message: FailureText.message(error), isRetryable: false)
         }
     }
 }

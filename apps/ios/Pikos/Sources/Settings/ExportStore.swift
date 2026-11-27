@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PikosCore
 import PikosSupport
+import os
 
 /// Produces a file for the share sheet.
 ///
@@ -56,6 +57,7 @@ public final class ExportStore {
     }
 
     private let workspace: @MainActor () -> Workspace?
+    private static let log = Logger(subsystem: "app.pikos", category: "export")
 
     public init(workspace: @escaping @MainActor () -> Workspace?) {
         self.workspace = workspace
@@ -72,11 +74,23 @@ public final class ExportStore {
 
     /// Cheap, so the settings screen calls it on every appearance.
     public func refreshDataFacts() {
-        if let database = try? WorkspaceLocation.databaseURL() {
-            workspaceSize = WorkspaceFiles.size(
-                database: database, assets: try? WorkspaceLocation.assetsURL())
+        do {
+            let database = try WorkspaceLocation.databaseURL()
+            var assets: URL?
+            do {
+                assets = try WorkspaceLocation.assetsURL()
+            } catch {
+                Self.log.error("the images folder is unreachable, so the size leaves it out: \(FailureText.kind(error), privacy: .public)")
+            }
+            workspaceSize = WorkspaceFiles.size(database: database, assets: assets)
+        } catch {
+            Self.log.error("measuring the workspace failed: \(FailureText.kind(error), privacy: .public)")
         }
-        lastBackup = (try? Self.backupsDirectory()).flatMap { WorkspaceFiles.latestBackup(in: $0) }
+        do {
+            lastBackup = WorkspaceFiles.latestBackup(in: try Self.backupsDirectory())
+        } catch {
+            Self.log.error("finding the last backup failed: \(FailureText.kind(error), privacy: .public)")
+        }
     }
 
     /// Copies the workspace into Files: a folder per backup under `Documents/Backups`, holding a
@@ -101,7 +115,8 @@ public final class ExportStore {
             }
             refreshDataFacts()
         } catch {
-            errorMessage = error.localizedDescription
+            Self.log.error("backing up to Files failed: \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)")
+            errorMessage = FailureText.message(error)
         }
     }
 
@@ -124,7 +139,10 @@ public final class ExportStore {
             let url = try await write(format, from: workspace, includeSynced: includeSynced)
             ready = Ready(url: url, format: format)
         } catch {
-            errorMessage = error.localizedDescription
+            Self.log.error(
+                "exporting \(format.rawValue, privacy: .public) failed: \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+            )
+            errorMessage = FailureText.message(error)
         }
     }
 
