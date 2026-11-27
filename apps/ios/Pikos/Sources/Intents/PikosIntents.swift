@@ -2,7 +2,9 @@ import AppIntents
 import PikosCore
 import PikosSupport
 import SwiftUI
+import UIKit
 import WidgetKit
+import os
 
 /// Shortcuts and Siri.
 ///
@@ -12,14 +14,43 @@ import WidgetKit
 /// belongs here, and the widget's `ReadOnlyWorkspace` has no write methods, which enforces the
 /// rule by type.
 enum PikosIntentError: Error, CustomLocalizedStringResourceConvertible {
-    case workspaceUnavailable
+    /// The phone hasn't been unlocked since it started, so its files can't be read yet.
+    case locked
+    case workspaceUnavailable(String)
+    /// A workspace call failed while doing what "Couldn't …" names.
+    case failed(doing: String, message: String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .workspaceUnavailable:
-            return "Pikos couldn't open your notes."
+        case .locked:
+            return "Unlock your iPhone, then try again. Pikos can't read your notes until it has been unlocked."
+        case .workspaceUnavailable(let message):
+            return "Pikos couldn't open your notes. \(message)"
+        case .failed(let doing, let message):
+            return "Pikos couldn't \(doing). \(message)"
         }
     }
+
+    /// Logs the failure by its kind and turns it into a sentence Shortcuts can show.
+    static func failure(_ doing: String, _ error: Error) -> PikosIntentError {
+        intentLog.error(
+            "couldn't \(doing, privacy: .public): \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+        )
+        return .failed(doing: doing, message: FailureText.message(error))
+    }
+}
+
+private let intentLog = Logger(subsystem: "app.pikos", category: "intents")
+
+/// Why the workspace didn't open, in words the person can act on. A phone not yet unlocked since
+/// it started can't read the workspace's files, and the open's error doesn't say that, so it's
+/// asked of the system.
+private func openFailure(_ error: Error) async -> PikosIntentError {
+    let isLocked = await MainActor.run { !UIApplication.shared.isProtectedDataAvailable }
+    intentLog.error(
+        "couldn't open the workspace\(isLocked ? " while locked" : "", privacy: .public): \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+    )
+    return isLocked ? .locked : .workspaceUnavailable(FailureText.message(error))
 }
 
 /// Open the workspace for a single intent run, per invocation: an intent may run in a freshly
@@ -29,7 +60,7 @@ private func openWorkspace() async throws -> Workspace {
         let url = try WorkspaceLocation.databaseURL()
         return try await Workspace.open(path: url.path)
     } catch {
-        throw PikosIntentError.workspaceUnavailable
+        throw await openFailure(error)
     }
 }
 
@@ -43,7 +74,7 @@ private func openForReading() async throws -> ReadOnlyWorkspace {
         let url = try WorkspaceLocation.databaseURL()
         return try await ReadOnlyWorkspace.openExisting(path: url.path)
     } catch {
-        throw PikosIntentError.workspaceUnavailable
+        throw await openFailure(error)
     }
 }
 
@@ -76,8 +107,12 @@ struct CreatePageIntent: AppIntent {
         } else {
             folderId = await preferredFolderID(in: workspace)
         }
-        let page = try await workspace.createPage(
-            page: NewPage(title: title, folderId: folderId))
+        let page: Page
+        do {
+            page = try await workspace.createPage(page: NewPage(title: title, folderId: folderId))
+        } catch {
+            throw PikosIntentError.failure("add the page", error)
+        }
 
         // A page created by voice should appear in the widget without waiting for its next refresh.
         WidgetCenter.shared.reloadAllTimelines()
@@ -92,7 +127,14 @@ struct CreatePageIntent: AppIntent {
 @MainActor
 private func preferredFolderID(in workspace: Workspace) async -> String? {
     guard let preferred = Preferences.shared.defaultFolderID else { return nil }
-    let folders = (try? await workspace.listFolders()) ?? []
+    let folders: [Folder]
+    do {
+        folders = try await workspace.listFolders()
+    } catch {
+        // The Inbox, where a page with no folder goes, is still somewhere to put it.
+        intentLog.notice("reading the folders for the default failed: \(FailureText.kind(error), privacy: .public)")
+        return nil
+    }
     return folders.contains { $0.id == preferred && !$0.isExternalCalendar } ? preferred : nil
 }
 
@@ -110,7 +152,12 @@ struct SearchPagesIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[PageEntity]> & ProvidesDialog {
         let workspace = try await openWorkspace()
-        let hits = try await workspace.search(query: query, includeCompleted: false, limit: 20).hits
+        let hits: [SearchHit]
+        do {
+            hits = try await workspace.search(query: query, includeCompleted: false, limit: 20).hits
+        } catch {
+            throw PikosIntentError.failure("search", error)
+        }
         let entities = hits.map { PageEntity(id: $0.pageId, title: $0.title) }
 
         let dialog: IntentDialog =
@@ -136,7 +183,12 @@ struct TodayListIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[PageEntity]> & ProvidesDialog {
         let workspace = try await openForReading()
-        let open = try await workspace.listToday().filter { $0.status != "done" }
+        let open: [PageSummary]
+        do {
+            open = try await workspace.listToday().filter { $0.status != "done" }
+        } catch {
+            throw PikosIntentError.failure("read today's list", error)
+        }
         let entities = await PageEntity.describing(open, in: workspace)
         let items = open.map { TodaySpeech.Item(title: $0.title, time: PageEntity.timeLabel($0.scheduledStart)) }
         return .result(value: entities, dialog: IntentDialog(stringLiteral: TodaySpeech.sentence(for: items)))
@@ -199,9 +251,14 @@ struct PageEntity: AppEntity, Identifiable {
 
     /// Pages as entities, with their folders' names looked up once.
     static func describing(_ pages: [PageSummary], in workspace: ReadOnlyWorkspace) async -> [PageEntity] {
-        let names = Dictionary(
-            ((try? await workspace.listFolders()) ?? []).map { ($0.id, $0.name) },
-            uniquingKeysWith: { first, _ in first })
+        var folders: [Folder] = []
+        do {
+            folders = try await workspace.listFolders()
+        } catch {
+            // The pages still go back, only without their folders' names.
+            intentLog.notice("reading the folders' names failed: \(FailureText.kind(error), privacy: .public)")
+        }
+        let names = Dictionary(folders.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         return pages.map { page in
             PageEntity(
                 id: page.id, title: page.title,
@@ -234,13 +291,19 @@ struct PageEntityQuery: EntityStringQuery {
             // A page in a saved shortcut may since have been deleted. Skipping
             // it is right: Shortcuts drops entities it cannot resolve, which is
             // better than failing the whole run over one stale reference.
-            if let page = try? await workspace.getPage(id: id) {
-                found.append(
-                    PageEntity(
-                        id: page.id, title: page.title,
-                        date: page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) },
-                        isDone: page.status == "done"))
+            let page: Page
+            do {
+                page = try await workspace.getPage(id: id)
+            } catch WorkspaceError.NotFound {
+                continue
+            } catch {
+                throw PikosIntentError.failure("find a page", error)
             }
+            found.append(
+                PageEntity(
+                    id: page.id, title: page.title,
+                    date: page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) },
+                    isDone: page.status == "done"))
         }
         return found
     }
