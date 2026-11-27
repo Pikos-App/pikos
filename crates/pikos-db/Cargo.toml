@@ -6,9 +6,9 @@ license = "BUSL-1.1"
 description = "Pikos local SQLite data layer — schema, migrations, and writer. Tauri-free; shared by the desktop app and the CLI."
 
 [dependencies]
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+sqlx = { version = "0.9", features = ["sqlite", "runtime-tokio", "migrate"] }
 # The same SQLite sqlx links, for registering the functions in `sql_functions`.
-libsqlite3-sys = "0.30"
+libsqlite3-sys = "0.40"
 # Title sort keys the database can order by: the collator, the Extended_Pictographic property the
 # emoji strip needs, and the system language the app's own collator uses.
 icu_collator = "2.3"

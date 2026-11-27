@@ -19,10 +19,10 @@ use crate::error::{AppError, AppResult};
 pub async fn pending(pool: &SqlitePool, limit: i64) -> AppResult<Vec<RecordName>> {
     let rows: Vec<(String, String)> =
         // sql-ok: apply_rank is built from entity prefixes, which are constants
-        sqlx::query_as(&format!(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT entity, key FROM replica_ops ORDER BY clock, {}, key LIMIT ?",
             apply_rank()
-        ))
+        )))
             .bind(limit)
             .fetch_all(pool)
             .await?;
@@ -163,7 +163,7 @@ pub(crate) async fn read(
         entity.key
     )
     .replace("{row}", "t");
-    let row = sqlx::query(&sql)
+    let row = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(key)
         .fetch_optional(&mut *conn)
         .await?;

@@ -119,11 +119,13 @@ pub async fn find_account_by_identity_impl(
          WHERE provider = ? AND display_name = ? COLLATE NOCASE
          ORDER BY disconnected ASC, created_at ASC LIMIT 1"
     );
-    Ok(sqlx::query_as::<_, SyncAccount>(&sql)
-        .bind(provider)
-        .bind(display_name)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, SyncAccount>(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(provider)
+            .bind(display_name)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
@@ -145,7 +147,7 @@ pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Acco
         "SELECT {ACCOUNT_COLS} FROM sync_account WHERE disconnected = 0
          ORDER BY provider ASC, display_name COLLATE NOCASE ASC, created_at ASC"
     );
-    let accounts = sqlx::query_as::<_, SyncAccount>(&sql)
+    let accounts = sqlx::query_as::<_, SyncAccount>(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_all(pool)
         .await?;
 
@@ -159,7 +161,7 @@ pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Acco
 
 pub async fn get_sync_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<SyncAccount> {
     let sql = format!("SELECT {ACCOUNT_COLS} FROM sync_account WHERE id = ?");
-    sqlx::query_as::<_, SyncAccount>(&sql)
+    sqlx::query_as::<_, SyncAccount>(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -215,10 +217,12 @@ pub async fn list_sync_calendars_impl(
     let sql = format!(
         "SELECT {CAL_COLS} FROM sync_calendar WHERE account_id = ? ORDER BY display_name ASC"
     );
-    Ok(sqlx::query_as::<_, SyncCalendar>(&sql)
-        .bind(account_id)
-        .fetch_all(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, SyncCalendar>(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(account_id)
+            .fetch_all(pool)
+            .await?,
+    )
 }
 
 /// Enabling materializes or re-flags its folder and sets the colour; disabling tears it down.
@@ -620,7 +624,7 @@ async fn folder_exists_pool(pool: &sqlx::SqlitePool, folder_id: &str) -> AppResu
 
 async fn fetch_calendar(pool: &sqlx::SqlitePool, id: &str) -> AppResult<SyncCalendar> {
     let sql = format!("SELECT {CAL_COLS} FROM sync_calendar WHERE id = ?");
-    sqlx::query_as::<_, SyncCalendar>(&sql)
+    sqlx::query_as::<_, SyncCalendar>(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -634,7 +638,7 @@ async fn fetch_calendar_by_keys(
 ) -> AppResult<SyncCalendar> {
     let sql =
         format!("SELECT {CAL_COLS} FROM sync_calendar WHERE account_id = ? AND calendar_id = ?");
-    sqlx::query_as::<_, SyncCalendar>(&sql)
+    sqlx::query_as::<_, SyncCalendar>(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(account_id)
         .bind(calendar_id)
         .fetch_optional(pool)

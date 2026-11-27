@@ -178,10 +178,12 @@ async fn table_names(pool: &SqlitePool) -> Vec<String> {
 
 async fn column_names(pool: &SqlitePool, table: &str) -> Vec<String> {
     // sql-ok: table name is a test-local literal, never user input.
-    sqlx::query_scalar::<_, String>(&format!("SELECT name FROM pragma_table_info('{table}')"))
-        .fetch_all(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(format!(
+        "SELECT name FROM pragma_table_info('{table}')"
+    )))
+    .fetch_all(pool)
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -245,7 +247,7 @@ async fn stepwise_preserves_seeded_data() {
     .unwrap();
 
     for (name, sql) in &MIGRATIONS[1..] {
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(*sql)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
@@ -325,7 +327,7 @@ async fn stepwise_preserves_seeded_data() {
 async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
     let pool = single_conn_memory_pool().await;
     for (name, sql) in &MIGRATIONS[..9] {
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(*sql)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
@@ -364,7 +366,7 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
     ] {
         let found: i64 =
             // sql-ok: table and id come from this test's own literal list
-            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE id = '{id}'"))
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table} WHERE id = '{id}'")))
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -402,7 +404,7 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
 async fn the_search_migration_backfills_mirrors_synced_before_it() {
     let pool = single_conn_memory_pool().await;
     for (name, sql) in &MIGRATIONS[..10] {
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(*sql)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
@@ -472,7 +474,7 @@ async fn the_search_migration_backfills_mirrors_synced_before_it() {
 async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
     let pool = single_conn_memory_pool().await;
     for (name, sql) in &MIGRATIONS[..11] {
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(*sql)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
@@ -543,7 +545,7 @@ async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
 async fn the_status_migration_brings_every_page_back_on_screen() {
     let pool = single_conn_memory_pool().await;
     for (name, sql) in &MIGRATIONS[..25] {
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(*sql)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
@@ -665,7 +667,10 @@ async fn needle_hits_after_reopening(change: &str) -> i64 {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::raw_sql(change).execute(&pool).await.unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(change))
+            .execute(&pool)
+            .await
+            .unwrap();
         pool.close().await;
     }
 
@@ -1103,10 +1108,12 @@ async fn a_shipped_workspace_migrates_forward_without_losing_anything() {
             let pool = pool.clone();
             async move {
                 // sql-ok: table name is a test-local literal, never user input.
-                sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {table}"))
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap()
+                sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
+                    "SELECT COUNT(*) FROM {table}"
+                )))
+                .fetch_one(&pool)
+                .await
+                .unwrap()
             }
         };
 

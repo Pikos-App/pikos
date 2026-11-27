@@ -32,9 +32,9 @@ pub(crate) async fn build_export_json_impl(
 
     let body = pikos_db::page_chunks::body_sql("pages.id");
     // sql-ok: body_sql is built from a compile-time constant
-    let pages = sqlx::query(&format!(
+    let pages = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT *, {body} AS body FROM pages WHERE deleted_at IS NULL ORDER BY sort_order"
-    ))
+    )))
     .fetch_all(pool)
     .await?;
 

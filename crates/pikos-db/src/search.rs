@@ -362,7 +362,7 @@ pub async fn search_pages_scan(
                  ORDER BY {BM25}, {done_last} pages.updated_at DESC
                  LIMIT {RESULT_LIMIT}"
             );
-            let rows = sqlx::query_as::<_, SearchRow>(&sql) // sql-ok: fragments are compile-time constants
+            let rows = sqlx::query_as::<_, SearchRow>(sqlx::AssertSqlSafe(sql.as_str())) // sql-ok: fragments are compile-time constants
                 .bind(&fts_query)
                 .fetch_all(pool)
                 .await?;
@@ -372,7 +372,7 @@ pub async fn search_pages_scan(
                    AND pages.deleted_at IS NULL
                    AND pages.status = 'done'"
             );
-            let completed: i64 = sqlx::query_scalar(&count_sql) // sql-ok: fragments are compile-time constants
+            let completed: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(count_sql.as_str())) // sql-ok: fragments are compile-time constants
                 .bind(&fts_query)
                 .fetch_one(pool)
                 .await?;
@@ -527,7 +527,7 @@ async fn search_window(
          ORDER BY pages.tier, pages.score, {done_last} pages.updated_at DESC
          LIMIT ?4 OFFSET ?5"
     );
-    let rows = sqlx::query_as::<_, SearchRow>(&rows_sql) // sql-ok: fragments are compile-time constants
+    let rows = sqlx::query_as::<_, SearchRow>(sqlx::AssertSqlSafe(rows_sql.as_str())) // sql-ok: fragments are compile-time constants
         .bind(&fts_query)
         .bind(&titled_query)
         .bind(below)
@@ -543,7 +543,7 @@ async fn search_window(
                 (SELECT COUNT(*) FROM matched WHERE status = 'done') AS completed,
                 (SELECT MIN(r) FROM win) AS floor"
     );
-    let facts = sqlx::query_as::<_, WindowFacts>(&facts_sql) // sql-ok: fragments are compile-time constants
+    let facts = sqlx::query_as::<_, WindowFacts>(sqlx::AssertSqlSafe(facts_sql.as_str())) // sql-ok: fragments are compile-time constants
         .bind(&fts_query)
         .bind(&titled_query)
         .bind(below)
@@ -719,7 +719,7 @@ async fn capped_search(
          ORDER BY {done_first} pages.tier, pages.score, {done_last} pages.updated_at DESC
          LIMIT {RESULT_LIMIT}"
     );
-    let ranked = sqlx::query_as::<_, RankedRow>(&sql) // sql-ok: fragments are compile-time constants
+    let ranked = sqlx::query_as::<_, RankedRow>(sqlx::AssertSqlSafe(sql.as_str())) // sql-ok: fragments are compile-time constants
         .bind(fts_query)
         .bind(format!("{{title subtitle}}: ({fts_query})"))
         .bind(cap)

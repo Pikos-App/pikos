@@ -179,7 +179,7 @@ impl Stream {
     }
 }
 
-fn push_scope(builder: &mut QueryBuilder<'_, Sqlite>, scope: &ViewScope) {
+fn push_scope(builder: &mut QueryBuilder<Sqlite>, scope: &ViewScope) {
     match scope {
         ViewScope::Inbox => {
             builder.push(" AND folder_id IS NULL");
@@ -195,7 +195,7 @@ fn push_scope(builder: &mut QueryBuilder<'_, Sqlite>, scope: &ViewScope) {
 /// Keep a stream to `bounds`, in its own key's terms: wall clocks for floating pages, instants for
 /// synced ones.
 fn push_dates(
-    builder: &mut QueryBuilder<'_, Sqlite>,
+    builder: &mut QueryBuilder<Sqlite>,
     column: &str,
     absolute: bool,
     bounds: &DateBounds,
@@ -542,7 +542,7 @@ pub async fn list_completed(
     after: Option<&CompletedCursor>,
     limit: usize,
 ) -> AppResult<CompletedWindow> {
-    let filter = |builder: &mut QueryBuilder<'_, Sqlite>| {
+    let filter = |builder: &mut QueryBuilder<Sqlite>| {
         if let Some(scope) = scope {
             push_scope(builder, scope);
         }

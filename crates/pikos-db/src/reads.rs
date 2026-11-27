@@ -302,10 +302,10 @@ pub async fn pages_changed_since(
     since: i64,
 ) -> AppResult<(Vec<PageSummary>, Vec<String>)> {
     // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
-    let live = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let live = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages \
          WHERE row_seq > ? AND deleted_at IS NULL"
-    ))
+    )))
     .bind(since)
     .fetch_all(pool)
     .await?;
@@ -395,12 +395,12 @@ pub async fn list_recent_pages(
 /// The pages, not trashed, whose bodies link to `id`, by title.
 pub async fn list_backlinks(pool: &SqlitePool, id: &str) -> AppResult<Vec<PageSummary>> {
     // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
-    let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let rows = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages \
          WHERE links <> '[]' AND deleted_at IS NULL AND id <> ? \
          AND EXISTS (SELECT 1 FROM json_each(pages.links) WHERE value = ?) \
          ORDER BY title COLLATE NOCASE"
-    ))
+    )))
     .bind(id)
     .bind(id)
     .fetch_all(pool)

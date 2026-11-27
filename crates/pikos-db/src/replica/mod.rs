@@ -141,7 +141,9 @@ async fn queue_everything(tx: &mut Transaction<'_, Sqlite>) -> AppResult<()> {
             entity.scope.sql(),
         )
         .replace("{row}", "t");
-        sqlx::query(&sql).execute(&mut **tx).await?;
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }
@@ -335,7 +337,7 @@ pub async fn expire(pool: &SqlitePool) -> AppResult<Vec<pikos_replica::RecordNam
             entity.table, entity.key
         )
         .replace("{row}", "t");
-        let keys: Vec<String> = sqlx::query_scalar(&sql)
+        let keys: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(entity.entity.prefix())
             .bind(cutoff_ms)
             .fetch_all(&mut *tx)
@@ -394,7 +396,9 @@ pub async fn clear_for_join(pool: &SqlitePool, workspace_id: &str) -> AppResult<
             entity.scope.sql()
         )
         .replace("{row}", "t");
-        sqlx::query(&sql).execute(tx.conn()).await?;
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .execute(tx.conn())
+            .await?;
     }
     sqlx::query("DELETE FROM replica_ops")
         .execute(tx.conn())

@@ -500,10 +500,11 @@ async fn reset_db_wipes_all_user_tables() {
         ("page_recurrence_rules", 0),
         ("focus_sessions", 0),
     ] {
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a constant from the hardcoded list above
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let count: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}"))) // sql-ok: table is a constant from the hardcoded list above
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(count, expected, "table {table} not empty after reset");
     }
 }
@@ -536,10 +537,11 @@ async fn reset_db_removes_connected_calendar_accounts() {
     reset_db_impl(&pool).await.unwrap();
 
     for table in ["sync_account", "sync_calendar"] {
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a constant from the hardcoded list above
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let count: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}"))) // sql-ok: table is a constant from the hardcoded list above
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(count, 0, "{table} survived the reset");
     }
 }
@@ -1026,7 +1028,7 @@ async fn open_existing(path: &str) -> SqlitePool {
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     // table is a constant supplied by the test, never user input.
-    sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: constant table name
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}"))) // sql-ok: constant table name
         .fetch_one(pool)
         .await
         .unwrap()

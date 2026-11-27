@@ -40,7 +40,7 @@ pikos-recurrence = { path = "../pikos-recurrence" }
 # iOS suspends within seconds of backgrounding, so nothing here polls.
 pikos-calendar-sync = { path = "../pikos-calendar-sync" }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx = { version = "0.9", features = ["sqlite", "runtime-tokio"] }
 thiserror = "2"
 # The async exports below need a runtime UniFFI can drive. Multi-threaded so a
 # widget refresh and a foreground query are not serialised behind each other.
@@ -57,7 +57,7 @@ chrono = "0.4"
 # iOS must honour one it finds, and there is no iOS-side writer to create it
 # with, so the test plays the part of the other app.
 pikos-db = { path = "../pikos-db" }
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx = { version = "0.9", features = ["sqlite", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
 [build-dependencies]

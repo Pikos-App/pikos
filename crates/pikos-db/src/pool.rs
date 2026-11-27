@@ -305,7 +305,9 @@ async fn refuse_writes_once_migrated_past(conn: &mut SqliteConnection) -> Result
                 "CREATE TEMP TRIGGER \"pikos_migrated_past_{quoted}_{op}\" BEFORE {op} ON main.\"{quoted}\" \
                  BEGIN SELECT RAISE(ABORT, '{MIGRATED_PAST_MARK} {applied} {supported}'); END"
             );
-            sqlx::query(&sql).execute(&mut *conn).await?;
+            sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+                .execute(&mut *conn)
+                .await?;
         }
     }
 
@@ -459,9 +461,11 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
             .execute(&pool)
             .await?;
-        sqlx::query(&format!("PRAGMA user_version = {DERIVED_TEXT_VERSION}")) // sql-ok: compile-time constant
-            .execute(&pool)
-            .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {DERIVED_TEXT_VERSION}"
+        ))) // sql-ok: compile-time constant
+        .execute(&pool)
+        .await?;
     }
 
     if let crate::search::IndexDefinition::Changed(current)
@@ -528,7 +532,9 @@ async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64)
     // VACUUM INTO's target can't be a bound parameter; escape the literal.
     let dest_str = dest.to_string_lossy();
     let sql = format!("VACUUM INTO '{}'", dest_str.replace('\'', "''"));
-    sqlx::query(&sql).execute(pool).await?;
+    sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .execute(pool)
+        .await?;
 
     prune_migration_backups(&backup_dir, MAX_MIGRATION_BACKUPS);
     Ok(())
@@ -564,9 +570,11 @@ fn prune_migration_backups(dir: &Path, keep: usize) {
 /// fresh workspace of half a million pages took 4.8 s, so a launch runs it in the background.
 pub async fn gather_statistics(pool: &SqlitePool) -> AppResult<()> {
     let mut conn = pool.acquire().await?;
-    sqlx::query(&format!("PRAGMA analysis_limit = {ANALYSIS_LIMIT}")) // sql-ok: compile-time constant
-        .execute(&mut *conn)
-        .await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "PRAGMA analysis_limit = {ANALYSIS_LIMIT}"
+    ))) // sql-ok: compile-time constant
+    .execute(&mut *conn)
+    .await?;
     sqlx::query("PRAGMA optimize = 0x10002")
         .execute(&mut *conn)
         .await?;
@@ -587,7 +595,9 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
         "SELECT id, {body} FROM pages WHERE content_text = '' \
          AND EXISTS (SELECT 1 FROM page_chunks WHERE page_chunks.page_id = pages.id)"
     );
-    let rows: Vec<(String, String)> = sqlx::query_as(&sql).fetch_all(pool).await?;
+    let rows: Vec<(String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+        .fetch_all(pool)
+        .await?;
 
     for (id, content) in &rows {
         let text = extract_text_from_tiptap(content);
@@ -613,7 +623,9 @@ async fn rederive_line_breaks(pool: &SqlitePool) -> AppResult<()> {
         "SELECT id, {body} FROM pages WHERE id IN \
          (SELECT page_id FROM page_chunks WHERE body LIKE '%\"hardBreak\"%')"
     );
-    let rows: Vec<(String, String)> = sqlx::query_as(&sql).fetch_all(pool).await?;
+    let rows: Vec<(String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+        .fetch_all(pool)
+        .await?;
     let mut tx = pool.begin().await?;
     for (id, content) in &rows {
         sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")

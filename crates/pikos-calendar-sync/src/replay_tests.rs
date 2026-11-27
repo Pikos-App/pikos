@@ -87,7 +87,10 @@ async fn scalar<T>(pool: &sqlx::SqlitePool, sql: &str) -> T
 where
     T: for<'r> sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Unpin,
 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.expect(sql)
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .expect(sql)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

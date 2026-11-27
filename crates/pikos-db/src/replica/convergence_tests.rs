@@ -324,7 +324,10 @@ fn page(title: String) -> NewPage {
 }
 
 async fn ids(pool: &SqlitePool, sql: &str) -> Vec<String> {
-    sqlx::query_scalar(sql).fetch_all(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_all(pool)
+        .await
+        .unwrap()
 }
 
 const TAGS: [&str; 4] = ["errands", "home", "work", "later"];

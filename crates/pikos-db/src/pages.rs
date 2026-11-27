@@ -547,19 +547,22 @@ fn page_row_select() -> String {
 
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
     // sql-ok: page_row_select is built from compile-time constants
-    sqlx::query_as::<_, PageRow>(&format!("{} WHERE id = ?", page_row_select()))
-        .bind(id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
-        .map(Page::from)
+    sqlx::query_as::<_, PageRow>(sqlx::AssertSqlSafe(format!(
+        "{} WHERE id = ?",
+        page_row_select()
+    )))
+    .bind(id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
+    .map(Page::from)
 }
 
 /// [`fetch_page`] with its body already known, so a long page isn't rejoined from its chunks.
 async fn fetch_page_with_body(pool: &sqlx::SqlitePool, id: &str, body: String) -> AppResult<Page> {
     // sql-ok: SYNC_DERIVED_SELECT is a compile-time constant
     let sql = format!("SELECT *{SYNC_DERIVED_SELECT}, ? AS body FROM pages WHERE id = ?");
-    sqlx::query_as::<_, PageRow>(&sql)
+    sqlx::query_as::<_, PageRow>(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(body)
         .bind(id)
         .fetch_optional(pool)
@@ -890,7 +893,7 @@ async fn live_body(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<String
     let body = crate::page_chunks::body_sql("pages.id");
     // sql-ok: body_sql is built from a compile-time constant
     let sql = format!("SELECT {body} FROM pages WHERE id = ? AND deleted_at IS NULL");
-    Ok(sqlx::query_scalar(&sql)
+    Ok(sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(id)
         .fetch_optional(pool)
         .await?)
@@ -1388,7 +1391,7 @@ pub async fn list_pages_overlapping_impl(
            AND date(COALESCE(scheduled_end, scheduled_start)) >= ?
          ORDER BY sort_order ASC"
     );
-    let rows = sqlx::query_as::<_, PageSummaryRow>(&query)
+    let rows = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(query.as_str()))
         .bind(end)
         .bind(start)
         .fetch_all(pool)
@@ -1421,7 +1424,7 @@ async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<
     let moved = moved_occurrences_through(pool, &window_end).await?;
 
     // sql-ok: SUMMARY_COLUMNS and SYNC_DERIVED_SELECT are compile-time constants
-    let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let rows = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages
          WHERE deleted_at IS NULL
            AND status != 'done'
@@ -1432,7 +1435,7 @@ async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<
                                AND ps.status != 'done'
                                AND substr(ps.scheduled_start, 1, 10) <= ?1))
          ORDER BY sort_order ASC"
-    ))
+    )))
     .bind(&window_end)
     .fetch_all(pool)
     .await?;
@@ -1660,7 +1663,8 @@ pub async fn list_completed_pages_impl(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE {where_clause} \
          ORDER BY completed_at DESC LIMIT ? OFFSET ?"
     );
-    let mut data_query = sqlx::query_as::<_, PageSummaryRow>(&data_sql);
+    let mut data_query =
+        sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(data_sql.as_str()));
     for v in &bind_values {
         data_query = data_query.bind(v);
     }
@@ -1842,10 +1846,10 @@ async fn complete_recurring_page_once(
 
     // Completing a trashed series must not resurrect it as a visible "done" clone.
     // sql-ok: page_row_select is built from compile-time constants
-    let head = sqlx::query_as::<_, PageRow>(&format!(
+    let head = sqlx::query_as::<_, PageRow>(sqlx::AssertSqlSafe(format!(
         "{} WHERE id = ? AND deleted_at IS NULL",
         page_row_select()
-    ))
+    )))
     .bind(&data.page_id)
     .fetch_optional(&mut *tx)
     .await?
@@ -1957,18 +1961,18 @@ async fn complete_recurring_page_once(
     tx.commit().await?;
 
     // Post-commit, so FTS triggers have fired.
-    let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let clone_row = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
+    )))
     .bind(&clone_id)
     .fetch_one(pool)
     .await?;
 
-    let head_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let head_row = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
+    )))
     .bind(&data.page_id)
     .fetch_one(pool)
     .await?;
@@ -1984,10 +1988,10 @@ async fn page_summary_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
 ) -> AppResult<PageSummary> {
-    let row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let row = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
+    )))
     .bind(page_id)
     .fetch_one(&mut **tx)
     .await?;
@@ -2011,10 +2015,10 @@ async fn existing_completed_clone(
     let Some(clone_id) = clone_id else {
         return Ok(None);
     };
-    let row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let row = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
-    ))
+    )))
     .bind(&clone_id)
     .fetch_optional(&mut **tx)
     .await?;
@@ -2213,7 +2217,7 @@ pub async fn recompute_recurring_schedules_impl(
         return Ok(Vec::new());
     }
 
-    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(&format!(
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id IN ("
     ));
     let mut sep = builder.separated(", ");
@@ -2316,10 +2320,10 @@ async fn reschedule_virtual_occurrence_once(
 
     // Rescheduling a trashed series must not resurrect its content as a visible page.
     // sql-ok: page_row_select is built from compile-time constants
-    let head = sqlx::query_as::<_, PageRow>(&format!(
+    let head = sqlx::query_as::<_, PageRow>(sqlx::AssertSqlSafe(format!(
         "{} WHERE id = ? AND deleted_at IS NULL",
         page_row_select()
-    ))
+    )))
     .bind(&page_id)
     .fetch_optional(&mut *tx)
     .await?
@@ -2409,10 +2413,10 @@ async fn reschedule_virtual_occurrence_once(
     tx.commit().await?;
 
     // Post-commit, so FTS triggers have fired.
-    let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+    let clone_row = sqlx::query_as::<_, PageSummaryRow>(sqlx::AssertSqlSafe(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
+    )))
     .bind(&clone_id)
     .fetch_one(pool)
     .await?;
@@ -2435,10 +2439,13 @@ pub(crate) async fn get_page_in(
     id: &str,
 ) -> AppResult<Option<Page>> {
     // sql-ok: page_row_select is built from compile-time constants
-    let row = sqlx::query_as::<_, PageRow>(&format!("{} WHERE id = ?", page_row_select()))
-        .bind(id)
-        .fetch_optional(conn)
-        .await?;
+    let row = sqlx::query_as::<_, PageRow>(sqlx::AssertSqlSafe(format!(
+        "{} WHERE id = ?",
+        page_row_select()
+    )))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?;
     Ok(row.map(Page::from))
 }
 

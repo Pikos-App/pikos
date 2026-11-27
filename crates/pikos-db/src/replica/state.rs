@@ -49,7 +49,7 @@ pub(crate) async fn synced_rows_conn(
 ) -> AppResult<Vec<SyncedRow>> {
     let mut rows = Vec::new();
     for entity in ENTITIES {
-        for row in sqlx::query(&select_sql(entity))
+        for row in sqlx::query(sqlx::AssertSqlSafe(&*select_sql(entity)))
             .fetch_all(&mut *conn)
             .await?
         {

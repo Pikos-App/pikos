@@ -55,7 +55,7 @@ pub async fn assert_converged(a: &SqlitePool, b: &SqlitePool) {
 }
 
 pub async fn text(pool: &SqlitePool, sql: &str) -> Option<String> {
-    sqlx::query_scalar(sql)
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
         .fetch_optional(pool)
         .await
         .unwrap()

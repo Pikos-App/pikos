@@ -13,7 +13,10 @@ async fn names(pool: &sqlx::SqlitePool) -> BTreeSet<String> {
 }
 
 async fn exec(pool: &sqlx::SqlitePool, sql: &str) {
-    sqlx::query(sql).execute(pool).await.unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

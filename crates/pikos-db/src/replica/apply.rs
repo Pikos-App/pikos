@@ -335,10 +335,11 @@ impl Touched {
         // sql-ok: body_sql is built from a compile-time constant
         let read_body = format!("SELECT {body} FROM pages WHERE id = ?");
         for page in &self.bodies {
-            let content: Option<String> = sqlx::query_scalar(&read_body)
-                .bind(page)
-                .fetch_optional(tx.conn())
-                .await?;
+            let content: Option<String> =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(read_body.as_str()))
+                    .bind(page)
+                    .fetch_optional(tx.conn())
+                    .await?;
             if let Some(content) = content {
                 sqlx::query("UPDATE pages SET content_text = ?, links = ? WHERE id = ?")
                     .bind(crate::pool::extract_text_from_tiptap(&content))
@@ -349,10 +350,11 @@ impl Touched {
             }
         }
         for page in self.page_rows.difference(&self.bodies) {
-            let content: Option<String> = sqlx::query_scalar(&read_body)
-                .bind(page)
-                .fetch_optional(tx.conn())
-                .await?;
+            let content: Option<String> =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(read_body.as_str()))
+                    .bind(page)
+                    .fetch_optional(tx.conn())
+                    .await?;
             if let Some(content) = content {
                 sqlx::query("UPDATE pages SET links = ? WHERE id = ?")
                     .bind(crate::pages::links_of(&content))
@@ -673,9 +675,9 @@ async fn known(
     entity: Entity,
     id: &str,
 ) -> AppResult<Known> {
-    let present: bool = sqlx::query_scalar(&format!(
+    let present: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT EXISTS (SELECT 1 FROM {table} WHERE id = ?)"
-    )) // sql-ok: table names are literals from this module
+    ))) // sql-ok: table names are literals from this module
     .bind(id)
     .fetch_one(&mut *conn)
     .await?;
@@ -716,7 +718,7 @@ async fn detach_references(
                 entity.key
             )
             .replace("{row}", "t");
-            let keys: Vec<String> = sqlx::query_scalar(&sql)
+            let keys: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
                 .bind(id)
                 .fetch_all(&mut *conn)
                 .await?;
@@ -782,7 +784,7 @@ async fn reattach_references(
             entity.table, entity.table, entity.key
         )
         .replace("{row}", "t");
-        sqlx::query(&sql)
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(id)
             .bind(&key)
             .execute(&mut *conn)
@@ -813,9 +815,9 @@ async fn project_links(
         };
         let missing = match &row.fields[f].values[c] {
             Value::Text(id) => {
-                let here: bool = sqlx::query_scalar(&format!(
+                let here: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                     "SELECT EXISTS (SELECT 1 FROM {target_table} WHERE id = ?)"
-                )) // sql-ok: table names are literals from the manifest
+                ))) // sql-ok: table names are literals from the manifest
                 .bind(id)
                 .fetch_one(&mut *conn)
                 .await?;
@@ -1148,7 +1150,7 @@ async fn prune_purged_children(
             entity.key, entity.table
         )
         .replace("{row}", "t");
-        let keys: Vec<String> = sqlx::query_scalar(&sql)
+        let keys: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(page)
             .fetch_all(&mut *conn)
             .await?;
@@ -1217,7 +1219,7 @@ async fn hold_newer_children(conn: &mut SqliteConnection, page: &str, tomb: Hlc)
             entity.key, entity.table
         )
         .replace("{row}", "t");
-        let keys: Vec<String> = sqlx::query_scalar(&sql)
+        let keys: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(page)
             .fetch_all(&mut *conn)
             .await?;
@@ -1256,7 +1258,7 @@ async fn out_of_scope_here(
         entity.key
     )
     .replace("{row}", "t");
-    let out: Option<bool> = sqlx::query_scalar(&sql)
+    let out: Option<bool> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(key)
         .fetch_optional(&mut *conn)
         .await?;
@@ -1276,7 +1278,7 @@ async fn read_row(
         entity.table, entity.key
     )
     .replace("{row}", "t");
-    let Some(row) = sqlx::query(&sql)
+    let Some(row) = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(key)
         .fetch_optional(&mut *conn)
         .await?
@@ -1392,9 +1394,9 @@ async fn write_packed(
 }
 
 fn bind_value<'q>(
-    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
     value: &Value,
-) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match value {
         Value::Null => query.bind(None::<String>),
         Value::Integer(i) => query.bind(*i),
@@ -1533,7 +1535,7 @@ async fn write_row(
         all_columns.join(", "),
         vec!["?"; all_columns.len()].join(", "),
     );
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()));
     for value in &identity_values {
         query = query.bind(value.clone());
     }
@@ -1551,7 +1553,10 @@ async fn delete_row(conn: &mut SqliteConnection, entity: &EntityMap, key: &str) 
         entity.table, entity.table, entity.key
     )
     .replace("{row}", "t");
-    sqlx::query(&sql).bind(key).execute(&mut *conn).await?;
+    sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .bind(key)
+        .execute(&mut *conn)
+        .await?;
     Ok(())
 }
 
@@ -1577,7 +1582,7 @@ async fn revive(conn: &mut SqliteConnection, name: &RecordName) -> AppResult<()>
             entity.key, entity.table
         )
         .replace("{row}", "t");
-        let keys: Vec<String> = sqlx::query_scalar(&sql)
+        let keys: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(&name.key)
             .fetch_all(&mut *conn)
             .await?;

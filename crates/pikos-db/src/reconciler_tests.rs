@@ -169,11 +169,13 @@ async fn page_content_text(pool: &sqlx::SqlitePool, page_id: &str) -> String {
 async fn page_content(pool: &sqlx::SqlitePool, page_id: &str) -> String {
     let body = crate::page_chunks::body_sql("pages.id");
     // sql-ok: body_sql is built from a compile-time constant
-    sqlx::query_scalar(&format!("SELECT {body} FROM pages WHERE id = ?"))
-        .bind(page_id)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT {body} FROM pages WHERE id = ?"
+    )))
+    .bind(page_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 /// (seeded_description_hash, seeded_description_hash_version, pending_description).
@@ -2742,7 +2744,7 @@ async fn teardown_re_drains_a_link_inserted_below_the_cursor() {
     .await
     .unwrap();
     // sql-ok: ACCOUNT is a test-local constant
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "CREATE TRIGGER late_link AFTER UPDATE OF sync_state ON page_sync
          WHEN NOT EXISTS (SELECT 1 FROM page_sync WHERE id = 'aaa-late')
          BEGIN
@@ -2752,7 +2754,7 @@ async fn teardown_re_drains_a_link_inserted_below_the_cursor() {
            VALUES ('aaa-late', 'late-page', '{ACCOUNT}', 'caldav', 'cal', '/late.ics',
                    'uid-late', 'active', '2026-01-01T00:00:00Z');
          END"
-    ))
+    )))
     .execute(&pool)
     .await
     .unwrap();

@@ -121,7 +121,7 @@ async fn skip(pool: &SqlitePool, id: &str, date: &str) {
 }
 
 async fn dates(pool: &SqlitePool, sql: &str, page: &str) -> Vec<String> {
-    sqlx::query_scalar(sql)
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
         .bind(page)
         .fetch_all(pool)
         .await
@@ -147,7 +147,10 @@ async fn skipped_dates(pool: &SqlitePool, page: &str) -> Vec<String> {
 }
 
 async fn count(pool: &SqlitePool, sql: &str) -> i64 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 /// What a device plans to fire over the day from 07:00 UTC on 2030-01-10, at its own default lead.

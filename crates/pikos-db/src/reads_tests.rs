@@ -25,7 +25,10 @@ async fn page(
 }
 
 async fn exec(pool: &SqlitePool, sql: &str) {
-    sqlx::query(sql).execute(pool).await.unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 /// Make `id` a synced page whose stored times are wall clocks in `zone`.

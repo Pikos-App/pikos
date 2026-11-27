@@ -37,11 +37,13 @@ fn new_page(title: &str) -> NewPage {
 }
 
 async fn count(pool: &SqlitePool, table: &str, page_id: &str) -> i64 {
-    sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE page_id = ?")) // sql-ok:
-        .bind(page_id)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM {table} WHERE page_id = ?"
+    ))) // sql-ok:
+    .bind(page_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 #[tokio::test]

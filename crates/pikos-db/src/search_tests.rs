@@ -405,7 +405,10 @@ async fn the_index_drives_the_join_to_pages_without_statistics() {
         "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM {MATCHED_PAGES}
          WHERE pages_fts MATCH 'word*' AND pages.deleted_at IS NULL AND pages.status = 'done'"
     );
-    let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(&sql).fetch_all(&pool).await.unwrap();
+    let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     let first = &plan.first().unwrap().3;
     assert!(first.starts_with("SCAN pages_fts"), "{plan:?}");
 }

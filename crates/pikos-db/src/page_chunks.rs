@@ -62,14 +62,14 @@ pub async fn write_body<'a>(
 
     let rows = stored_rows_sql("?2");
     // sql-ok: stored_rows_sql is built from a compile-time constant
-    let written = sqlx::query(&format!(
+    let written = sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO page_chunks (page_id, chunk_id, ord, body)
            SELECT ?2, w.value ->> 'id', w.value ->> 'ord', COALESCE(w.value ->> 'body', '')
            FROM json_each(pikos_chunk_writes(?1, {rows})) AS w
            WHERE true
          ON CONFLICT (page_id, chunk_id) DO UPDATE
            SET ord = excluded.ord, body = iif(excluded.body = '', body, excluded.body)"
-    ))
+    )))
     .bind(content)
     .bind(page_id)
     .execute(&mut *tx)
@@ -133,7 +133,7 @@ pub async fn stored_body(pool: &sqlx::SqlitePool, page_id: &str) -> AppResult<Op
     let rows = stored_rows_sql("pages.id");
     // sql-ok: stored_rows_sql is built from a compile-time constant
     let sql = format!("SELECT body_rev, {rows} FROM pages WHERE id = ?");
-    let row: Option<(i64, Option<String>)> = sqlx::query_as(&sql)
+    let row: Option<(i64, Option<String>)> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(page_id)
         .fetch_optional(pool)
         .await?;

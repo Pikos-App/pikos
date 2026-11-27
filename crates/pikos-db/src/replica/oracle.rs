@@ -58,7 +58,11 @@ async fn synced_state(pool: &SqlitePool) -> State {
             entity.table,
         );
 
-        for row in sqlx::query(&sql).fetch_all(pool).await.unwrap() {
+        for row in sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .fetch_all(pool)
+            .await
+            .unwrap()
+        {
             let mut values = (3..3 + columns.len()).map(|i| row.get::<String, _>(i));
             let fields = entity
                 .fields
@@ -79,9 +83,9 @@ async fn synced_state(pool: &SqlitePool) -> State {
 }
 
 async fn exists(pool: &SqlitePool, table: &str, id: &str) -> bool {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT EXISTS (SELECT 1 FROM {table} WHERE id = ?)"
-    )) // sql-ok: table names from the manifest
+    ))) // sql-ok: table names from the manifest
     .bind(id)
     .fetch_one(pool)
     .await

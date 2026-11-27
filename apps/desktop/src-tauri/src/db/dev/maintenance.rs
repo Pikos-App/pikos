@@ -38,9 +38,10 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
             "focus_sessions",
             "sync_account",
         ] {
-            let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a literal from the list above
-                .fetch_one(pool)
-                .await?;
+            let n: i64 =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}"))) // sql-ok: table is a literal from the list above
+                    .fetch_one(pool)
+                    .await?;
             counts.push((table, n));
         }
         counts

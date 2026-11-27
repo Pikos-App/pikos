@@ -32,7 +32,9 @@ pub async fn fetch_export_pages(
         "SELECT {columns} FROM pages p \
          WHERE p.deleted_at IS NULL{exclude_mirrors} ORDER BY p.sort_order"
     );
-    Ok(sqlx::query(&sql).fetch_all(pool).await?)
+    Ok(sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .fetch_all(pool)
+        .await?)
 }
 
 /// The stored path of an image node's file: `data-asset-path` where the editor set it, else a
@@ -147,7 +149,11 @@ pub async fn plan_markdown_page(
 ) -> AppResult<Option<MarkdownPage>> {
     let columns = markdown_columns();
     let sql = format!("SELECT {columns} FROM pages p WHERE p.id = ? AND p.deleted_at IS NULL");
-    let Some(row) = sqlx::query(&sql).bind(page_id).fetch_optional(pool).await? else {
+    let Some(row) = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .bind(page_id)
+        .fetch_optional(pool)
+        .await?
+    else {
         return Ok(None);
     };
 
@@ -502,7 +508,9 @@ pub async fn backup_to(pool: &sqlx::SqlitePool, destination: &str) -> AppResult<
     // SQLite rejects a bound parameter for the target, so the path goes in as a literal with
     // the quote doubled; refusing such a path would fail on a name every platform allows.
     let sql = format!("VACUUM INTO '{}'", destination.replace('\'', "''")); // sql-ok: quote-escaped literal; VACUUM INTO takes no bound parameter
-    sqlx::query(&sql).execute(pool).await?;
+    sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -528,7 +536,7 @@ pub async fn reset_workspace(pool: &sqlx::SqlitePool) -> AppResult<()> {
         "folders",
         "sync_account",
     ] {
-        sqlx::query(&format!("DELETE FROM {table}")) // sql-ok: table is a literal from the list above
+        sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table}"))) // sql-ok: table is a literal from the list above
             .execute(pool)
             .await?;
     }

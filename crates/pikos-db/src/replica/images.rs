@@ -85,7 +85,7 @@ pub(crate) async fn queue_arrived(
     // sql-ok: body_sql is built from a compile-time constant
     let read_body = format!("SELECT {body} FROM pages WHERE id = ?");
     for page in pages {
-        let content: Option<String> = sqlx::query_scalar(&read_body)
+        let content: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(read_body.as_str()))
             .bind(page)
             .fetch_optional(&mut *conn)
             .await?;

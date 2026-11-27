@@ -438,7 +438,10 @@ async fn every_stream_reads_through_its_index_without_sorting() {
                  AND status <> 'done'{filter} AND {scope} ORDER BY {order} LIMIT 50"
             );
             let plan: Vec<(i64, i64, i64, String)> =
-                sqlx::query_as(&sql).fetch_all(&pool).await.unwrap();
+                sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
             let text: String = plan
                 .into_iter()
                 .map(|(_, _, _, d)| d)

@@ -215,7 +215,7 @@ pub async fn due_day_before_reminders(
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
     let (window_start, now_ts) = window.wall_bounds();
     // sql-ok: DAY_BEFORE_MINUTES and DAY_BEFORE_HOUR are compile-time constants
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before
          FROM page_schedules ps
@@ -237,7 +237,7 @@ pub async fn due_day_before_reminders(
              WHERE nl.schedule_id = ps.id || '#' || pr.minutes_before
                AND nl.type = 'reminder'
            )"
-    ))
+    )))
     .bind(&window_start)
     .bind(&now_ts)
     .fetch_all(pool)

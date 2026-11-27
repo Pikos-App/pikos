@@ -404,8 +404,8 @@ async fn carry_past_end(
 /// occurrence on. Returns how many moved and how many stayed.
 async fn move_occurring_dates(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    select: &str,
-    update: &str,
+    select: &'static str,
+    update: &'static str,
     from_page: &str,
     from_day: &str,
     to_page: &str,
@@ -1180,7 +1180,7 @@ async fn is_owned(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, page_id: &str) -
          WHERE p.id = ?",
         crate::sync::PAGE_OWNED_SQL
     );
-    let owned: bool = sqlx::query_scalar(&sql)
+    let owned: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(page_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -1652,11 +1652,11 @@ async fn apply_seeded_description(
 pub(crate) async fn rebuild_seeded_bodies(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let body = crate::page_chunks::body_sql("p.id");
     // sql-ok: body_sql is built from a compile-time constant
-    let rows: Vec<(String, String, String, String)> = sqlx::query_as(&format!(
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT p.id, {body}, p.content_text, ps.seeded_description_hash
          FROM pages p JOIN page_sync ps ON ps.page_id = p.id
          WHERE ps.seeded_description_hash IS NOT NULL"
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     let mut tx = pool.begin().await?;

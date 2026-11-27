@@ -65,7 +65,10 @@ fn all_fields(entity_kind: Entity) -> i64 {
 }
 
 async fn exec(pool: &SqlitePool, sql: &str) {
-    sqlx::query(sql).execute(pool).await.unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn started_pool() -> SqlitePool {

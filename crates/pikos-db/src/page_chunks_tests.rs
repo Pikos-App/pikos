@@ -150,10 +150,10 @@ async fn every_body_write_reads_back_as_written() {
     synced_event(&pool, "v1", &"A long agenda line.\n".repeat(2_000)).await;
     synced_event(&pool, "v2", &"A changed agenda line.\n".repeat(2_000)).await;
     // sql-ok: body_sql is built from a compile-time constant
-    let seeded: String = sqlx::query_scalar(&format!(
+    let seeded: String = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT {} FROM pages WHERE title = 'Meeting'",
         body_sql("pages.id")
-    ))
+    )))
     .fetch_one(&pool)
     .await
     .unwrap();

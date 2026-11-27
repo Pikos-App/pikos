@@ -178,7 +178,9 @@ pub(crate) async fn snapshot_workspace(workspace_path: &str, dest: &Path) -> App
         "VACUUM INTO '{}'",
         dest.to_string_lossy().replace('\'', "''")
     );
-    let result = sqlx::query(&sql).execute(&pool).await; // sql-ok: VACUUM INTO takes no bind parameter
+    let result = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+        .execute(&pool)
+        .await; // sql-ok: VACUUM INTO takes no bind parameter
     pool.close().await;
     result?;
     Ok(())

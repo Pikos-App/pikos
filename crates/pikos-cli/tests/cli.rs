@@ -97,7 +97,7 @@ where
     )
     .await
     .unwrap();
-    sqlx::query_scalar::<_, T>(sql)
+    sqlx::query_scalar::<_, T>(sqlx::AssertSqlSafe(sql))
         .fetch_one(&pool)
         .await
         .unwrap()
