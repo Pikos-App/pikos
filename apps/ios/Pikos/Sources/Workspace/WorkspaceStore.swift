@@ -3,6 +3,7 @@ import Observation
 import PikosCore
 import PikosSupport
 import UIKit
+import os
 
 /// The app's single connection to the workspace, and the state the UI observes.
 ///
@@ -142,7 +143,31 @@ public final class WorkspaceStore {
 
     /// Set when something failed in a way the user should see; cleared on dismiss. Shown by the
     /// shell rather than any one screen, so a failed write on the calendar says so there.
-    public var errorMessage: String?
+    public var failure: FailureNotice?
+
+    /// A failure whose message already says what went wrong, under a generic title.
+    public var errorMessage: String? {
+        get { failure?.message }
+        set { failure = newValue.map { FailureNotice(title: String(localized: "Something went wrong"), message: $0) } }
+    }
+
+    private static let log = Logger(subsystem: "app.pikos", category: "workspace")
+
+    /// Shows what failed and why, and logs the same naming the page or folder `id` and the error's
+    /// kind. The message stays private in the log: a refusal can quote a tag or folder name.
+    private func fail(_ doing: String, _ error: Error, id: String? = nil) {
+        failure = FailureNotice(doing: doing, error: error)
+        Self.log.error(
+            "couldn't \(doing, privacy: .public)\(id.map { " \($0)" } ?? "", privacy: .public): \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+        )
+    }
+
+    /// For the failures deliberately kept off screen, so they still leave a trace.
+    private func logQuietly(_ doing: String, _ error: Error, id: String? = nil) {
+        Self.log.notice(
+            "couldn't \(doing, privacy: .public)\(id.map { " \($0)" } ?? "", privacy: .public): \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+        )
+    }
 
     /// Something that just happened and the way back from it, for a few seconds. One mechanism for
     /// every "done, undo?" moment, so there is one countdown to keep in step. The shell draws and
@@ -275,7 +300,11 @@ public final class WorkspaceStore {
             }
             // After the open, so SQLite's sidecar files get the class too. The app is the only
             // writer, so this is the one place it can be applied without racing.
-            try? WorkspaceLocation.applyProtectionClass()
+            do {
+                try WorkspaceLocation.applyProtectionClass()
+            } catch {
+                Self.log.error("couldn't apply the data protection class: \(FailureText.kind(error), privacy: .public)")
+            }
             if isNewWorkspace {
                 #if DEBUG
                     if let count = DemoWorkspace.perfPageCount {
@@ -292,18 +321,10 @@ public final class WorkspaceStore {
             await refresh()
         } catch {
             isLoading = false
-            openFailure = Self.describe(error)
-        }
-    }
-
-    private static func describe(_ error: Error) -> String {
-        switch error {
-        case WorkspaceError.TooNew:
-            return String(localized: "This workspace was saved by a newer version of Pikos. Update Pikos to open it.")
-        case WorkspaceError.Open(let message), WorkspaceError.Database(let message):
-            return message
-        default:
-            return error.localizedDescription
+            openFailure = FailureText.message(error)
+            Self.log.fault(
+                "couldn't open the workspace: \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .private)"
+            )
         }
     }
 
@@ -319,18 +340,32 @@ public final class WorkspaceStore {
     ///
     /// Seeded only when the database did not exist before this open, so a restored or synced
     /// workspace is never given pages its owner did not write.
+    /// A seed that fails isn't worth an alert at first launch: the workspace works without it.
     private func seedStartHere() async {
-        guard let workspace,
-            let folder = try? await workspace.createFolder(
+        guard let workspace else { return }
+        let folder: Folder
+        do {
+            folder = try await workspace.createFolder(
                 name: String(localized: "Start here"), color: Self.startHereColor)
-        else { return }
+        } catch {
+            logQuietly("create the Start here folder", error)
+            return
+        }
         for page in Self.startHerePages {
             let new = NewPage(
                 title: page.title, subtitle: page.subtitle, folderId: folder.id,
                 content: plainTextToDocument(text: page.text), tags: ["tutorial"])
-            _ = try? await workspace.createPage(page: new)
+            do {
+                _ = try await workspace.createPage(page: new)
+            } catch {
+                logQuietly("create a Start here page", error, id: folder.id)
+            }
         }
-        try? await workspace.recordFirstRunSeed()
+        do {
+            try await workspace.recordFirstRunSeed()
+        } catch {
+            logQuietly("record the first-run seed", error)
+        }
     }
 
     /// The desktop tutorial's folder colour, so the folder looks the same on both.
@@ -442,7 +477,7 @@ public final class WorkspaceStore {
             // The view or its order changed while this read was out; the change's own read follows.
         } catch {
             isLoading = false
-            errorMessage = error.localizedDescription
+            fail("load the list", error)
         }
     }
 
@@ -516,7 +551,7 @@ public final class WorkspaceStore {
         do {
             try await refreshAroundTheList(workspace)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("update the list", error)
         }
     }
 
@@ -600,15 +635,20 @@ public final class WorkspaceStore {
         for _ in 0..<windows {
             guard let cursor = after else { break }
             let window: PageWindow?
-            switch scope {
-            case .today:
-                window = try? await workspace.listTodayWindow(after: cursor, limit: UInt32(limit)).earlier
-            case .inbox, .folder:
-                guard let listScope = scope.listScope else { return }
-                window = try? await workspace.listWindow(
-                    scope: listScope, sort: listSort.listSort, after: cursor, limit: UInt32(limit))
-            case .upcoming:
-                window = nil
+            do {
+                switch scope {
+                case .today:
+                    window = try await workspace.listTodayWindow(after: cursor, limit: UInt32(limit)).earlier
+                case .inbox, .folder:
+                    guard let listScope = scope.listScope else { return }
+                    window = try await workspace.listWindow(
+                        scope: listScope, sort: listSort.listSort, after: cursor, limit: UInt32(limit))
+                case .upcoming:
+                    window = nil
+                }
+            } catch {
+                fail("load more of the list", error)
+                return
             }
             guard let window else { return }
             more += window.pages
@@ -633,9 +673,15 @@ public final class WorkspaceStore {
         var before = before
         // Dropped below the last row read, with more after it: the neighbour is the next unread row.
         if before == nil, let next = nextWindow, let listScope = scope.listScope {
-            before = try? await workspace.listWindow(
-                scope: listScope, sort: listSort.listSort, after: next, limit: 1
-            ).pages.first?.id
+            do {
+                before = try await workspace.listWindow(
+                    scope: listScope, sort: listSort.listSort, after: next, limit: 1
+                ).pages.first?.id
+            } catch {
+                // Without the neighbour the page lands after the last row read, still a place the
+                // drag allowed.
+                logQuietly("read the next row for a drop", error, id: id)
+            }
         }
         // Moved here first, so the row stays where the finger left it while the write goes.
         if var pages = sections.first?.pages, let from = pages.firstIndex(where: { $0.id == id }) {
@@ -649,7 +695,7 @@ public final class WorkspaceStore {
         } catch WorkspaceError.Refused {
             // The list moved under the drag; the refresh below shows where things are now.
         } catch {
-            errorMessage = error.localizedDescription
+            fail("move the page", error, id: id)
         }
         await refresh()
     }
@@ -720,7 +766,7 @@ public final class WorkspaceStore {
                 completedPages.append(contentsOf: result.pages)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            fail("load the completed pages", error)
         }
     }
 
@@ -737,10 +783,10 @@ public final class WorkspaceStore {
             // worth an alert. `NotFound`, capitalised: UniFFI spells an error case as the Rust
             // variant, not in lowerCamelCase.
             if case .NotFound = error { return nil }
-            errorMessage = error.localizedDescription
+            fail("open the page", error, id: id)
             return nil
         } catch {
-            errorMessage = error.localizedDescription
+            fail("open the page", error, id: id)
             return nil
         }
     }
@@ -753,7 +799,7 @@ public final class WorkspaceStore {
         do {
             return try await workspace.calendarRange(start: start, end: end)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("load the calendar", error)
             return []
         }
     }
@@ -763,7 +809,11 @@ public final class WorkspaceStore {
     /// empty suggestion list is no fault worth an alert.
     public func allTags() async -> [String] {
         guard let workspace else { return [] }
-        guard let pages = try? await workspace.listPages(query: PageQuery(openOnly: true)) else {
+        let pages: [PageSummary]
+        do {
+            pages = try await workspace.listPages(query: PageQuery(openOnly: true))
+        } catch {
+            logQuietly("read the tags for suggestions", error)
             return []
         }
         var counts: [String: Int] = [:]
@@ -783,7 +833,7 @@ public final class WorkspaceStore {
             return try await workspace.search(
                 query: query, includeCompleted: includeCompleted, limit: limit)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("search", error)
             return nil
         }
     }
@@ -792,13 +842,22 @@ public final class WorkspaceStore {
     /// An empty list on failure: search without suggestions still works.
     public func recentPages(limit: UInt32 = 10) async -> [PageSummary] {
         guard let workspace else { return [] }
-        return (try? await workspace.recentPages(limit: limit)) ?? []
+        do {
+            return try await workspace.recentPages(limit: limit)
+        } catch {
+            logQuietly("read the recent pages", error)
+            return []
+        }
     }
 
     /// Recency is a convenience, so a failed write is not worth interrupting the reader for.
     public func markOpened(pageId: String) async {
         guard let workspace else { return }
-        try? await workspace.markPageOpened(id: pageId)
+        do {
+            try await workspace.markPageOpened(id: pageId)
+        } catch {
+            logQuietly("mark the page opened", error, id: pageId)
+        }
     }
 
     // MARK: - Writes
@@ -819,7 +878,7 @@ public final class WorkspaceStore {
                 ).content
                 typedSaves += 1
             } catch {
-                errorMessage = error.localizedDescription
+                fail("save the page", error, id: pageId)
             }
         }
         return stored
@@ -833,7 +892,7 @@ public final class WorkspaceStore {
             _ = try await workspace.updatePage(id: pageId, edit: edit)
             typedSaves += 1
         } catch {
-            errorMessage = error.localizedDescription
+            fail("save the page's title", error, id: pageId)
         }
     }
 
@@ -855,7 +914,7 @@ public final class WorkspaceStore {
             noticeIfOutOfView([created])
             return created
         } catch {
-            errorMessage = error.localizedDescription
+            fail("create the page", error)
             return nil
         }
     }
@@ -868,7 +927,7 @@ public final class WorkspaceStore {
         do {
             try await workspace.addPageReminder(pageId: pageId, minutesBefore: minutesBefore)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("add the reminder", error, id: pageId)
         }
     }
 
@@ -881,16 +940,20 @@ public final class WorkspaceStore {
         do {
             try await workspace.reorderFolders(orderedIds: orderedIds)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("reorder the folders", error)
         }
         await refresh()
     }
 
     public func reminders(pageId: String) async -> PageReminders {
-        guard let workspace,
-            let rows = try? await workspace.listPageReminders(pageId: pageId)
-        else { return PageReminders([]) }
-        return PageReminders(rows.map(\.minutesBefore))
+        guard let workspace else { return PageReminders([]) }
+        do {
+            return PageReminders(try await workspace.listPageReminders(pageId: pageId).map(\.minutesBefore))
+        } catch {
+            // Shown, since an empty chip would read as a page with no reminder.
+            fail("read the page's reminders", error, id: pageId)
+            return PageReminders([])
+        }
     }
 
     /// Put a lead on a page or take it off, as the desktop's reminder menu does.
@@ -932,7 +995,7 @@ public final class WorkspaceStore {
             try await write(workspace, try await workspace.listPageReminders(pageId: pageId))
             dataVersion += 1
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the reminder", error, id: pageId)
         }
         return await reminders(pageId: pageId)
     }
@@ -953,7 +1016,7 @@ public final class WorkspaceStore {
             await refresh()
             return folder
         } catch {
-            errorMessage = error.localizedDescription
+            fail("create the folder", error)
             return nil
         }
     }
@@ -966,7 +1029,7 @@ public final class WorkspaceStore {
             _ = try await workspace.renameFolder(id: id, name: trimmed)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("rename the folder", error, id: id)
         }
     }
 
@@ -982,7 +1045,7 @@ public final class WorkspaceStore {
             scope = .today
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("delete all data", error)
         }
     }
 
@@ -1006,8 +1069,9 @@ public final class WorkspaceStore {
             case .tooShort(let label): return label
             }
         } catch {
-            // Deliberately not `errorMessage`: that surfaces as an alert over the page list, and an
+            // Deliberately not `fail`: that surfaces as an alert over the page list, and an
             // unsaved focus session is not worth one.
+            logQuietly("record the focus session", error, id: pageId)
             return nil
         }
     }
@@ -1037,7 +1101,7 @@ public final class WorkspaceStore {
             _ = try await workspace.setFolderColor(id: id, color: color)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the folder's colour", error, id: id)
         }
     }
 
@@ -1052,7 +1116,7 @@ public final class WorkspaceStore {
             }
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("delete the folder", error, id: id)
         }
     }
 
@@ -1068,7 +1132,7 @@ public final class WorkspaceStore {
                 _ = try await workspace.updatePage(id: id, edit: PageEdit(title: trimmed))
                 await refresh()
             } catch {
-                errorMessage = error.localizedDescription
+                fail("rename the page", error, id: id)
             }
         }
     }
@@ -1086,7 +1150,7 @@ public final class WorkspaceStore {
             await refresh()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            fail("move the page", error, id: id)
             return false
         }
     }
@@ -1126,7 +1190,7 @@ public final class WorkspaceStore {
                     String(localized: "Moved to \(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())), the nearest day it repeats on"))
             }
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the date", error, id: pageId)
         }
     }
 
@@ -1165,7 +1229,7 @@ public final class WorkspaceStore {
                     }
                 })
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the date", error, id: pageId)
         }
     }
 
@@ -1177,7 +1241,7 @@ public final class WorkspaceStore {
                 _ = try await workspace.updatePage(id: pageId, edit: PageEdit(subtitle: subtitle))
                 await refresh()
             } catch {
-                errorMessage = error.localizedDescription
+                fail("save the subtitle", error, id: pageId)
             }
         }
     }
@@ -1191,7 +1255,15 @@ public final class WorkspaceStore {
 
     /// Open pages per view, for the switcher. Read when it opens rather than on every refresh.
     public func viewCounts() async -> ViewCounts {
-        guard let workspace, let counted = try? await workspace.viewCounts() else { return ViewCounts() }
+        guard let workspace else { return ViewCounts() }
+        let counted: PikosCore.ViewCounts
+        do {
+            counted = try await workspace.viewCounts()
+        } catch {
+            // Logged, not shown: the switcher still works without its counts.
+            logQuietly("count the pages in each view", error)
+            return ViewCounts()
+        }
         var counts = ViewCounts()
         counts.today = Int(counted.today)
         counts.upcoming = Int(counted.upcoming)
@@ -1216,7 +1288,7 @@ public final class WorkspaceStore {
             _ = try await workspace.updatePage(id: pageId, edit: PageEdit(tags: cleaned))
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the tags", error, id: pageId)
         }
     }
 
@@ -1227,7 +1299,7 @@ public final class WorkspaceStore {
         do {
             return try await workspace.pageRepeat(pageId: pageId)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("read how the page repeats", error, id: pageId)
             return nil
         }
     }
@@ -1243,7 +1315,7 @@ public final class WorkspaceStore {
             await refresh()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            fail("make the page repeat", error, id: pageId)
             return false
         }
     }
@@ -1257,7 +1329,7 @@ public final class WorkspaceStore {
             await refresh()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            fail("stop the page repeating", error, id: pageId)
             return false
         }
     }
@@ -1269,7 +1341,7 @@ public final class WorkspaceStore {
             _ = try await workspace.clearPageSchedule(pageId: pageId)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("clear the date", error, id: pageId)
         }
     }
 
@@ -1290,7 +1362,7 @@ public final class WorkspaceStore {
             _ = try await workspace.updatePage(id: pageId, edit: PageEdit(priority: stored))
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("change the priority", error, id: pageId)
         }
     }
 
@@ -1318,7 +1390,7 @@ public final class WorkspaceStore {
             noticeIfOutOfView(created)
             return created
         } catch {
-            errorMessage = error.localizedDescription
+            fail("add the page", error)
             return []
         }
     }
@@ -1396,7 +1468,7 @@ public final class WorkspaceStore {
                 await refresh()
             }
         } catch {
-            errorMessage = error.localizedDescription
+            fail(done ? "complete the page" : "reopen the page", error, id: pageId)
             await refresh()
         }
     }
@@ -1433,7 +1505,7 @@ public final class WorkspaceStore {
                 try await workspace.setPageStatus(pageId: id, done: true)
                 finished += 1
             } catch {
-                errorMessage = error.localizedDescription
+                fail("complete a page", error, id: id)
             }
         }
         await refresh()
@@ -1466,7 +1538,7 @@ public final class WorkspaceStore {
                 }
                 moved += 1
             } catch {
-                errorMessage = error.localizedDescription
+                fail(day == nil ? "clear a page's date" : "change a page's date", error, id: page.id)
             }
         }
         await refresh()
@@ -1498,7 +1570,7 @@ public final class WorkspaceStore {
                     edit: PageEdit(folder: folderId.map { .folder(id: $0) } ?? .inbox))
                 moved += 1
             } catch {
-                errorMessage = error.localizedDescription
+                fail("move a page", error, id: page.id)
             }
         }
         await refresh()
@@ -1520,7 +1592,7 @@ public final class WorkspaceStore {
                 try await workspace.trashPage(id: id)
                 trashed.append(id)
             } catch {
-                errorMessage = error.localizedDescription
+                fail("delete a page", error, id: id)
             }
         }
         await refresh()
@@ -1532,7 +1604,11 @@ public final class WorkspaceStore {
             action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
                 guard let self, let workspace = self.workspace else { return }
                 for id in trashed {
-                    try? await workspace.restorePage(id: id)
+                    do {
+                        try await workspace.restorePage(id: id)
+                    } catch {
+                        self.fail("restore a page", error, id: id)
+                    }
                 }
                 await self.refresh()
             })
@@ -1558,7 +1634,7 @@ public final class WorkspaceStore {
                         await self?.undoOverdueMove(moved)
                     })
         } catch {
-            errorMessage = error.localizedDescription
+            fail("move the overdue pages to today", error)
         }
     }
 
@@ -1569,7 +1645,7 @@ public final class WorkspaceStore {
             _ = try await workspace.undoOverdueMove(moved: moved)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("undo the move", error)
         }
     }
 
@@ -1585,6 +1661,7 @@ public final class WorkspaceStore {
         } catch {
             // A question that cannot be asked is not worth an alert: the caller acts on the one
             // occurrence.
+            logQuietly("read the earlier occurrences", error, id: entry.pageId)
             return []
         }
     }
@@ -1612,7 +1689,7 @@ public final class WorkspaceStore {
                 })
             return skipped
         } catch {
-            errorMessage = error.localizedDescription
+            fail("skip the occurrence", error, id: pageId)
             return []
         }
     }
@@ -1633,7 +1710,7 @@ public final class WorkspaceStore {
                     await self?.unskipOccurrences(pageId: pageId, dates: skipped)
                 })
         } catch {
-            errorMessage = error.localizedDescription
+            fail("skip this date", error, id: pageId)
         }
     }
 
@@ -1643,7 +1720,7 @@ public final class WorkspaceStore {
             try await workspace.unskipOccurrences(pageId: pageId, dates: dates)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("undo the skip", error, id: pageId)
         }
     }
 
@@ -1661,7 +1738,7 @@ public final class WorkspaceStore {
             await refresh()
             return Int(more) + 1
         } catch {
-            errorMessage = error.localizedDescription
+            fail("complete the occurrence", error, id: entry.pageId)
             await refresh()
             return 0
         }
@@ -1684,7 +1761,7 @@ public final class WorkspaceStore {
             await refresh()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            fail("move the occurrence", error, id: entry.pageId)
             return false
         }
     }
@@ -1706,7 +1783,7 @@ public final class WorkspaceStore {
         do {
             return try await workspace.listTrashedPages()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("open the trash", error)
             return []
         }
     }
@@ -1732,7 +1809,7 @@ public final class WorkspaceStore {
                     await self?.restore(pageId: pageId)
                 })
         } catch {
-            errorMessage = error.localizedDescription
+            fail("delete the page", error, id: pageId)
         }
     }
 
@@ -1742,7 +1819,13 @@ public final class WorkspaceStore {
     /// work.
     public func stopRepeating(pageId: String, title: String) async {
         guard let workspace else { return }
-        let previous = try? await workspace.pageRepeat(pageId: pageId)
+        // Read only to offer the way back, so a failure costs the Undo and nothing else.
+        var previous: PageRepeat?
+        do {
+            previous = try await workspace.pageRepeat(pageId: pageId)
+        } catch {
+            logQuietly("read the rule to offer an undo", error, id: pageId)
+        }
         do {
             try await workspace.removePageRepeat(pageId: pageId)
             await refresh()
@@ -1755,7 +1838,7 @@ public final class WorkspaceStore {
             }
             notice = Notice(String(localized: "\(name) no longer repeats"), action: undo)
         } catch {
-            errorMessage = error.localizedDescription
+            fail("stop the page repeating", error, id: pageId)
         }
     }
 
@@ -1765,7 +1848,7 @@ public final class WorkspaceStore {
             try await workspace.restorePage(id: pageId)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            fail("restore the page", error, id: pageId)
         }
     }
 

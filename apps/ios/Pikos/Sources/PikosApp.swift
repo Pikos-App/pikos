@@ -248,13 +248,13 @@ struct RootView: View {
         // Errors surface above every tab and sheet, so a failed write on the calendar is not an
         // alert waiting on the page list.
         .alert(
-            "Something went wrong",
+            store.failure?.title ?? "",
             isPresented: Binding(
-                get: { store.errorMessage != nil },
-                set: { if !$0 { store.errorMessage = nil } }
+                get: { store.failure != nil },
+                set: { if !$0 { store.failure = nil } }
             ),
             actions: { Button("OK", role: .cancel) {} },
-            message: { Text(store.errorMessage ?? "") }
+            message: { Text(store.failure?.message ?? "") }
         )
         .alert(
             "Started a new workspace",
