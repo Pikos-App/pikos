@@ -118,7 +118,7 @@ fi
 
 wait
 
-for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts rust-slice qa-rows tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts rust-slice merged-cleanup qa-rows tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
