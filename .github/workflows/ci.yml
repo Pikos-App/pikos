@@ -1,12 +1,14 @@
 name: CI
 
+# Every PR runs, a docs-only one included, so "CI result" always reports and main can require
+# it. Docs-only changes still skip the code gates: the `changes` job decides that per job.
 on:
+  # A release branch runs too: TestFlight builds from it, and before this nothing tested what
+  # reached a phone.
   push:
-    branches: [main]
-    paths-ignore: ['**.md', 'LICENSE']
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'LICENSE']
   # GitHub drops a cache nobody has read for seven days, and a run with none takes about 30
   # minutes instead of 12. main can go that long without a push, so this runs twice a week to
   # keep main's caches warm for the next push and every branch that reads them. It also catches
@@ -26,9 +28,9 @@ jobs:
   # The iOS job is skipped by path. It is the one macOS runner and often the longest job,
   # and most changes never reach the phone: a desktop screen, the site, a script.
   #
-  # The trigger's paths-ignore only sees a pull request's whole diff, so a docs-only push to a
-  # PR that touches code anywhere would rerun everything. `code` is false for a push that
-  # changed only docs on top of a head whose CI passed, since that head's result still holds.
+  # `code` is false when the whole change is docs, and for a push that changed only docs on top
+  # of a head whose CI passed, since that head's result still holds. `audits` is true only when a
+  # lockfile changed, and on the schedule.
   changes:
     name: What changed
     runs-on: ubuntu-latest
@@ -38,8 +40,9 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      code: ${{ steps.docs.outputs.code != 'false' }}
+      code: ${{ github.event_name == 'schedule' || (steps.code.outputs.code == 'true' && steps.docs.outputs.code != 'false') }}
       ios: ${{ github.event_name == 'schedule' || steps.filter.outputs.ios == 'true' }}
+      audits: ${{ github.event_name == 'schedule' || steps.filter.outputs.locks == 'true' }}
     steps:
       - uses: actions/checkout@v5
         if: github.event_name != 'schedule'
@@ -92,6 +95,23 @@ jobs:
               - 'scripts/gen-swift-bindings.sh'
               - '.github/workflows/ci.yml'
               - '.github/workflows/_ios.yml'
+            locks:
+              - 'Cargo.lock'
+              - 'pnpm-lock.yaml'
+              - 'apps/desktop/src-tauri/Cargo.lock'
+
+      # A file counts as code unless it is markdown or the licence. Its own step, because
+      # `every` would turn the OR lists above into AND lists.
+      - uses: dorny/paths-filter@v3
+        id: code
+        if: github.event_name != 'schedule'
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!LICENSE'
 
   # ── Validation ─────────────────────────────────────────────────────────────
   # verify + e2e + rust live in _validate.yml so release.yml can reuse them.
@@ -99,6 +119,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/_validate.yml
+    with:
+      audits: ${{ needs.changes.outputs.audits == 'true' }}
 
   # ── iOS ────────────────────────────────────────────────────────────────────
   # The only macOS runner in the repo, so it is its own workflow rather than a
@@ -118,3 +140,50 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/_build.yml
+
+  # ── Result ─────────────────────────────────────────────────────────────────
+  # The one check main requires. A skipped reusable workflow reports under its caller's name
+  # alone, so requiring "validate / Verify" would wait forever on a docs-only PR; this job always
+  # runs, passes when every gate passed or was skipped, and fails otherwise.
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, validate, ios, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every gate passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "gates: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "::error::a gate ended $r"; exit 1 ;; esac
+          done
+
+  # A red scheduled run has nobody watching it, so it opens an issue, or comments on the one
+  # already open, with the run's link and the jobs that failed.
+  file-scheduled-failure:
+    name: File a scheduled failure
+    if: always() && github.event_name == 'schedule' && needs.result.result == 'failure'
+    needs: [result]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failed=$(gh run view "$GITHUB_RUN_ID" --json jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name' || true)
+          body=$(printf 'The scheduled CI run on `main` failed: %s\n\n%s\n\nA new seed, a new advisory and a flaky test all land here. Triage each into the backlog.\n' "$RUN_URL" "${failed:-- (no job reported failure)}")
+          gh label create ci-scheduled --color B60205 --description "A scheduled CI run failed" --force
+          open=$(gh issue list --label ci-scheduled --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --label ci-scheduled --title "Scheduled CI failed" --body "$body"
+          fi

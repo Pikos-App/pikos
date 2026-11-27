@@ -1,0 +1,8 @@
+# The compiler every build uses, here and in CI, so a new stable with a new clippy lint arrives as
+# a deliberate change rather than a red run on a day nobody touched the code. Bump it by hand and
+# fix what the new clippy raises in the same change. The wasm package pins its own, older compiler
+# in scripts/build-recurrence-wasm.sh, since its output depends on the compiler.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

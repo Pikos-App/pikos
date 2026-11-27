@@ -64,18 +64,6 @@ printf '\033[0;32m✓\033[0m Unit tests — full suite\n'
 if [ -z "$rust_crates" ] && [ "$rust_desktop" = 0 ] && [ "$rust_swift" = 0 ]; then
   printf '\033[0;32m✓\033[0m %s\n' "$rust_summary"
 elif command -v cargo &>/dev/null; then
-  # CI installs the newest stable Rust, so these gates have to run on it too: an older compiler's
-  # clippy passes code that CI's fails on a lint it doesn't know yet. Offline, it says so and goes on.
-  # rustup check exits non-zero when an update exists, so its lines are read rather than its status.
-  stable=$(rustup check 2>/dev/null | grep '^stable-')
-  case "$stable" in
-    *"update available"*)
-      printf '\033[0;31m✗\033[0m Rust is older than the stable CI runs: %s\n' "${stable#*available: }"
-      echo "  Run: rustup update stable"
-      exit 1
-      ;;
-    "") echo "Couldn't ask rustup for the newest stable Rust, so this may not be CI's clippy." ;;
-  esac
   printf '\033[0;32m✓\033[0m %s\n' "$rust_summary"
 
   echo "Checking Rust formatting..."

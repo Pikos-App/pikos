@@ -19,7 +19,8 @@ PKG_DIR="packages/recurrence-wasm/pkg"
 WASM_BINDGEN_PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
 
 # `stable` would go red the day rustc bumps, since its version moves codegen and panic line
-# tables. The image tag pins toolchain and host together.
+# tables. The image tag pins toolchain and host together, and RUSTUP_TOOLCHAIN keeps the repo's
+# rust-toolchain.toml from swapping in the app's compiler inside the container.
 RUSTC_PIN="1.93.1"
 BUILD_IMAGE="rust:${RUSTC_PIN}-slim"
 BUILD_PLATFORM="linux/amd64"
@@ -37,6 +38,7 @@ docker run --rm \
   -e PKG_DIR="$PKG_DIR" \
   -e WASM_BINDGEN_PIN="$WASM_BINDGEN_PIN" \
   -e HOST_OWNER="$(id -u):$(id -g)" \
+  -e RUSTUP_TOOLCHAIN="$RUSTC_PIN" \
   "$BUILD_IMAGE" \
   bash -euo pipefail -c '
     apt-get update -qq >/dev/null

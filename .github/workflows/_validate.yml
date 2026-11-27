@@ -9,6 +9,12 @@ name: Validate
 
 on:
   workflow_call:
+    inputs:
+      # A new upstream advisory would otherwise turn every open PR red, whatever it changed.
+      # Off only for a PR or push that left the lockfiles alone; the schedule and a release audit.
+      audits:
+        type: boolean
+        default: true
 
 env:
   PNPM_VERSION: 10.30.3
@@ -116,6 +122,7 @@ jobs:
         run: pnpm audit:source
 
       - name: JS audit (shipped dependencies)
+        if: inputs.audits
         run: node scripts/check-js-audit.mjs
 
   # The single unit-test pass: desktop + core with per-directory coverage
@@ -305,7 +312,18 @@ jobs:
           merge-multiple: true
 
       - name: Merge into HTML report
-        run: pnpm --filter @pikos/desktop exec playwright merge-reports --reporter html ./all-blob-reports
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+        run: pnpm --filter @pikos/desktop exec playwright merge-reports --reporter html,json ./all-blob-reports
+
+      # The config retries a failed test twice, so a flaky one passes and nobody hears of it.
+      # Every test that needed a retry is named in the run's summary, and a scheduled run fails on
+      # one, which files it as an issue.
+      - name: Name the tests that needed a retry
+        working-directory: apps/desktop
+        env:
+          FAIL_ON_FLAKY: ${{ github.event_name == 'schedule' }}
+        run: node ../../scripts/flaky-tests.mjs results.json
 
       - name: Upload HTML report
         if: ${{ !cancelled() }}
@@ -337,9 +355,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      # The compiler and its components come from rust-toolchain.toml.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
@@ -375,14 +393,13 @@ jobs:
       - name: Cargo test
         run: cargo test --workspace --quiet
 
-      # The committed fuzz corpus is a sample. This searches wider on every CI
-      # run, with a seed derived from the run so successive runs explore
-      # different ground — which is the point: the first 20,000-line sweep found
-      # five divergence classes the 317-input corpus never reached, and a second
-      # seed found a sixth the first had missed.
+      # The committed fuzz corpus is a sample, so this searches wider. Only the scheduled run
+      # draws a new seed, since new ground is what finds bugs: the first 20,000-line sweep found
+      # five divergence classes the corpus never reached. A PR or push uses a fixed seed, so it
+      # fails only for what it changed, never for an old bug its seed happened to draw.
       - name: Wider differential fuzz against the TypeScript parser
         run: |
-          FUZZ_CASES=8000 FUZZ_SEED=${{ github.run_number }} \
+          FUZZ_CASES=8000 FUZZ_SEED=${{ github.event_name == 'schedule' && github.run_number || 1 }} \
             FUZZ_OUT=/tmp/fuzz-wide.json pnpm --filter @pikos/core gen:fuzz
           PIKOS_FUZZ_CORPUS=/tmp/fuzz-wide.json PIKOS_FUZZ_FAILURES=/tmp/fuzz-failures.json \
             cargo test --release -p pikos-core --test quick_add_fuzz
@@ -396,7 +413,7 @@ jobs:
 
       - name: Wider differential fuzz against the TypeScript calendar layout
         run: |
-          FUZZ_CASES=10000 FUZZ_SEED=${{ github.run_number }} \
+          FUZZ_CASES=10000 FUZZ_SEED=${{ github.event_name == 'schedule' && github.run_number || 1 }} \
             FUZZ_OUT=/tmp/calendar-wide.json pnpm --filter @pikos/desktop gen:fuzz-calendar
           PIKOS_CALENDAR_FUZZ=/tmp/calendar-wide.json \
             cargo test --release -p pikos-core --test calendar_fuzz
@@ -452,8 +469,14 @@ jobs:
           apt-get update
           apt-get install -y curl build-essential pkg-config tzdata libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      # The Playwright image ships no Rust, unlike the hosted runner, so rustup comes first. It
+      # installs no toolchain of its own: `rustup toolchain install` reads rust-toolchain.toml.
+      - name: Install the pinned Rust toolchain
         if: steps.cached.outputs.cache-hit != 'true'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
 
       # Saved from main only: the shards wait for this job to finish, saving included, and that
       # took about three minutes. A pull request restores main's.
@@ -567,9 +590,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      # The compiler and its components come from rust-toolchain.toml.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -621,6 +644,7 @@ jobs:
       # The release binary, pinned by version and checksum like gitleaks. Compiling it took three
       # minutes whenever its cache had been evicted.
       - name: Install cargo-audit
+        if: inputs.audits
         working-directory: .
         env:
           CARGO_AUDIT_VERSION: 0.23.0
@@ -637,12 +661,14 @@ jobs:
       # so an advisory here is a decision someone made. What it may stay quiet
       # about, and why, is `.cargo/audit.toml`.
       - name: Cargo audit
+        if: inputs.audits
         working-directory: .
         run: cargo audit
 
       # The desktop crate is outside the workspace and keeps its own lock, the one the
       # shipped binary is built from, with its own accepted list beside it.
       - name: Cargo audit (desktop)
+        if: inputs.audits
         run: cargo audit
 
   # packages/core/src/generated mirrors pikos-db's wire structs and is committed, so
