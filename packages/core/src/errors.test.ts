@@ -126,8 +126,12 @@ describe("storageErrorUserMessage", () => {
     expect(seen.size).toBeGreaterThanOrEqual(7);
   });
 
-  it("returns NotFound copy without the verb (refresh framing only)", () => {
-    expect(storageErrorUserMessage(err("NotFound"), "saving page")).not.toContain("saving page");
+  it("says what was being done and what to try next, for the kinds a retry can fix", () => {
+    for (const kind of ["NotFound", "Db", "Invalid", "Unknown"] as StorageErrorKind[]) {
+      const copy = storageErrorUserMessage(err(kind), "saving page");
+      expect(copy, kind).toContain("saving page");
+      expect(copy, kind).toMatch(/try again/i);
+    }
   });
 
   it("never echoes the raw backend message (which may contain user input or SQL)", () => {

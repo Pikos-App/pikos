@@ -149,6 +149,8 @@ describe("useTrash", () => {
     });
 
     expect(read).toHaveBeenCalled();
-    expect(hook.result.current.trash.error).toBe("That didn't work. Try again.");
+    expect(hook.result.current.trash.error).toMatch(
+      /^Something went wrong while emptying the trash/
+    );
   });
 });

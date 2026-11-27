@@ -129,7 +129,7 @@ describe("useCalendarPageCreate", () => {
 
     expect(created).toEqual([]);
     expect(hook.result.current.undo.toastItems.map((t) => t.label)).toEqual([
-      "Something went wrong while creating the page.",
+      "Something went wrong while creating the page. Try again, and restart Pikos if it keeps happening.",
     ]);
   });
 

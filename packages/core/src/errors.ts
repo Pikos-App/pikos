@@ -82,17 +82,17 @@ function toStorageErrorKind(raw: unknown): StorageErrorKind {
 export function storageErrorUserMessage(err: StorageError, verb = "the operation"): string {
   switch (err.kind) {
     case "NotFound":
-      return `Not found — refresh and try again.`;
+      return `Couldn't find it while ${verb}. It may have been deleted; refresh and try again.`;
     case "Conflict":
       return `Conflict while ${verb}. Try again in a moment.`;
     case "Io":
       return `Disk error while ${verb}. Check available space and permissions.`;
     case "Db":
-      return `Storage error while ${verb}.`;
+      return `Storage error while ${verb}. Try again, and restart Pikos if it keeps happening.`;
     case "Serde":
       return `Data shape mismatch while ${verb}. The workspace may need a restart.`;
     case "Invalid":
-      return `Invalid input for ${verb}.`;
+      return `Pikos couldn't accept that while ${verb}. Check what you entered and try again.`;
     case "Network":
       return `Couldn't reach the network while ${verb}. Check your connection.`;
     case "Corrupt":
@@ -102,6 +102,6 @@ export function storageErrorUserMessage(err: StorageError, verb = "the operation
     case "Internal":
     case "Unknown":
     default:
-      return `Something went wrong while ${verb}.`;
+      return `Something went wrong while ${verb}. Try again, and restart Pikos if it keeps happening.`;
   }
 }

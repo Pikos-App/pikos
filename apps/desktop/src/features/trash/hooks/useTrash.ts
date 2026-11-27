@@ -4,6 +4,7 @@
 // toast takes the same path).
 
 import type { TrashedPage } from "@pikos/core";
+import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -82,29 +83,29 @@ export function useTrash(active: boolean): TrashState {
 
   /** Run a write, then re-read: the backend decides what survives (a mirror is
    *  kept), so the list is refetched rather than patched from the outcome. */
-  async function mutate(label: string, write: () => Promise<void>): Promise<void> {
+  async function mutate(label: string, verb: string, write: () => Promise<void>): Promise<void> {
     try {
       await write();
       setError(null);
     } catch (e) {
       log.error(`${label} failed`, e);
-      setError({ from: "write", message: "That didn't work. Try again." });
+      setError({ from: "write", message: storageErrorUserMessage(toStorageError(e), verb) });
     }
     await refresh();
   }
 
   async function restore(id: string): Promise<void> {
-    await mutate("restorePage", () => restorePage(id));
+    await mutate("restorePage", "restoring the page", () => restorePage(id));
   }
 
   async function deleteForever(id: string): Promise<void> {
-    await mutate("deletePage", () => deletePage(id));
+    await mutate("deletePage", "deleting the page", () => deletePage(id));
   }
 
   async function emptyTrash(): Promise<number> {
     if (!storage) return 0;
     let purged = 0;
-    await mutate("purgeTrashedPages", async () => {
+    await mutate("purgeTrashedPages", "emptying the trash", async () => {
       purged = await storage.purgeTrashedPages(0);
       // Destructive and user-initiated: the count (never a title) is what makes
       // a "where did my pages go" report readable afterwards.
