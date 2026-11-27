@@ -190,6 +190,31 @@ async fn usage_stats_count_sessions_written_by_the_focus_writer() {
     assert!(s.has_focus_sessions);
 }
 
+/// A status that won't read fails the panel rather than showing as a nameless bar.
+#[tokio::test]
+async fn usage_stats_fail_on_a_status_that_will_not_read() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Groceries"))
+        .await
+        .unwrap();
+    // As a file written past the status guard would hold it.
+    sqlx::query("DROP TRIGGER page_status_known_on_update")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET status = X'00FF' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = get_usage_stats_impl(&pool, MONDAY, &today_local())
+        .await
+        .err()
+        .expect("the stats read a status that doesn't decode");
+
+    assert_eq!(err.kind(), "Db", "{err}");
+}
+
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
     let pool = test_pool().await;

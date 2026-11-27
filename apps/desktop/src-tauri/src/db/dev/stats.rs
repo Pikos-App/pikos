@@ -120,13 +120,15 @@ pub(crate) async fn get_usage_stats_impl(
         "SELECT status, COUNT(*) as count FROM pages WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC"
     ).fetch_all(pool).await?;
 
-    let pages_by_status: Vec<StatusCount> = status_rows
+    let pages_by_status = status_rows
         .iter()
-        .map(|row| StatusCount {
-            status: row.try_get::<String, _>("status").unwrap_or_default(),
-            count: row.try_get::<i64, _>("count").unwrap_or(0),
+        .map(|row| {
+            Ok(StatusCount {
+                status: row.try_get("status")?,
+                count: row.try_get("count")?,
+            })
         })
-        .collect();
+        .collect::<AppResult<Vec<_>>>()?;
 
     // Weeks key on their first day via `date(X, '-6 days', 'weekday N')`. The reverse, `'weekday N'`
     // then back a week, is wrong on the boundary day: SQLite's `weekday` modifier is a no-op when
@@ -175,10 +177,10 @@ pub(crate) async fn get_usage_stats_impl(
     .fetch_all(pool)
     .await?;
 
-    let weekly_activity: Vec<WeekActivity> = week_rows
+    let weekly_activity = week_rows
         .iter()
         .map(|row| {
-            let week_start: String = row.try_get("week_start").unwrap_or_default();
+            let week_start: String = row.try_get("week_start")?;
             let label = if week_start.len() >= 10 {
                 let month = match &week_start[5..7] {
                     "01" => "Jan",
@@ -200,15 +202,15 @@ pub(crate) async fn get_usage_stats_impl(
             } else {
                 week_start
             };
-            WeekActivity {
+            Ok(WeekActivity {
                 week: label,
-                created: row.try_get("created").unwrap_or(0),
-                edited: row.try_get("edited").unwrap_or(0),
-                completed: row.try_get("completed").unwrap_or(0),
-                focus_minutes: row.try_get("focus_minutes").unwrap_or(0),
-            }
+                created: row.try_get("created")?,
+                edited: row.try_get("edited")?,
+                completed: row.try_get("completed")?,
+                focus_minutes: row.try_get("focus_minutes")?,
+            })
         })
-        .collect();
+        .collect::<AppResult<Vec<_>>>()?;
 
     let has_folders = total_folders > 0;
     let has_schedules = total_schedules > 0;
