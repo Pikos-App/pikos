@@ -146,8 +146,8 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 
 ¹ `create_page_impl` rejects any create targeting an external-calendar folder
 (`crates/pikos-db/src/pages.rs`). Only the reconciler seeds pages there, via raw SQL.
-² Needs Node on PATH. The NL parser runs in a one-shot `node` bridge subprocess
-(`crates/pikos-cli/src/main.rs`). Every other command is pure Rust.
+² Parsed by the Rust Quick Add parser the phone runs (`pikos_core::nlp::quick_add`), so the
+CLI and the phone read a line the same way.
 ³ Normal editor: title + schedule + recurrence render read-only with a "from \<calendar\>"
 affordance; body, tags, priority, status, reminders stay live (`MetadataHeader.tsx`).
 ⁴ Locked mirror. Backend rejects title/`scheduled_start`/`scheduled_end` on an active-synced

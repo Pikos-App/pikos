@@ -5,19 +5,15 @@ The Pikos command-line interface and MCP server, in Rust, over the shared `pikos
 ## How it fits
 
 - **One writer.** Every read and write goes through `pikos-db`, the same code the desktop app uses for schema, FTS triggers, transactions, and ordering. The CLI reimplements none of it.
-- **One grammar.** `add` needs the TypeScript Quick Add parser. Porting it to Rust would recreate drift, so the CLI runs the `@pikos/bridge` bundle (`bridge.mjs`) in a one-shot Node subprocess. Only `add` (including `--dry-run`) and the MCP `create_page` tool need Node on PATH.
+- **One grammar with the phone.** `add` parses with `pikos_core::nlp::quick_add`, the Rust Quick Add parser the iPhone app runs, so a line typed at either becomes the same page. It is graded against the desktop's TypeScript parser by the corpora in `crates/pikos-core/tests`. `add --dry-run` and the MCP `create_page` tool's `dryRun` print the parse in the TypeScript parser's JSON shape, which agents read: a field nothing set is left out, and a cleared priority (`!0`) is `null`.
 - **One recurrence engine.** `pikos-recurrence`, the same engine the app runs as wasm.
 - **Two front ends, one `ops` layer.** The subcommands and `pikos mcp` both call `ops.rs`. Nothing in the MCP server reaches `pikos-db` directly, so a rule added to an operation holds on both.
 
 ## Build and run
 
 ```bash
-pnpm --filter @pikos/bridge build     # produces packages/pikos-bridge/dist/bridge.mjs
 cargo build -p pikos-cli --release    # target/release/pikos
-export PIKOS_BRIDGE_JS="$PWD/packages/pikos-bridge/dist/bridge.mjs"
 ```
-
-A build from source can't find the bridge on its own unless it runs from the repo root, so set `PIKOS_BRIDGE_JS`. A released build needs nothing: the tarball puts the bundle where the binary looks, and the Homebrew formula pins the variable.
 
 A debug build addresses `app.pikos.desktop.dev`, the workspace the dev desktop app writes, so branch work can't reach real data.
 

@@ -10,12 +10,11 @@ const graph = loadGraph();
 const pick = (...paths) => select(paths, graph);
 const names = (s) => (s.crates === "all" ? "all" : s.crates.split(" ").filter(Boolean));
 
-test("a change to the CLI alone tests the CLI alone, with the bridge built", () => {
+test("a change to the CLI alone tests the CLI alone", () => {
   const s = pick("crates/pikos-cli/src/main.rs");
   assert.deepEqual(names(s), ["pikos-cli"]);
   assert.equal(s.desktop, false);
   assert.equal(s.swift, false);
-  assert.equal(s.bridge, true);
 });
 
 test("a change to the desktop crate alone leaves the workspace alone", () => {
@@ -23,7 +22,6 @@ test("a change to the desktop crate alone leaves the workspace alone", () => {
   assert.deepEqual(names(s), []);
   assert.equal(s.desktop, true);
   assert.equal(s.swift, false);
-  assert.equal(s.bridge, false);
 });
 
 test("a change to the data layer reaches everything built on it, and nothing under it", () => {
@@ -83,12 +81,11 @@ test("a directory under crates/ that is no crate selects everything", () => {
   assert.match(s.summary, /pikos-something-new/);
 });
 
-test("the TypeScript core reaches the CLI through the bridge, and the files Rust tests read", () => {
-  assert.deepEqual(names(pick("packages/core/src/nlp/parser.ts")), ["pikos-cli"]);
+test("the TypeScript core reaches Rust only through the files Rust tests read", () => {
+  assert.deepEqual(names(pick("packages/core/src/nlp/parser.ts")), []);
 
   const types = pick("packages/core/src/types.ts");
   assert.ok(names(types).includes("pikos-db"), "pikos-db reads the schema version mirror");
-  assert.ok(names(types).includes("pikos-cli"));
 
   const cases = pick("packages/core/src/pages/pageActions.cases.json");
   assert.ok(names(cases).includes("pikos-core"), "pikos-core reads the page menu cases");

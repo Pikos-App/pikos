@@ -4,7 +4,6 @@ coverage
 package-lock.json
 build
 apps/desktop/dist
-packages/pikos-bridge/dist
 .svelte-kit
 package
 .turbo

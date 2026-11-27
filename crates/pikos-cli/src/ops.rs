@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use chrono::{Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use pikos_core::body_section::SectionEdit;
+use pikos_core::nlp::quick_add::ParseResult;
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, delete_page_schedule_impl,
@@ -24,8 +25,8 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::SqlitePool;
 
-use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
+use crate::quick_add;
 use crate::schedule::{parse_day_range, parse_due, resolve_schedule_change, ScheduleChange};
 use crate::write::{
     apply_patch, local_tz, markdown_to_doc, markdown_to_linked_doc, markdown_to_tiptap,
@@ -411,25 +412,14 @@ pub async fn list_tags(pool: &SqlitePool) -> Result<Vec<pikos_db::reads::TagCoun
 /// The agent-preview mode behind `add --dry-run`: the shape is exactly what [`cmd_add`]
 /// would then persist, so a caller can show the parse for approval and re-issue the text.
 pub fn parse_only(text: &str) -> Result<Value, CliError> {
-    let parsed = run_bridge("parse", text)?;
-    Ok(parsed["result"].clone())
+    quick_add::to_json(&quick_add::parse(text))
 }
 
 /// Writes as Quick Add would. The created pages are re-read so the caller sees the
 /// derived schedule rather than what was asked for.
 pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
-    let parsed = parse_only(text)?;
-    let result: ParseResult = serde_json::from_value(parsed).map_err(|e| {
-        CliError::internal(format!(
-            "could not interpret parser output ({:?} at {}:{})",
-            e.classify(),
-            e.line(),
-            e.column()
-        ))
-    })?;
-
     let mut created: Vec<Page> = Vec::new();
-    match result {
+    match quick_add::parse(text) {
         ParseResult::Recurring { input, rrule } => {
             let folder = resolve_folder(pool, &input.folder_query)
                 .await
@@ -440,12 +430,21 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
             )
             .await
             .map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
-                .await
-                .map_err(classify)?;
-            write_reminders(pool, &page.id, &input.reminder_minutes)
-                .await
-                .map_err(classify)?;
+            apply_patch(
+                pool,
+                &page.id,
+                priority_num(input.priority.flatten()),
+                &input.tags,
+            )
+            .await
+            .map_err(classify)?;
+            write_reminders(
+                pool,
+                &page.id,
+                input.reminder_minutes.as_deref().unwrap_or_default(),
+            )
+            .await
+            .map_err(classify)?;
             let (rule_start, rule_end) = pikos_recurrence::snap_schedule_to_rule(
                 &rrule,
                 &input.scheduled_start.clone().unwrap_or_else(today_local),
@@ -485,12 +484,21 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
                 )
                 .await
                 .map_err(classify)?;
-                apply_patch(pool, &page.id, priority_num(&inp.priority), &inp.tags)
-                    .await
-                    .map_err(classify)?;
-                write_reminders(pool, &page.id, &inp.reminder_minutes)
-                    .await
-                    .map_err(classify)?;
+                apply_patch(
+                    pool,
+                    &page.id,
+                    priority_num(inp.priority.flatten()),
+                    &inp.tags,
+                )
+                .await
+                .map_err(classify)?;
+                write_reminders(
+                    pool,
+                    &page.id,
+                    inp.reminder_minutes.as_deref().unwrap_or_default(),
+                )
+                .await
+                .map_err(classify)?;
                 if let Some(start) = &inp.scheduled_start {
                     schedule_once(pool, &page.id, start, inp.scheduled_end.as_deref())
                         .await
@@ -509,12 +517,21 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
             )
             .await
             .map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
-                .await
-                .map_err(classify)?;
-            write_reminders(pool, &page.id, &input.reminder_minutes)
-                .await
-                .map_err(classify)?;
+            apply_patch(
+                pool,
+                &page.id,
+                priority_num(input.priority.flatten()),
+                &input.tags,
+            )
+            .await
+            .map_err(classify)?;
+            write_reminders(
+                pool,
+                &page.id,
+                input.reminder_minutes.as_deref().unwrap_or_default(),
+            )
+            .await
+            .map_err(classify)?;
             if let Some(start) = &input.scheduled_start {
                 schedule_once(pool, &page.id, start, input.scheduled_end.as_deref())
                     .await

@@ -1,6 +1,7 @@
 //! Write helpers that mirror the app's persistence path, so a CLI-written page is
 //! indistinguishable from one the desktop app wrote.
 
+use pikos_core::nlp::quick_add::Priority;
 use pikos_db::{
     fuzzy_match_folder, list_folders_impl, list_page_schedules_impl, update_page_impl,
     update_page_schedule_impl, AppError, NewPage, NewPageSchedule, PageUpdate,
@@ -61,13 +62,13 @@ pub async fn write_reminders(
     Ok(())
 }
 
-pub fn priority_num(word: &Option<String>) -> i64 {
-    match word.as_deref() {
-        Some("urgent") => 1,
-        Some("high") => 2,
-        Some("medium") => 3,
-        Some("low") => 4,
-        _ => 0,
+pub fn priority_num(priority: Option<Priority>) -> i64 {
+    match priority {
+        Some(Priority::Urgent) => 1,
+        Some(Priority::High) => 2,
+        Some(Priority::Medium) => 3,
+        Some(Priority::Low) => 4,
+        None => 0,
     }
 }
 
@@ -179,13 +180,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn priority_num_maps_words() {
-        assert_eq!(priority_num(&Some("urgent".into())), 1);
-        assert_eq!(priority_num(&Some("high".into())), 2);
-        assert_eq!(priority_num(&Some("medium".into())), 3);
-        assert_eq!(priority_num(&Some("low".into())), 4);
-        assert_eq!(priority_num(&None), 0);
-        assert_eq!(priority_num(&Some("nonsense".into())), 0);
+    fn priority_num_maps_the_parsed_priority() {
+        assert_eq!(priority_num(Some(Priority::Urgent)), 1);
+        assert_eq!(priority_num(Some(Priority::High)), 2);
+        assert_eq!(priority_num(Some(Priority::Medium)), 3);
+        assert_eq!(priority_num(Some(Priority::Low)), 4);
+        assert_eq!(priority_num(None), 0);
     }
 
     #[test]

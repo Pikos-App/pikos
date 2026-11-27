@@ -12,7 +12,6 @@
 //   crates   all | space-separated workspace packages | empty
 //   desktop  1 when the desktop crate (apps/desktop/src-tauri) needs its gates
 //   swift    1 when the committed Swift bindings need regenerating and comparing
-//   bridge   1 when pikos-cli is selected, whose tests run the parser bridge bundle
 //   summary  one line for the hook to print
 
 import { execFileSync } from "node:child_process";
@@ -50,11 +49,6 @@ const READ_ACROSS = [
   [/^apps\/apple\/PikosSync\//, ["pikos-db", DESKTOP]],
   // The desktop crate's IPC tests read the read-command list out of the adapter.
   [/^apps\/desktop\/src\/shared\/adapters\/TauriSQLiteAdapter\.ts$/, [DESKTOP]],
-  // pikos-cli's tests drive the parser bridge bundle, which esbuild builds from these.
-  [
-    /^(packages\/(pikos-bridge|core|recurrence-wasm)\/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$)/,
-    ["pikos-cli"],
-  ],
 ];
 
 // The bindings check compares generated output with what is committed, so a change to either
@@ -95,7 +89,6 @@ export function select(paths, graph) {
     crates: "all",
     desktop: true,
     swift: true,
-    bridge: true,
     summary: `Rust gates: every crate, because ${path} changed`,
   });
   const workspace = [...graph.keys()].filter((name) => name !== DESKTOP);
@@ -147,7 +140,6 @@ export function select(paths, graph) {
     crates: crates.length === workspace.length ? "all" : crates.join(" "),
     desktop,
     swift,
-    bridge: crates.includes("pikos-cli"),
     summary,
   };
 }
@@ -159,6 +151,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   line("crates", s.crates);
   line("desktop", s.desktop ? 1 : 0);
   line("swift", s.swift ? 1 : 0);
-  line("bridge", s.bridge ? 1 : 0);
   line("summary", s.summary);
 }

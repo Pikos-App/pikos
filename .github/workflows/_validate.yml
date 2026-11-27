@@ -369,9 +369,8 @@ jobs:
       - name: Cargo clippy (zero warnings)
         run: bash scripts/clippy.sh --workspace --all-targets
 
-      # The parser bridge and the fuzz generators are TypeScript, so this job needs Node as
-      # well as Rust. Set up after fmt and clippy so a failure there surfaces without waiting
-      # on an install.
+      # The fuzz generators are TypeScript, so this job needs Node as well as Rust. Set up
+      # after fmt and clippy so a failure there surfaces without waiting on an install.
       - uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -382,12 +381,6 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-
-      # pikos-cli's `add` tests drive the real NLP parser through the @pikos/bridge bundle and
-      # silently skip themselves when it is absent, so without this build the CLI's whole
-      # parser surface would pass vacuously.
-      - name: Build the parser bridge
-        run: pnpm --filter @pikos/bridge build
 
       # The workspace's only test run in CI. The `rust` job below runs the desktop crate's.
       - name: Cargo test

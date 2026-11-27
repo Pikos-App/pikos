@@ -1,13 +1,11 @@
 //! Pikos CLI: headless access to the local workspace, over the shared `pikos-db`
-//! writer. Only the natural-language parser is bridged to the TS core (see
-//! [`bridge`]); recurrence math is not bridged, because the occurrence-sets model
-//! derives the completed occurrence and the next head server-side, in the same
-//! transaction as the write.
+//! writer. `add` parses with the phone's Quick Add parser (see [`quick_add`]), and
+//! recurrence math stays in `pikos-db`, which derives the completed occurrence and
+//! the next head in the same transaction as the write.
 //!
 //! The crate is laid out along that path: [`cli`] parses, [`commands`] dispatches,
 //! [`ops`] does the work against [`pikos_db`], and [`render`] prints it.
 
-mod bridge;
 mod cli;
 mod commands;
 mod error;
@@ -15,6 +13,7 @@ mod export;
 mod mcp;
 mod occurrences;
 mod ops;
+mod quick_add;
 mod render;
 mod schedule;
 mod stress;

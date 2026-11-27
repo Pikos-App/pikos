@@ -57,8 +57,7 @@ step "cargo fmt --check" "workspace + desktop"
 step "cargo clippy (workspace)" "zero warnings"
 (cd "$ROOT" && bash scripts/clippy.sh --workspace --all-targets)
 
-step "cargo test (workspace)" "parser bridge rebuilt first"
-(cd "$ROOT" && pnpm --filter @pikos/bridge build >/dev/null)
+step "cargo test (workspace)" ""
 (cd "$ROOT" && cargo test --workspace --quiet)
 
 step "cargo check (desktop)" "zero warnings"
