@@ -12,6 +12,7 @@
 //! One writer in the app process, extensions read-only, WAL mode: [`ReadOnlyWorkspace`]
 //! enforces that by type, and WAL comes from `pikos_db::open_pool`.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use pikos_core::calendar::occurrences::{
@@ -640,15 +641,6 @@ pub enum FocusOutcome {
     TooShort { label: String },
 }
 
-/// One file of an export, ready to be written.
-#[derive(Debug, uniffi::Record)]
-pub struct ExportFile {
-    /// Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
-    /// Never absolute and never above the root; the caller joins it to whatever
-    /// directory it is writing into.
-    pub path: String,
-    pub contents: String,
-}
 
 /// One colour a folder can be.
 #[derive(Debug, uniffi::Record)]
@@ -2818,32 +2810,24 @@ impl Workspace {
         Ok(pikos_db::export_ics::build_export_ics(&self.pool, include_synced).await?)
     }
 
-    /// The workspace as a tree of Markdown files.
-    ///
-    /// Returned rather than written, because where they go is the platform's
-    /// question — a Downloads folder on a desktop, a temporary directory on the
-    /// way to a share sheet on a phone. `path` is relative to wherever the
-    /// caller decides the root is.
-    ///
-    /// Image references are left as the absolute paths they are stored as. The
-    /// desktop copies those files into an `assets/` directory and rewrites them;
-    /// nothing on iOS writes such an asset today, so there is nothing to copy
-    /// and nothing to rewrite. When that changes, `render_markdown_page` is the
-    /// function to call with whatever was copied — this method deliberately does
-    /// not decide.
+    /// The workspace as a tree of Markdown files written into `destination`, with
+    /// the images its pages show copied from `assets_dir` into `assets/` beside
+    /// them, as the desktop exports.
     pub async fn export_markdown(
         &self,
+        destination: String,
+        assets_dir: String,
         include_synced: bool,
-    ) -> Result<Vec<ExportFile>, WorkspaceError> {
-        let plan = pikos_db::export::plan_markdown_export(&self.pool, include_synced).await?;
-        let nothing_copied = std::collections::HashMap::new();
-        Ok(plan
-            .iter()
-            .map(|page| ExportFile {
-                path: page.path.clone(),
-                contents: pikos_db::export::render_markdown_page(page, &nothing_copied),
-            })
-            .collect())
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::export::write_markdown_export(
+            &self.pool,
+            Path::new(&destination),
+            Path::new(&assets_dir),
+            include_synced,
+        )
+        .await?;
+
+        Ok(())
     }
 
     /// Copy the whole database to `destination`.

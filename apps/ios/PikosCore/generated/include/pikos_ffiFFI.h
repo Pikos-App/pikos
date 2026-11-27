@@ -505,7 +505,7 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_export_ics(uint64_t ptr, int8_t in
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_MARKDOWN
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_MARKDOWN
-uint64_t uniffi_pikos_ffi_fn_method_workspace_export_markdown(uint64_t ptr, int8_t include_synced
+uint64_t uniffi_pikos_ffi_fn_method_workspace_export_markdown(uint64_t ptr, RustBuffer destination, RustBuffer assets_dir, int8_t include_synced
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FOCUS_ELAPSED_LABEL

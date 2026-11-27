@@ -159,14 +159,10 @@ public final class ExportStore {
 
         case .markdown:
             let directory = root.appendingPathComponent("pikos-markdown-\(stamp)", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            for file in try await workspace.exportMarkdown(includeSynced: includeSynced) {
-                let destination = directory.appendingPathComponent(file.path)
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true)
-                try file.contents.write(to: destination, atomically: true, encoding: .utf8)
-            }
+            try await workspace.exportMarkdown(
+                destination: directory.path,
+                assetsDir: WorkspaceLocation.assetsURL().path,
+                includeSynced: includeSynced)
             return try Self.zip(directory)
         }
     }

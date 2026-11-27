@@ -4645,27 +4645,84 @@ async fn the_markdown_export_is_a_tree_of_relative_paths() {
     tagged_page(&ws, "Standup notes", Some(folder.id), &[], 0, None).await;
     tagged_page(&ws, "Loose thought", None, &[], 0, None).await;
 
-    let files = ws.export_markdown(false).await.unwrap();
-    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    assert!(paths.contains(&"Work/Standup notes.md"), "{paths:?}");
+    let out = TempExport::new();
+
+    ws.export_markdown(out.root(), out.assets(), false)
+        .await
+        .unwrap();
+
     assert!(
-        paths.contains(&"Loose thought.md"),
+        out.path.join("export/Loose thought.md").is_file(),
         "an unfiled page sits at the root"
     );
+    let filed = std::fs::read_to_string(out.path.join("export/Work/Standup notes.md")).unwrap();
     assert!(
-        paths
-            .iter()
-            .all(|p| !p.starts_with('/') && !p.contains("..")),
-        "a path that escapes the export root would write outside it: {paths:?}"
+        filed.starts_with("---\ntitle: \"Standup notes\"\n"),
+        "each file opens with its frontmatter: {filed:?}"
     );
-    let filed = files.iter().find(|f| f.path.starts_with("Work/")).unwrap();
-    assert!(
-        filed
-            .contents
-            .starts_with("---\ntitle: \"Standup notes\"\n"),
-        "each file opens with its frontmatter: {:?}",
-        filed.contents
-    );
+}
+
+/// The phone saves a picked photo into the workspace's images folder and stores `assets/<name>`.
+#[tokio::test]
+async fn the_markdown_export_carries_the_images_its_pages_show() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let out = TempExport::new();
+    std::fs::create_dir_all(out.path.join("images")).unwrap();
+    std::fs::write(out.path.join("images/photo.png"), b"png bytes").unwrap();
+    let folder = ws.create_folder("Trips".to_string(), None).await.unwrap();
+    let content = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "image", "attrs": {
+            "src": "assets/photo.png", "data-asset-path": "assets/photo.png" } }]
+    });
+    ws.create_page(NewPage {
+        title: "Paris".to_string(),
+        subtitle: None,
+        folder_id: Some(folder.id),
+        content: Some(content.to_string()),
+        tags: None,
+        scheduled_start: None,
+        scheduled_end: None,
+    })
+    .await
+    .unwrap();
+
+    ws.export_markdown(out.root(), out.assets(), false)
+        .await
+        .unwrap();
+
+    let copied = std::fs::read(out.path.join("export/assets/photo.png")).unwrap();
+    assert_eq!(copied, b"png bytes");
+    let page = std::fs::read_to_string(out.path.join("export/Trips/Paris.md")).unwrap();
+    assert!(page.contains("](../assets/photo.png)"), "{page}");
+}
+
+/// A scratch directory holding an export's destination (`export/`) and a workspace's images
+/// folder (`images/`).
+struct TempExport {
+    path: std::path::PathBuf,
+}
+
+impl TempExport {
+    fn new() -> Self {
+        let path = std::env::temp_dir().join(format!("pikos-ffi-export-{}", unique_suffix()));
+        TempExport { path }
+    }
+
+    fn root(&self) -> String {
+        self.path.join("export").to_string_lossy().into_owned()
+    }
+
+    fn assets(&self) -> String {
+        self.path.join("images").to_string_lossy().into_owned()
+    }
+}
+
+impl Drop for TempExport {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
 }
 
 /// A title with a slash in it must not become a directory.
@@ -4675,10 +4732,19 @@ async fn a_title_that_looks_like_a_path_is_flattened_into_a_filename() {
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
     tagged_page(&ws, "Q1/Q2 planning", None, &[], 0, None).await;
 
-    let files = ws.export_markdown(false).await.unwrap();
-    assert_eq!(files.len(), 1);
+    let out = TempExport::new();
+
+    ws.export_markdown(out.root(), out.assets(), false)
+        .await
+        .unwrap();
+
+    let written: Vec<String> = std::fs::read_dir(out.path.join("export"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
     assert_eq!(
-        files[0].path, "Q1_Q2 planning.md",
+        written,
+        ["Q1_Q2 planning.md"],
         "or the export writes into a directory nobody asked for"
     );
 }

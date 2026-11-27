@@ -1242,21 +1242,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func exportIcs(includeSynced: Bool) async throws  -> String
     
     /**
-     * The workspace as a tree of Markdown files.
-     *
-     * Returned rather than written, because where they go is the platform's
-     * question — a Downloads folder on a desktop, a temporary directory on the
-     * way to a share sheet on a phone. `path` is relative to wherever the
-     * caller decides the root is.
-     *
-     * Image references are left as the absolute paths they are stored as. The
-     * desktop copies those files into an `assets/` directory and rewrites them;
-     * nothing on iOS writes such an asset today, so there is nothing to copy
-     * and nothing to rewrite. When that changes, `render_markdown_page` is the
-     * function to call with whatever was copied — this method deliberately does
-     * not decide.
+     * The workspace as a tree of Markdown files written into `destination`, with
+     * the images its pages show copied from `assets_dir` into `assets/` beside
+     * them, as the desktop exports.
      */
-    func exportMarkdown(includeSynced: Bool) async throws  -> [ExportFile]
+    func exportMarkdown(destination: String, assetsDir: String, includeSynced: Bool) async throws 
     
     /**
      * `M:SS`, or `H:MM:SS` past an hour — the ticking label beside a running
@@ -2781,32 +2771,22 @@ open func exportIcs(includeSynced: Bool)async throws  -> String  {
 }
     
     /**
-     * The workspace as a tree of Markdown files.
-     *
-     * Returned rather than written, because where they go is the platform's
-     * question — a Downloads folder on a desktop, a temporary directory on the
-     * way to a share sheet on a phone. `path` is relative to wherever the
-     * caller decides the root is.
-     *
-     * Image references are left as the absolute paths they are stored as. The
-     * desktop copies those files into an `assets/` directory and rewrites them;
-     * nothing on iOS writes such an asset today, so there is nothing to copy
-     * and nothing to rewrite. When that changes, `render_markdown_page` is the
-     * function to call with whatever was copied — this method deliberately does
-     * not decide.
+     * The workspace as a tree of Markdown files written into `destination`, with
+     * the images its pages show copied from `assets_dir` into `assets/` beside
+     * them, as the desktop exports.
      */
-open func exportMarkdown(includeSynced: Bool)async throws  -> [ExportFile]  {
+open func exportMarkdown(destination: String, assetsDir: String, includeSynced: Bool)async throws   {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_export_markdown(
-                        self.uniffiCloneHandle(),FfiConverterBool.lower(includeSynced)
+                        self.uniffiCloneHandle(),FfiConverterString.lower(destination),FfiConverterString.lower(assetsDir),FfiConverterBool.lower(includeSynced)
                 )
             },
-            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
-            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
-            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeExportFile.lift,
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -4756,73 +4736,6 @@ public func FfiConverterTypeDroppedSchedule_lift(_ buf: RustBuffer) throws -> Dr
 #endif
 public func FfiConverterTypeDroppedSchedule_lower(_ value: DroppedSchedule) -> RustBuffer {
     return FfiConverterTypeDroppedSchedule.lower(value)
-}
-
-
-/**
- * One file of an export, ready to be written.
- */
-public struct ExportFile: Equatable, Hashable {
-    /**
-     * Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
-     * Never absolute and never above the root; the caller joins it to whatever
-     * directory it is writing into.
-     */
-    public var path: String
-    public var contents: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
-         * Never absolute and never above the root; the caller joins it to whatever
-         * directory it is writing into.
-         */path: String, contents: String) {
-        self.path = path
-        self.contents = contents
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension ExportFile: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeExportFile: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportFile {
-        return
-            try ExportFile(
-                path: FfiConverterString.read(from: &buf), 
-                contents: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ExportFile, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.path, into: &buf)
-        FfiConverterString.write(value.contents, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportFile_lift(_ buf: RustBuffer) throws -> ExportFile {
-    return try FfiConverterTypeExportFile.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportFile_lower(_ value: ExportFile) -> RustBuffer {
-    return FfiConverterTypeExportFile.lower(value)
 }
 
 
@@ -10786,31 +10699,6 @@ fileprivate struct FfiConverterSequenceTypeCalendarSyncResult: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeExportFile: FfiConverterRustBuffer {
-    typealias SwiftType = [ExportFile]
-
-    public static func write(_ value: [ExportFile], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeExportFile.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ExportFile] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ExportFile]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeExportFile.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeFolder: FfiConverterRustBuffer {
     typealias SwiftType = [Folder]
 
@@ -11915,7 +11803,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_export_ics() != 1251) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 3908) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 42407) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 53112) {

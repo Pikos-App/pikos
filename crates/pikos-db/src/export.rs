@@ -4,7 +4,7 @@
 //! I stop using this". Where a file goes is the caller's question, so each export returns
 //! content: CSV and `.ics` are one string each, and Markdown is a plan the caller writes (see
 //! [`plan_markdown_export`]). [`write_markdown_export`] is that writing for a caller with the
-//! workspace's images on disk beside it, the desktop and the CLI.
+//! workspace's images on disk beside it, which every caller is.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
