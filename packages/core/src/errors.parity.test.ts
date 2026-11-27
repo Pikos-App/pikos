@@ -22,7 +22,9 @@ function rustKinds(): string[] {
   const body = source.split("pub fn kind(&self)")[1];
   if (!body) throw new Error("AppError::kind() not found — did error.rs move?");
   const arms = body.split("impl Serialize")[0] ?? "";
-  return [...arms.matchAll(/=>\s*"([A-Za-z]+)"/g)].map((m) => m[1]!).sort();
+  // Only `AppError::<Variant> => "X"` arms: a helper beside kind() returning its own names (the
+  // sqlx classifier) is not a kind.
+  return [...arms.matchAll(/AppError::\w+[^=]*=>\s*"([A-Za-z]+)"/g)].map((m) => m[1]!).sort();
 }
 
 describe("StorageErrorKind matches AppError", () => {
