@@ -193,8 +193,14 @@ async fn propfind_follow<T: DavTransport>(
                 refuse_offsite(base, &next)?;
                 current = next;
             }
-            401 | 403 => return Err(CaldavError::Unauthorized),
-            other => return Err(CaldavError::UnexpectedStatus(other)),
+            401 => return Err(CaldavError::Unauthorized),
+            403 => return Err(CaldavError::Forbidden),
+            other => {
+                return Err(CaldavError::UnexpectedStatus {
+                    op: "discovery PROPFIND",
+                    status: other,
+                })
+            }
         }
     }
     Err(CaldavError::Protocol(

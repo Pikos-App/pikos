@@ -85,10 +85,11 @@ pub(crate) struct Fetched {
     pub body: String,
 }
 
-/// Send `request`, read its body, and log it.
+/// Send `request`, read its body, and log it. A failure comes back without its URL, so a caller
+/// can put the error in a message or the log without carrying a query string or an email.
 pub(crate) async fn fetch(request: reqwest::RequestBuilder) -> Result<Fetched, reqwest::Error> {
     let (client, request) = request.build_split();
-    let request = request?;
+    let request = request.map_err(reqwest::Error::without_url)?;
     let method = request.method().clone();
     let url = request.url().clone();
 
@@ -103,9 +104,13 @@ pub(crate) async fn fetch(request: reqwest::RequestBuilder) -> Result<Fetched, r
             body,
         })
     }
-    .await;
+    .await
+    .map_err(reqwest::Error::without_url);
 
-    let answer = fetched.as_ref().ok().map(|f| (f.status, f.body.len()));
+    let answer = match &fetched {
+        Ok(f) => Ok((f.status, f.body.len())),
+        Err(e) => Err(failure(e)),
+    };
     log_request(
         method.as_str(),
         url.host_str().unwrap_or_default(),
@@ -113,6 +118,63 @@ pub(crate) async fn fetch(request: reqwest::RequestBuilder) -> Result<Fetched, r
         answer,
     );
     fetched
+}
+
+/// Why a request got no answer: reqwest's failure class, then the error and each cause under it,
+/// so a DNS miss, a refused connection and a certificate rejection read differently. The chain is
+/// hyper, io and rustls text, which names a host at most; callers strip the URL first.
+pub(crate) fn failure(e: &(dyn std::error::Error + 'static)) -> String {
+    // oauth2 boxes its reqwest error, and the box is what sits in the chain.
+    let class = causes(e)
+        .find_map(|e| {
+            e.downcast_ref::<reqwest::Error>()
+                .or_else(|| e.downcast_ref::<Box<reqwest::Error>>().map(|b| &**b))
+        })
+        .map_or("other", |r| failure_class(r, e));
+    let chain: Vec<String> = causes(e).map(ToString::to_string).collect();
+    format!("{class}: {}", chain.join(": "))
+}
+
+fn causes<'a>(
+    e: &'a (dyn std::error::Error + 'static),
+) -> impl Iterator<Item = &'a (dyn std::error::Error + 'static)> {
+    std::iter::successors(Some(e), |e| e.source())
+}
+
+fn failure_class(r: &reqwest::Error, whole: &(dyn std::error::Error + 'static)) -> &'static str {
+    if r.is_timeout() {
+        "timeout"
+    } else if causes(whole).any(is_tls) {
+        "tls"
+    } else if causes(whole).any(|e| e.to_string().starts_with("dns error")) {
+        // hyper-util's connect error is private, so its fixed "dns error" text is the only seam.
+        "dns"
+    } else if r.is_connect() {
+        "connect"
+    } else if r.is_body() {
+        "body"
+    } else if r.is_decode() {
+        "decode"
+    } else if r.is_status() {
+        "status"
+    } else if r.is_redirect() {
+        "redirect"
+    } else if r.is_request() {
+        "request"
+    } else if r.is_builder() {
+        "builder"
+    } else {
+        "other"
+    }
+}
+
+/// tokio-rustls hands a handshake failure back as an io error wrapping the rustls one, and an io
+/// error's `source` skips past what it wraps, so the wrapped error is looked at directly.
+fn is_tls(e: &(dyn std::error::Error + 'static)) -> bool {
+    e.is::<rustls::Error>()
+        || e.downcast_ref::<std::io::Error>()
+            .and_then(std::io::Error::get_ref)
+            .is_some_and(|inner| inner.is::<rustls::Error>())
 }
 
 /// The HTTP client the OAuth grant sends through: oauth2's own reqwest adapter, logged as
@@ -133,11 +195,16 @@ impl<'c> oauth2::AsyncHttpClient<'c> for OauthHttp {
         let uri = request.uri().clone();
 
         Box::pin(async move {
-            let response = self.0.call(request).await;
-            let answer = response
-                .as_ref()
-                .ok()
-                .map(|r| (r.status().as_u16(), r.body().len()));
+            let response = self.0.call(request).await.map_err(|e| match e {
+                oauth2::HttpClientError::Reqwest(e) => {
+                    oauth2::HttpClientError::Reqwest(Box::new(e.without_url()))
+                }
+                other => other,
+            });
+            let answer = match &response {
+                Ok(r) => Ok((r.status().as_u16(), r.body().len())),
+                Err(e) => Err(failure(e)),
+            };
             log_request(
                 method.as_str(),
                 uri.host().unwrap_or_default(),
@@ -149,15 +216,17 @@ impl<'c> oauth2::AsyncHttpClient<'c> for OauthHttp {
     }
 }
 
-/// `answer` is the status and body size, or `None` when no response came back.
-fn log_request(method: &str, host: &str, path: &str, answer: Option<(u16, usize)>) {
+/// `answer` is the status and body size, or why no response came back.
+fn log_request(method: &str, host: &str, path: &str, answer: Result<(u16, usize), String>) {
     match answer {
-        Some((status, bytes)) => {
+        Ok((status, bytes)) => {
             log::info!(
                 "request method={method} host={host} path={path} status={status} bytes={bytes}"
             )
         }
-        None => log::info!("request method={method} host={host} path={path} failed"),
+        Err(reason) => {
+            log::info!("request method={method} host={host} path={path} failed reason={reason}")
+        }
     }
 }
 

@@ -50,8 +50,9 @@ impl CaldavProvider {
     }
 }
 
-/// Load + deserialize an account's keychain blob. A keychain miss maps to a
-/// user-actionable "reconnect needed", not a transient network error.
+/// Load + deserialize an account's keychain blob. A keychain miss or a blob that no
+/// longer reads maps to a user-actionable "reconnect needed", not a transient network
+/// error; a keychain that can't be reached right now is retried as offline.
 ///
 /// Free rather than a method because the reconnect command needs the stored server
 /// URL and username while still owning the keychain to write the new blob back.
@@ -66,7 +67,19 @@ pub(crate) fn stored_credentials(
             AppError::Network(e.to_string())
         }
     })?;
-    Ok(CaldavCredentials::from_blob(&blob)?)
+    CaldavCredentials::from_blob(&blob).map_err(|e| {
+        // serde's message can quote the blob, so only its category and position are logged.
+        log::warn!(
+            "caldav_credentials_unreadable account={account_id} serde={:?} at {}:{}",
+            e.classify(),
+            e.line(),
+            e.column()
+        );
+        AppError::Invalid(
+            "Pikos can't read this account's saved sign-in. Disconnect it and connect it again."
+                .into(),
+        )
+    })
 }
 
 impl CalendarProvider for CaldavProvider {

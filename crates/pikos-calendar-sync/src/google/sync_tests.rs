@@ -522,3 +522,42 @@ async fn an_event_without_its_own_zone_takes_the_calendars() {
     assert_eq!(ev.schedule.timezone.as_deref(), Some("Europe/Berlin"));
     assert_eq!(ev.schedule.start, "2026-06-15T09:00:00");
 }
+
+fn as_app(err: GoogleError) -> pikos_db::error::AppError {
+    err.into()
+}
+
+/// A list answering 404 is the calendar gone, which "event not found" misdescribes.
+#[tokio::test]
+async fn a_list_404_reads_as_the_calendar_being_gone() {
+    let t = Replay::with(vec![(404, "")]);
+    let err = as_app(sync_calendar(&t, CAL, None).await.unwrap_err());
+
+    assert!(
+        matches!(err, pikos_db::error::AppError::NotFound(_)),
+        "{err:?}"
+    );
+    let message = err.to_string();
+    assert!(!message.contains("event not found"), "{message}");
+    assert!(message.contains("calendar"), "{message}");
+}
+
+/// Google documents its 5xx answers as retryable, so those stay offline. Any other status repeats
+/// on every poll, so it must not hide behind offline.
+#[tokio::test]
+async fn an_unhandled_client_status_is_reported_and_a_server_status_is_retried() {
+    use pikos_db::error::AppError;
+    for status in [400u16, 409] {
+        let t = Replay::with(vec![(status, "")]);
+        let err = as_app(sync_calendar(&t, CAL, None).await.unwrap_err());
+        assert!(matches!(err, AppError::Internal(_)), "{status}: {err:?}");
+        let message = err.to_string();
+        assert!(message.contains("events.list"), "{message}");
+        assert!(!message.contains(CAL), "{message}");
+    }
+    for status in [500u16, 503] {
+        let t = Replay::with(vec![(status, "")]);
+        let err = as_app(sync_calendar(&t, CAL, None).await.unwrap_err());
+        assert!(matches!(err, AppError::Network(_)), "{status}: {err:?}");
+    }
+}

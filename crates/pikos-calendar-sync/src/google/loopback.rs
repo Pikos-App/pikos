@@ -49,7 +49,7 @@ impl Loopback {
     pub(crate) async fn wait(self, timeout: Duration) -> Result<Callback, GoogleError> {
         tokio::time::timeout(timeout, self.accept_callback())
             .await
-            .map_err(|_| GoogleError::Cancelled)?
+            .map_err(|_| GoogleError::TimedOut)?
     }
 
     async fn accept_callback(self) -> Result<Callback, GoogleError> {

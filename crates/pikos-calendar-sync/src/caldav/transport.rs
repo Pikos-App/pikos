@@ -53,6 +53,7 @@ impl ReqwestDav {
         body: &str,
     ) -> Result<DavResponse, CaldavError> {
         let method = reqwest::Method::from_bytes(method).expect("valid WebDAV method");
+        let verb = method.to_string();
         let request = self
             .client
             .request(method, url)
@@ -66,7 +67,7 @@ impl ReqwestDav {
             .body(body.to_owned());
         let fetched = http::fetch(request)
             .await
-            .map_err(|e| CaldavError::Network(e.to_string()))?;
+            .map_err(|e| CaldavError::Network(format!("{verb} failed, {}", http::failure(&e))))?;
 
         let location = fetched
             .headers

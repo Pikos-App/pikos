@@ -475,12 +475,15 @@ async fn backfill_maps_non_207_status() {
     let err = sync_calendar(&StatusOnly(500), CAL, None)
         .await
         .unwrap_err();
-    assert!(matches!(err, CaldavError::UnexpectedStatus(500)));
+    assert!(matches!(
+        err,
+        CaldavError::UnexpectedStatus { status: 500, .. }
+    ));
     let err = sync_calendar(&StatusOnly(403), CAL, None)
         .await
         .unwrap_err();
     assert!(
-        matches!(err, CaldavError::Unauthorized),
+        matches!(err, CaldavError::Forbidden),
         "backfill maps 403 to reconnect, not re-enumerate"
     );
 }
@@ -606,7 +609,10 @@ async fn an_unexpected_status_is_surfaced_not_swallowed() {
     let err = sync_calendar(&StatusOnly(500), CAL, Some(&SyncToken("t1".into())))
         .await
         .unwrap_err();
-    assert!(matches!(err, CaldavError::UnexpectedStatus(500)));
+    assert!(matches!(
+        err,
+        CaldavError::UnexpectedStatus { status: 500, .. }
+    ));
 }
 
 #[test]
@@ -684,4 +690,74 @@ async fn current_ctag_is_none_on_unsupported_status() {
             "status {status} → no ctag"
         );
     }
+}
+
+fn as_app(err: CaldavError) -> pikos_db::error::AppError {
+    err.into()
+}
+
+/// Offline is retried quietly for ever, so a server that fails a calendar's request the same way
+/// every poll must read as an error instead. Only a status that clears by itself is offline.
+#[tokio::test]
+async fn a_server_error_on_a_calendar_is_reported_not_read_as_offline() {
+    use pikos_db::error::AppError;
+    for status in [500u16, 400, 501] {
+        let err = as_app(
+            sync_calendar(&StatusOnly(status), CAL, None)
+                .await
+                .unwrap_err(),
+        );
+        assert!(matches!(err, AppError::Internal(_)), "{status}: {err:?}");
+    }
+    let err = as_app(
+        sync_calendar(&StatusOnly(404), CAL, None)
+            .await
+            .unwrap_err(),
+    );
+    assert!(matches!(err, AppError::NotFound(_)), "{err:?}");
+    assert!(
+        err.to_string().contains("no longer has this calendar"),
+        "{err}"
+    );
+
+    let err = as_app(
+        sync_calendar(&StatusOnly(503), CAL, None)
+            .await
+            .unwrap_err(),
+    );
+    assert!(matches!(err, AppError::Network(_)), "{err:?}");
+}
+
+/// The URL can hold the account's email address; the request's name says as much without it.
+#[tokio::test]
+async fn an_unexpected_status_names_the_request_and_not_the_url() {
+    let message = as_app(
+        sync_calendar(&StatusOnly(500), CAL, None)
+            .await
+            .unwrap_err(),
+    )
+    .to_string();
+    assert!(message.contains("calendar-query REPORT"), "{message}");
+    assert!(message.contains("500"), "{message}");
+    assert!(!message.contains("127.0.0.1"), "{message}");
+}
+
+/// A 403 means the sign-in worked, so sending the person to retype the password misleads them.
+#[tokio::test]
+async fn a_refused_password_and_a_refused_calendar_read_differently() {
+    let unauthorized = as_app(
+        sync_calendar(&StatusOnly(401), CAL, None)
+            .await
+            .unwrap_err(),
+    );
+    let forbidden = as_app(
+        sync_calendar(&StatusOnly(403), CAL, None)
+            .await
+            .unwrap_err(),
+    );
+    assert_ne!(unauthorized.to_string(), forbidden.to_string());
+    assert!(
+        matches!(forbidden, pikos_db::error::AppError::Invalid(_)),
+        "{forbidden:?}"
+    );
 }

@@ -1306,3 +1306,128 @@ async fn one_failing_calendar_does_not_stop_the_pass() {
     assert_eq!(results[0].status, "reconnectNeeded");
     assert_eq!(results[1].status, "synced");
 }
+
+/// A provider whose first `sync` answers `first` and every later one `later`, whichever
+/// calendar asks.
+struct FirstThen {
+    seen: RefCell<usize>,
+    first: fn() -> pikos_db::AppResult<SyncDelta>,
+    later: fn() -> pikos_db::AppResult<SyncDelta>,
+}
+
+impl FirstThen {
+    fn new(
+        first: fn() -> pikos_db::AppResult<SyncDelta>,
+        later: fn() -> pikos_db::AppResult<SyncDelta>,
+    ) -> Self {
+        Self {
+            seen: RefCell::new(0),
+            first,
+            later,
+        }
+    }
+}
+
+impl CalendarProvider for FirstThen {
+    async fn list_calendars(
+        &self,
+        _a: &SyncAccountRow,
+    ) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
+        unreachable!("resync never discovers")
+    }
+    async fn sync(
+        &self,
+        _c: &SyncCalendarRow,
+        _since: Option<SyncToken>,
+    ) -> pikos_db::AppResult<SyncDelta> {
+        let first = {
+            let mut seen = self.seen.borrow_mut();
+            *seen += 1;
+            *seen == 1
+        };
+        if first {
+            (self.first)()
+        } else {
+            (self.later)()
+        }
+    }
+    async fn fetch_event(
+        &self,
+        _c: &SyncCalendarRow,
+        _r: &str,
+    ) -> pikos_db::AppResult<EventUpsert> {
+        unreachable!("no orphans scripted")
+    }
+    async fn current_sync_token(
+        &self,
+        _c: &SyncCalendarRow,
+    ) -> pikos_db::AppResult<Option<SyncToken>> {
+        Ok(None)
+    }
+}
+
+fn server_error() -> pikos_db::AppResult<SyncDelta> {
+    Err(pikos_db::AppError::Internal(
+        "CalDAV calendar-query REPORT answered HTTP 500".into(),
+    ))
+}
+
+async fn two_enabled_calendars(pool: &sqlx::SqlitePool) -> String {
+    let acc = insert_sync_account_impl(pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    for id in ["cal-a", "cal-b"] {
+        let cal = upsert_sync_calendar_impl(pool, &acc.id, id, id, None)
+            .await
+            .unwrap();
+        toggle_sync_calendar_impl(pool, &cal.id, true, None)
+            .await
+            .unwrap();
+    }
+    acc.id
+}
+
+/// An error out of one calendar used to end the account's pass there, so every calendar after
+/// it went unsynced on every poll for as long as the first one kept failing.
+#[tokio::test]
+async fn a_calendar_that_errors_does_not_stop_the_calendars_after_it() {
+    let pool = test_pool().await;
+    let account_id = two_enabled_calendars(&pool).await;
+    let provider = FirstThen::new(server_error, || {
+        Ok(backfill(
+            vec![one_event("/later.ics", "later-uid", "Later")],
+            "2020-01-01",
+            "t1",
+        ))
+    });
+
+    let outcome = resync_account(&pool, &provider, &account_id).await;
+
+    assert!(outcome.is_err(), "the failure is still reported");
+    assert_eq!(*provider.seen.borrow(), 2, "the second calendar was polled");
+    assert_eq!(
+        crate::test_support::page_count(&pool).await,
+        1,
+        "and its event landed"
+    );
+}
+
+/// The reconnect flag is the account's state on screen, so a calendar that errors first must not
+/// keep a later calendar's refused credential from setting it.
+#[tokio::test]
+async fn a_refused_credential_flags_the_account_even_after_another_calendar_errors() {
+    let pool = test_pool().await;
+    let account_id = two_enabled_calendars(&pool).await;
+    let provider = FirstThen::new(server_error, || {
+        Err(pikos_db::AppError::Invalid("credential rejected".into()))
+    });
+
+    let _ = resync_account(&pool, &provider, &account_id).await;
+
+    assert!(
+        get_sync_account_impl(&pool, &account_id)
+            .await
+            .unwrap()
+            .reconnect_needed
+    );
+}

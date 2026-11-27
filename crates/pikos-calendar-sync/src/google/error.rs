@@ -16,9 +16,13 @@ pub enum GoogleError {
     #[error("Google access was revoked. Connect the account again.")]
     Revoked,
 
-    /// The user closed the browser, denied consent, or never finished.
+    /// The user denied consent in the browser.
     #[error("Google authorization was cancelled")]
     Cancelled,
+
+    /// Nothing came back from the browser before the listener gave up.
+    #[error("Google sign-in took too long, so Pikos stopped waiting. Connect again to retry.")]
+    TimedOut,
 
     /// Google's granular consent screen lets a user approve part of the request;
     /// approving less than sync needs yields tokens that can't read the calendar.
@@ -37,20 +41,35 @@ pub enum GoogleError {
     #[error("Google network error: {0}")]
     Network(String),
 
+    /// The keychain refused a write. Not Network: it is this machine, not the connection.
+    #[error("{0}")]
+    Keychain(String),
+
+    /// The stored blob no longer deserializes. Carries nothing of serde's message, which
+    /// can quote the blob.
+    #[error("Pikos can't read this Google account's saved sign-in. Connect the account again.")]
+    CredentialsUnreadable,
+
     /// The event is gone upstream (`404`). Terminal for a targeted fetch: the
     /// engine drops the occurrence delta that asked for it instead of retrying
     /// against a master that will never come back.
     #[error("Google event not found")]
     NotFound,
 
+    /// Listing a calendar's events answered `404`: the calendar was deleted, or this
+    /// account can no longer see it.
+    #[error("Google no longer has this calendar, or this account can't see it any more.")]
+    CalendarGone,
+
     /// Quota or per-user rate limit. Transient by definition — the cursor is kept
     /// and the next scheduled poll retries.
     #[error("Google is limiting requests for now. Pikos will try again shortly.")]
     RateLimited,
 
-    /// Reached Google but it answered with a status sync doesn't handle.
-    #[error("unexpected Google status {0}")]
-    UnexpectedStatus(u16),
+    /// Reached Google but it answered with a status sync doesn't handle. `op` names
+    /// the API method rather than the path, which holds the calendar id, an email address.
+    #[error("Google {op} answered HTTP {status}")]
+    UnexpectedStatus { op: &'static str, status: u16 },
 
     /// Reached Google but couldn't make sense of the exchange — a malformed
     /// token response, a rejected client_id, or a redirect that didn't carry
@@ -66,16 +85,22 @@ impl From<GoogleError> for AppError {
             // wait for a build that ships the client.
             GoogleError::Revoked
             | GoogleError::Cancelled
+            | GoogleError::TimedOut
             | GoogleError::ScopesWithheld
             | GoogleError::NoPrimaryCalendar
+            | GoogleError::CredentialsUnreadable
             | GoogleError::NotConfigured => AppError::Invalid(e.to_string()),
-            GoogleError::NotFound => AppError::NotFound(e.to_string()),
-            // Transient: maps to `Offline` — cursor kept, retried later, no
-            // reconnect prompt. An unhandled status lands here too, not just network faults.
-            GoogleError::Network(_)
-            | GoogleError::RateLimited
-            | GoogleError::UnexpectedStatus(_) => AppError::Network(e.to_string()),
-            GoogleError::Protocol(_) => AppError::Internal(e.to_string()),
+            GoogleError::NotFound | GoogleError::CalendarGone => AppError::NotFound(e.to_string()),
+            // Transient: maps to `Offline` — cursor kept, retried later, no reconnect prompt.
+            // Google documents its 5xx answers as retryable, so they land here too.
+            GoogleError::Network(_) | GoogleError::RateLimited => AppError::Network(e.to_string()),
+            GoogleError::UnexpectedStatus { status, .. } if status == 408 || status >= 500 => {
+                AppError::Network(e.to_string())
+            }
+            // Any other status repeats on every poll, so it is reported rather than read as offline.
+            GoogleError::UnexpectedStatus { .. }
+            | GoogleError::Keychain(_)
+            | GoogleError::Protocol(_) => AppError::Internal(e.to_string()),
         }
     }
 }
@@ -109,6 +134,10 @@ mod tests {
             mapped(GoogleError::NoPrimaryCalendar),
             AppError::Invalid(_)
         ));
+        assert!(matches!(
+            mapped(GoogleError::TimedOut),
+            AppError::Invalid(_)
+        ));
     }
 
     #[test]
@@ -118,6 +147,9 @@ mod tests {
             GoogleError::ScopesWithheld,
             GoogleError::NoPrimaryCalendar,
             GoogleError::RateLimited,
+            GoogleError::TimedOut,
+            GoogleError::CredentialsUnreadable,
+            GoogleError::CalendarGone,
         ] {
             assert!(!e.to_string().contains('—'), "{e}");
         }
@@ -129,6 +161,15 @@ mod tests {
             mapped(GoogleError::Network("x".into())),
             AppError::Network(_)
         ));
+    }
+
+    #[test]
+    fn a_status_names_its_method_and_not_its_path() {
+        let e = GoogleError::UnexpectedStatus {
+            op: "events.list",
+            status: 400,
+        };
+        assert_eq!(e.to_string(), "Google events.list answered HTTP 400");
     }
 
     // Invalid would set reconnect_needed and prompt re-auth over a quota blip

@@ -92,12 +92,14 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
         super::watch::suppress_begin,
         move |report: &PassReport| {
             super::watch::suppress_end(super::watch::TRAILING_COVER);
-            for (account_id, e) in &report.errors {
-                // Variant only — AppError's Display can echo SQL fragments or
-                // user-derived values into the log.
+            for failure in &report.errors {
+                // `log_summary`, not Display, which can echo SQL fragments or user-derived
+                // values. The calendar-sync crate logs the cause beside it.
                 log::warn!(
-                    "calendar_sync_pass_failed account={account_id} kind={}",
-                    e.kind()
+                    "calendar_sync_pass_failed account={} calendar={} error={}",
+                    failure.account_id,
+                    failure.calendar_id.as_deref().unwrap_or("none"),
+                    failure.error.log_summary()
                 );
             }
             if report.changed {

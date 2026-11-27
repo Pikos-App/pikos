@@ -448,10 +448,7 @@ fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
             return;
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    let _ = log_id;
-
-    if let Ok(()) = app
+    if let Err(e) = app
         .notification()
         .builder()
         .title(title)
@@ -459,7 +456,10 @@ fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
         .sound("default")
         .group("pikos-reminders")
         .show()
-    {}
+    {
+        // The row is already logged as fired; this line is what says nobody saw it.
+        log::warn!("notification_show_failed log_id={log_id} error={e}");
+    }
 }
 
 async fn record_not_shown(
@@ -595,8 +595,9 @@ async fn fire_reminder(
             let drift = diag.has_rule != 0
                 && diag.page_scheduled_start.as_deref() != Some(row.scheduled_start.as_str());
             log::info!(
-                "notification_fired type=reminder page_id={} schedule_id={} minutes_before={} \
-                 schedule_start={} page_start={} has_rule={} status={} completed={} drift={}",
+                "notification_fired type=reminder log_id={log_id} page_id={} schedule_id={} \
+                 minutes_before={} schedule_start={} page_start={} has_rule={} status={} \
+                 completed={} drift={}",
                 row.page_id,
                 row.schedule_id,
                 row.minutes_before,
@@ -610,14 +611,14 @@ async fn fire_reminder(
         }
         Ok(None) => {
             log::info!(
-                "notification_fired type=reminder page_id={} schedule_id={} (page vanished before diagnostics)",
+                "notification_fired type=reminder log_id={log_id} page_id={} schedule_id={} (page vanished before diagnostics)",
                 row.page_id,
                 row.schedule_id
             );
         }
         Err(e) => {
             log::info!(
-                "notification_fired type=reminder page_id={} schedule_id={} (diagnostics failed kind={})",
+                "notification_fired type=reminder log_id={log_id} page_id={} schedule_id={} (diagnostics failed kind={})",
                 row.page_id,
                 row.schedule_id,
                 classify_sqlx(&e)

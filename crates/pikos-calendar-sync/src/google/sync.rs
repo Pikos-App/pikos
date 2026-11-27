@@ -49,6 +49,21 @@ const PERMISSION_REASONS: [&str; 4] = [
     "accessNotConfigured",
 ];
 
+/// `error.errors[].reason` values Google documents for throttling. Anything outside both lists
+/// is still backed off, and logged, so a reason that should end the sync can be seen.
+const RATE_LIMIT_REASONS: [&str; 5] = [
+    "rateLimitExceeded",
+    "userRateLimitExceeded",
+    "quotaExceeded",
+    "dailyLimitExceeded",
+    "calendarUsageLimitsExceeded",
+];
+
+// What an `UnexpectedStatus` names in place of the path, which holds the calendar id.
+const OP_EVENTS_LIST: &str = "events.list";
+const OP_EVENTS_GET: &str = "events.get";
+const OP_CALENDAR_LIST: &str = "calendarList.list";
+
 pub(crate) async fn sync_calendar<T: GoogleTransport>(
     transport: &T,
     calendar_id: &str,
@@ -66,7 +81,9 @@ pub(crate) async fn sync_calendar<T: GoogleTransport>(
     ];
     let pages = match collect_pages(transport, &events_path(calendar_id), base).await {
         Ok(pages) => pages,
-        Err(GoogleError::UnexpectedStatus(GONE)) => return backfill(transport, calendar_id).await,
+        Err(GoogleError::UnexpectedStatus { status: GONE, .. }) => {
+            return backfill(transport, calendar_id).await
+        }
         Err(e) => return Err(e),
     };
 
@@ -117,9 +134,9 @@ pub(crate) async fn fetch_one<T: GoogleTransport>(
 ) -> Result<EventUpsert, GoogleError> {
     let path = format!("{}/{}", events_path(calendar_id), encode_segment(event_id));
     let resp = transport.get(&path, &[]).await?;
-    check_status(resp.status, &resp.body)?;
-    let event: Event = serde_json::from_str(&resp.body)
-        .map_err(|e| GoogleError::Protocol(format!("malformed event: {e}")))?;
+    check_status(OP_EVENTS_GET, resp.status, &resp.body)?;
+    let event: Event =
+        serde_json::from_str(&resp.body).map_err(|e| malformed("malformed event", &e))?;
 
     // Fetched alone, so whatever occurrence deltas the series carries are not here.
     let grouped = events::group(vec![event], None, OccurrenceFidelity::MasterOnly);
@@ -168,9 +185,9 @@ async fn list_calendars_with_primary<T: GoogleTransport>(
             query.push(("pageToken", t.clone()));
         }
         let resp = transport.get("/users/me/calendarList", &query).await?;
-        check_status(resp.status, &resp.body)?;
+        check_status(OP_CALENDAR_LIST, resp.status, &resp.body)?;
         let parsed: CalendarListResponse = serde_json::from_str(&resp.body)
-            .map_err(|e| GoogleError::Protocol(format!("malformed calendarList: {e}")))?;
+            .map_err(|e| malformed("malformed calendarList", &e))?;
 
         for c in parsed.items.into_iter().filter(|c| !c.deleted) {
             if c.primary {
@@ -213,9 +230,9 @@ async fn collect_pages<T: GoogleTransport>(
             query.push(("pageToken", t.clone()));
         }
         let resp = transport.get(path, &query).await?;
-        check_status(resp.status, &resp.body)?;
+        check_status(OP_EVENTS_LIST, resp.status, &resp.body)?;
         let parsed: EventsResponse = serde_json::from_str(&resp.body)
-            .map_err(|e| GoogleError::Protocol(format!("malformed events response: {e}")))?;
+            .map_err(|e| malformed("malformed events response", &e))?;
 
         page_token = parsed.next_page_token.clone();
         pages.push(parsed);
@@ -254,16 +271,18 @@ fn reduce(
     }
 }
 
-fn check_status(status: u16, body: &str) -> Result<(), GoogleError> {
+fn check_status(op: &'static str, status: u16, body: &str) -> Result<(), GoogleError> {
     match status {
         200..=299 => Ok(()),
-        NOT_FOUND => Err(GoogleError::NotFound),
+        // Only a single-event fetch means the event is gone; a list's 404 is its calendar.
+        NOT_FOUND if op == OP_EVENTS_GET => Err(GoogleError::NotFound),
+        NOT_FOUND if op == OP_EVENTS_LIST => Err(GoogleError::CalendarGone),
         // The access token was just refreshed, so a 401 here means the grant
         // itself is gone, not an expiry we could retry through.
         UNAUTHORIZED => Err(GoogleError::Revoked),
         TOO_MANY_REQUESTS => Err(GoogleError::RateLimited),
-        FORBIDDEN => Err(classify_forbidden(body)),
-        other => Err(GoogleError::UnexpectedStatus(other)),
+        FORBIDDEN => Err(classify_forbidden(op, body)),
+        other => Err(GoogleError::UnexpectedStatus { op, status: other }),
     }
 }
 
@@ -271,7 +290,7 @@ fn check_status(status: u16, body: &str) -> Result<(), GoogleError> {
 /// including an unreadable body or an unrecognised reason — is treated as
 /// transient: a needless retry costs one request, while a wrong `Revoked` forces
 /// an unnecessary re-authorization.
-fn classify_forbidden(body: &str) -> GoogleError {
+fn classify_forbidden(op: &str, body: &str) -> GoogleError {
     let reasons = serde_json::from_str::<ApiErrorResponse>(body)
         .map(|e| e.reasons())
         .unwrap_or_default();
@@ -281,7 +300,45 @@ fn classify_forbidden(body: &str) -> GoogleError {
     {
         return GoogleError::Revoked;
     }
+    if !reasons
+        .iter()
+        .any(|r| RATE_LIMIT_REASONS.contains(&r.as_str()))
+    {
+        log::warn!(
+            "google_forbidden_unrecognised op={op} reasons={} backing off",
+            loggable_reasons(&reasons)
+        );
+    }
     GoogleError::RateLimited
+}
+
+/// Google's reasons are fixed camelCase names. Anything else in the field is cut to the
+/// characters such a name uses, so a body that put text there can't carry it into the log.
+fn loggable_reasons(reasons: &[String]) -> String {
+    if reasons.is_empty() {
+        return "none".into();
+    }
+    reasons
+        .iter()
+        .map(|r| {
+            r.chars()
+                .filter(char::is_ascii_alphanumeric)
+                .take(64)
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// serde's message quotes the value it choked on, which in an event is its title or description,
+/// so only the category and position are kept.
+fn malformed(what: &str, e: &serde_json::Error) -> GoogleError {
+    GoogleError::Protocol(format!(
+        "{what}: {:?} at {}:{}",
+        e.classify(),
+        e.line(),
+        e.column()
+    ))
 }
 
 fn events_path(calendar_id: &str) -> String {
