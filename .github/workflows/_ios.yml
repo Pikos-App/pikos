@@ -60,6 +60,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The compiler comes from rust-toolchain.toml; build-ios-framework.sh adds the targets.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+
       - name: Read the Rust toolchain
         id: rust
         run: echo "version=$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
