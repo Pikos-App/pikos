@@ -71,7 +71,7 @@ impl GoogleTransport for ReqwestGoogle {
             .query(query);
         let fetched = http::fetch(request)
             .await
-            .map_err(|e| GoogleError::Network(e.to_string()))?;
+            .map_err(|e| GoogleError::Network(http::failure(&e)))?;
 
         Ok(GoogleResponse {
             status: fetched.status,

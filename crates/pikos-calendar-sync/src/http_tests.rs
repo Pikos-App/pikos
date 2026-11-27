@@ -23,6 +23,26 @@ impl log::Log for Capture {
 
 static CAPTURE: Capture = Capture(Mutex::new(Vec::new()));
 
+/// A refused connection, a DNS miss and a certificate rejection used to share one message.
+/// The reason now leads with reqwest's class, and the URL, which can carry a token, is gone.
+#[tokio::test]
+async fn a_failed_request_says_why_and_not_where() {
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let request = client().get(format!(
+        "http://127.0.0.1:{port}/calendars/me%40example.com/events?syncToken=query-secret"
+    ));
+
+    let err = fetch(request).await.err().expect("nothing listens there");
+    let reason = failure(&err);
+
+    assert!(reason.starts_with("connect: "), "{reason}");
+    assert!(!reason.contains("query-secret"), "{reason}");
+    assert!(!reason.contains("example.com"), "{reason}");
+}
+
 #[test]
 fn client_builds() {
     let _ = client();
