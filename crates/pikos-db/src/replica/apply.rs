@@ -610,7 +610,7 @@ fn map_from_json(name: &str, text: &str) -> AppResult<FieldMap> {
     let object: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(text).map_err(|e| {
             AppError::Internal(format!(
-                "held record {name} is unreadable: {}",
+                "held {name} is unreadable: {}",
                 AppError::from(e).log_summary()
             ))
         })?;
@@ -619,7 +619,7 @@ fn map_from_json(name: &str, text: &str) -> AppResult<FieldMap> {
         .map(|(k, v)| {
             let bad = || {
                 AppError::Internal(format!(
-                    "held record {name} is unreadable: field {k} isn't a tagged value"
+                    "held {name} is unreadable: field {k} isn't a tagged value"
                 ))
             };
             let value = match &v {
