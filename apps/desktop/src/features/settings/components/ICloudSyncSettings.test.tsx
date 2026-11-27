@@ -70,4 +70,43 @@ describe("ICloudSyncSettings", () => {
     expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledWith("Sync on in pikos-1\nUp to date");
   });
+
+  it("says why the switch failed instead of showing an object", async () => {
+    invoke.mockImplementation((command: string) =>
+      command === "icloud_sync_set"
+        ? // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Tauri rejects with the plain { kind, message } object
+          Promise.reject({ kind: "Db", message: "db error: database is locked" })
+        : Promise.resolve({ action: "none", on: true, text: "Up to date" })
+    );
+    render(<ICloudSyncSettings />);
+    const toggle = await screen.findByRole("switch", { name: "Sync with iCloud" });
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    fireEvent.click(toggle);
+
+    expect(
+      await screen.findByText(/^Storage error while turning iCloud sync off/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/object Object|database is locked/)).toBeNull();
+  });
+
+  it("says the clipboard refused the report, apart from a report that couldn't be made", async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: () => Promise.reject(new DOMException("denied", "NotAllowedError")) },
+    });
+    invoke.mockImplementation((command: string) =>
+      Promise.resolve(
+        command === "icloud_sync_report"
+          ? "Sync on in pikos-1"
+          : { action: "none", on: true, text: "Up to date" }
+      )
+    );
+    render(<ICloudSyncSettings />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy" }));
+
+    expect(
+      await screen.findByText("Couldn't copy the report to the clipboard. Try again.")
+    ).toBeInTheDocument();
+  });
 });

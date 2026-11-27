@@ -14,8 +14,10 @@ import type {
   PlatformWindowAction,
 } from "@pikos/core";
 import { resolveAssetPath } from "@pikos/core";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { appDataDir, appLogDir, join } from "@tauri-apps/api/path";
+
+import { invokeCommand } from "@/shared/adapters/command";
 
 export class TauriPlatformAdapter implements PlatformAdapter {
   async openExternal(url: string): Promise<void> {
@@ -46,29 +48,30 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     await relaunch();
   }
 
-  /** Swallows the failure into `null`: an OS that can't answer and a missing shell are both "unknown". */
+  /** Turns the failure into `null`: an OS that can't answer and a missing shell are both "unknown".
+   *  invokeCommand has already logged it. */
   async checkNotificationPermission(): Promise<boolean | null> {
     try {
-      return await invoke<boolean>("check_notification_permission");
+      return await invokeCommand<boolean>("check_notification_permission");
     } catch {
       return null;
     }
   }
 
   requestNotificationPermission(): Promise<boolean> {
-    return invoke<boolean>("request_notification_permission");
+    return invokeCommand<boolean>("request_notification_permission");
   }
 
   async openNotificationSettings(): Promise<void> {
-    await invoke("open_notification_settings");
+    await invokeCommand("open_notification_settings");
   }
 
   async applyNotificationSettings(settings: PlatformNotificationSettings): Promise<void> {
-    await invoke("update_notification_settings", { settings });
+    await invokeCommand("update_notification_settings", { settings });
   }
 
   async replayPendingNotificationClicks(): Promise<void> {
-    await invoke("replay_pending_notification_clicks");
+    await invokeCommand("replay_pending_notification_clicks");
   }
 
   async pickDirectory(title: string): Promise<string | null> {
@@ -103,15 +106,15 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   private assetsDir: string | null = null;
 
   async ensureAssetsDir(): Promise<void> {
-    this.assetsDir = await invoke<string>("init_assets_dir");
+    this.assetsDir = await invokeCommand<string>("init_assets_dir");
   }
 
   saveAsset(sourcePath: string): Promise<string> {
-    return invoke<string>("save_asset", { sourcePath });
+    return invokeCommand<string>("save_asset", { sourcePath });
   }
 
   saveAssetBytes(data: Uint8Array, extension: string): Promise<string> {
-    return invoke<string>("save_asset_bytes", { data: Array.from(data), ext: extension });
+    return invokeCommand<string>("save_asset_bytes", { data: Array.from(data), ext: extension });
   }
 
   assetUrl(storedPath: string): string {

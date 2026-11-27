@@ -1,6 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
+import { storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
+
+import { invokeCommand } from "@/shared/adapters/command";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("iCloudSync");
 
 export type ICloudSyncAction = "none" | "useThisAccount" | "uploadAgain";
 
@@ -11,6 +16,7 @@ export interface ICloudSyncState {
 }
 
 const STATUS_EVENT = "icloud-sync:status";
+const READING = "reading the iCloud sync status";
 
 export interface ICloudSync {
   state: ICloudSyncState | null;
@@ -22,7 +28,11 @@ export interface ICloudSync {
 }
 
 function readState(): Promise<ICloudSyncState> {
-  return invoke<ICloudSyncState>("icloud_sync_state");
+  return invokeCommand<ICloudSyncState>("icloud_sync_state");
+}
+
+function failed(e: unknown, verb: string): string {
+  return storageErrorUserMessage(toStorageError(e), verb);
 }
 
 /** The Mac's iCloud sync switch and the line under it, kept current by the event the transport
@@ -39,43 +49,61 @@ export function useICloudSync(): ICloudSync {
           if (!cancelled) setState(next);
         },
         (e: unknown) => {
-          if (!cancelled) setError(String(e));
+          if (!cancelled) setError(failed(e, READING));
         }
       );
     void pull();
-    const unlisten = listen(STATUS_EVENT, () => void pull());
+    const unlisten = listen(STATUS_EVENT, () => void pull()).catch((e: unknown) => {
+      // The line then changes only when the panel is opened again.
+      log.warn("listening for sync status failed", e);
+      return null;
+    });
     return () => {
       cancelled = true;
-      void unlisten.then((stop) => stop());
+      void unlisten.then((stop) => stop?.());
     };
   }, []);
 
-  async function run(command: string, args?: Record<string, unknown>): Promise<void> {
+  // The line is read again either way: a refused switch still moved the state Rust holds.
+  async function run(command: string, verb: string, args?: Record<string, unknown>) {
+    let failure: string | null = null;
     try {
-      await invoke(command, args);
-      setError(null);
+      await invokeCommand(command, args);
     } catch (e) {
-      setError(String(e));
+      failure = failed(e, verb);
     }
-    setState(await readState());
+    try {
+      setState(await readState());
+    } catch (e) {
+      failure ??= failed(e, READING);
+    }
+    setError(failure);
   }
 
   async function copyReport(): Promise<boolean> {
+    let report: string;
     try {
-      await navigator.clipboard.writeText(await invoke<string>("icloud_sync_report"));
-      setError(null);
-      return true;
+      report = await invokeCommand<string>("icloud_sync_report");
     } catch (e) {
-      setError(String(e));
+      setError(failed(e, "making the sync report"));
       return false;
     }
+    try {
+      await navigator.clipboard.writeText(report);
+    } catch (e) {
+      log.warn("copying the sync report failed", e);
+      setError("Couldn't copy the report to the clipboard. Try again.");
+      return false;
+    }
+    setError(null);
+    return true;
   }
 
   return {
-    act: () => run("icloud_sync_act"),
+    act: () => run("icloud_sync_act", "starting iCloud sync over"),
     copyReport,
     error,
-    setOn: (on) => run("icloud_sync_set", { on }),
+    setOn: (on) => run("icloud_sync_set", `turning iCloud sync ${on ? "on" : "off"}`, { on }),
     state,
   };
 }
