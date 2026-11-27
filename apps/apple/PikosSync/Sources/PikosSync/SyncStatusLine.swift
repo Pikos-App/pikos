@@ -81,9 +81,27 @@ public struct SyncStatusLine: Equatable, Sendable {
         case .syncing:
             self.init(text: Self.withReassurance(Self.syncing(queue), queue), action: .none)
         case .upToDate:
-            self.init(text: Self.withReassurance(Self.settled(queue, unsent: 0, now: now), queue), action: .none)
-        case .unsent(let count):
-            self.init(text: Self.withReassurance(Self.settled(queue, unsent: count, now: now), queue), action: .none)
+            self.init(text: Self.withReassurance(Self.settled(queue, unsent: 0, cause: nil, now: now), queue), action: .none)
+        case .unsent(let count, let cause):
+            self.init(
+                text: Self.withReassurance(Self.settled(queue, unsent: count, cause: cause, now: now), queue),
+                action: .none)
+        }
+    }
+
+    /// Why records weren't sent, in words a person can act on or pass on. The fallback keeps the
+    /// code's name, since that's what a bug report needs.
+    static func reason(_ cause: UnsentCause) -> String {
+        guard case .refused(let code) = cause else { return "this device couldn't prepare them" }
+
+        switch code {
+        case .limitExceeded: return "too large for iCloud"
+        case .invalidArguments: return "iCloud rejected a field in them"
+        case .serverRejectedRequest: return "iCloud rejected them"
+        case .permissionFailure: return "iCloud didn't allow them"
+        case .assetFileNotFound, .assetFileModified: return "an image file was missing or changed"
+        case .incompatibleVersion: return "iCloud needs a newer Pikos"
+        default: return "iCloud error \(SyncFailure.name(code))"
         }
     }
 
@@ -124,7 +142,7 @@ public struct SyncStatusLine: Equatable, Sendable {
         }
     }
 
-    private static func settled(_ queue: Queue, unsent: Int, now: Date) -> String {
+    private static func settled(_ queue: Queue, unsent: Int, cause: UnsentCause?, now: Date) -> String {
         var parts: [String] = []
         if queue.toSend > 0 {
             parts.append(queue.toSend == 1 ? "1 change waiting to send" : "\(queue.toSend.formatted()) changes waiting to send")
@@ -132,7 +150,8 @@ public struct SyncStatusLine: Equatable, Sendable {
             parts.append("Up to date")
         }
         if unsent > 0 {
-            parts.append("\(unsent) couldn't be sent")
+            let why = cause.map { (unsent == 1 ? ": " : ", mainly: ") + reason($0) } ?? ""
+            parts.append("\(unsent) couldn't be sent\(why)")
         }
         if queue.needsUpdate {
             parts.append("some changes need a newer Pikos")

@@ -443,11 +443,33 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(stillPending, [ids[3]], "neither a refused record nor one that can't be built goes again")
         XCTAssertNil(rebuilt)
         let line = SyncStatusLine(status: status, queue: .init(toSend: 5, needsUpdate: false, lastFetch: nil))
-        XCTAssertEqual(line.text, "5 changes waiting to send · 4 couldn't be sent. \(SyncStatusLine.reassurance)")
+        XCTAssertEqual(
+            line.text,
+            "5 changes waiting to send · 4 couldn't be sent, mainly: iCloud rejected a field in them. \(SyncStatusLine.reassurance)",
+            "a four-way tie names the lowest code, the same on every read")
 
         let afterRelaunch = SyncCoordinator(store: store, zone: workspaceZone)
         let pendingAfterRelaunch = try await afterRelaunch.pending()
         XCTAssertEqual(pendingAfterRelaunch, ids)
+    }
+
+    func testRecordsThatCouldntBeSentSayWhatMostOfThemFailedWith() async throws {
+        let store = FakeStore()
+        for index in 0..<3 {
+            await store.queue(page("p\(index)", title: "Long \(index)"), storeName: "page:p\(index)")
+        }
+        let coordinator = SyncCoordinator(store: store, zone: workspaceZone)
+        let ids = try await coordinator.pending()
+
+        _ = await coordinator.failed(ids[0], code: .limitExceeded)
+        let oneStatus = await coordinator.settled
+        _ = await coordinator.failed(ids[1], code: .invalidArguments)
+        _ = await coordinator.failed(ids[2], code: .limitExceeded)
+        let status = await coordinator.settled
+
+        let empty = SyncStatusLine.Queue(toSend: 0, needsUpdate: false, lastFetch: nil)
+        XCTAssertEqual(SyncStatusLine(status: oneStatus, queue: empty).text, "Up to date · 1 couldn't be sent: too large for iCloud")
+        XCTAssertEqual(SyncStatusLine(status: status, queue: empty).text, "Up to date · 3 couldn't be sent, mainly: too large for iCloud")
     }
 
     // qa: CLOUD-139

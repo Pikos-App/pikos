@@ -20,9 +20,18 @@ public enum SyncStatus: Equatable, Sendable {
     /// iCloud is busy or asked this device to slow down. Sync tries again by itself, after this
     /// many seconds when CloudKit said.
     case retrying(after: TimeInterval?)
-    /// Settled, except for this many records iCloud refused or this device couldn't build.
-    case unsent(Int)
+    /// Settled, except for this many records iCloud refused or this device couldn't build, and
+    /// the reason most of them share.
+    case unsent(Int, cause: UnsentCause?)
     case failed(String)
+}
+
+/// Why records weren't sent.
+public enum UnsentCause: Hashable, Sendable {
+    /// iCloud refused them with this code.
+    case refused(CKError.Code)
+    /// This device couldn't build them from the workspace.
+    case unbuildable
 }
 
 /// The CloudKit transport, over Apple's sync engine. It owns batching, retries, change tokens and
