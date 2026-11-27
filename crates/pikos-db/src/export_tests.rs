@@ -632,3 +632,58 @@ async fn the_schema_is_what_makes_a_missing_folder_impossible() {
         "deleting the folder nulls the column, so the page becomes unfiled"
     );
 }
+
+// A value that won't decode stops the export naming the page and the column, rather than going
+// into the person's file as a blank.
+
+async fn page_with_an_unreadable_title(pool: &SqlitePool) {
+    insert_test_page(pool, TestPage::new("readable", "Readable"))
+        .await
+        .unwrap();
+    insert_test_page(pool, TestPage::new("unreadable", "Unreadable"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET title = X'00FF' WHERE id = 'unreadable'")
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn assert_names_page_and_column(err: crate::AppError, column: &str) {
+    assert_eq!(err.kind(), "Db", "{err}");
+    assert!(
+        err.to_string()
+            .contains(&format!("{column} of page unreadable")),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn a_csv_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = build_export_csv(&pool, false).await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}
+
+#[tokio::test]
+async fn a_markdown_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = plan_markdown_export(&pool, false).await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}
+
+#[tokio::test]
+async fn a_one_page_markdown_export_with_an_unreadable_title_fails_naming_the_page() {
+    let pool = test_pool().await;
+    page_with_an_unreadable_title(&pool).await;
+
+    let err = plan_markdown_page(&pool, "unreadable").await.unwrap_err();
+
+    assert_names_page_and_column(err, "title");
+}

@@ -11,7 +11,7 @@ use std::path::Path;
 
 use sqlx::Row;
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 /// The pages a user-facing export ships.
 ///
@@ -65,21 +65,49 @@ pub fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
     }
 }
 
+/// A page row's column, or an error naming the page and the column. A value that fails to
+/// decode would otherwise go into the person's file as a blank, a page that seems to have no
+/// title or no date.
+pub(crate) fn column<'r, T>(
+    row: &'r sqlx::sqlite::SqliteRow,
+    page_id: &str,
+    name: &str,
+) -> AppResult<T>
+where
+    T: sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
+{
+    row.try_get(name).map_err(|e| {
+        let source = match e {
+            sqlx::Error::ColumnDecode { source, .. } => source,
+            other => Box::new(other),
+        };
+        AppError::Db(sqlx::Error::ColumnDecode {
+            index: format!("{name} of page {page_id}"),
+            source,
+        })
+    })
+}
+
+/// The page id that names every other column's error. It names its own by the row's place in
+/// the export, as there is nothing else to go by.
+pub(crate) fn page_id(row: &sqlx::sqlite::SqliteRow, position: usize) -> AppResult<String> {
+    column(row, &format!("#{} in export order", position + 1), "id")
+}
+
 /// A nullable text column, read as the `None` it actually is.
 ///
 /// `row.try_get::<String, _>(col).ok()` looks like it does this and does not: sqlx decodes a
 /// NULL into `Ok("")`, so every absent value arrives as `Some("")`, and an unfiled page lands
 /// in `Uncategorized/` or an unscheduled one gets `scheduled_start: ""`.
-fn nullable(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<String> {
-    row.try_get::<Option<String>, _>(column)
-        .ok()
-        .flatten()
-        .filter(|value| !value.is_empty())
+fn nullable(row: &sqlx::sqlite::SqliteRow, page_id: &str, name: &str) -> AppResult<Option<String>> {
+    Ok(column::<Option<String>>(row, page_id, name)?.filter(|value| !value.is_empty()))
 }
 
 /// One page, ready to be written once its assets are resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkdownPage {
+    /// The page's id, which names it in a log line where its title can't go.
+    pub id: String,
     /// Path relative to the export root, including the `.md` — `"Work/Notes.md"`
     /// for a filed page, `"Notes.md"` for one in the inbox.
     pub path: String,
@@ -114,32 +142,30 @@ pub async fn plan_markdown_export(
 
     let rows = fetch_export_pages(pool, &markdown_columns(), include_synced).await?;
 
-    let titles: HashMap<String, String> = rows
-        .iter()
-        .map(|row| {
-            let id: String = row.try_get("id").unwrap_or_default();
-            let title: String = row.try_get("title").unwrap_or_default();
-            (id, title)
-        })
-        .collect();
+    let mut titles: HashMap<String, String> = HashMap::new();
+    for (position, row) in rows.iter().enumerate() {
+        let id = page_id(row, position)?;
+        let title: String = column(row, &id, "title")?;
+        titles.insert(id, title);
+    }
 
     let mut claimed = HashSet::new();
-    Ok(rows
-        .iter()
-        .map(|row| {
-            // A folder id with no folder behind it is not an error worth failing an
-            // export over; the page still has to land somewhere a person can find.
-            let directory = nullable(row, "folder_id").map(|id| {
-                folder_names
-                    .get(&id)
-                    .map(|n| sanitize_filename(n))
-                    .unwrap_or_else(|| "Uncategorized".to_string())
-            });
-            let mut page = markdown_page(row, directory, &titles);
-            page.path = unclaimed_path(&page.path, &mut claimed);
-            page
-        })
-        .collect())
+    let mut plan = Vec::with_capacity(rows.len());
+    for (position, row) in rows.iter().enumerate() {
+        let id = page_id(row, position)?;
+        // A folder id with no folder behind it is not an error worth failing an
+        // export over; the page still has to land somewhere a person can find.
+        let directory = nullable(row, &id, "folder_id")?.map(|folder| {
+            folder_names
+                .get(&folder)
+                .map(|n| sanitize_filename(n))
+                .unwrap_or_else(|| "Uncategorized".to_string())
+        });
+        let mut page = markdown_page(row, &id, directory, &titles)?;
+        page.path = unclaimed_path(&page.path, &mut claimed);
+        plan.push(page);
+    }
+    Ok(plan)
 }
 
 /// `path`, or `<stem> 2.md` and up when an earlier page took it, as the one-page export names a
@@ -177,13 +203,13 @@ pub async fn plan_markdown_page(
         return Ok(None);
     };
 
-    let content: String = row.try_get("body").unwrap_or_default();
+    let content: String = column(&row, page_id, "body")?;
     let titles = match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(doc) => crate::page_links::target_titles(pool, &doc).await?,
         Err(_) => HashMap::new(),
     };
 
-    Ok(Some(markdown_page(&row, None, &titles)))
+    Ok(Some(markdown_page(&row, page_id, None, &titles)?))
 }
 
 fn markdown_columns() -> String {
@@ -196,18 +222,19 @@ fn markdown_columns() -> String {
 
 fn markdown_page(
     row: &sqlx::sqlite::SqliteRow,
+    id: &str,
     directory: Option<String>,
     titles: &HashMap<String, String>,
-) -> MarkdownPage {
-    let title: String = row.try_get("title").unwrap_or_default();
-    let content: String = row.try_get("body").unwrap_or_default();
-    let status: String = row.try_get("status").unwrap_or_default();
-    let priority: i64 = row.try_get("priority").unwrap_or(0);
-    let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-    let scheduled_start = nullable(row, "scheduled_start");
-    let scheduled_end = nullable(row, "scheduled_end");
-    let created_at: String = row.try_get("created_at").unwrap_or_default();
-    let updated_at: String = row.try_get("updated_at").unwrap_or_default();
+) -> AppResult<MarkdownPage> {
+    let title: String = column(row, id, "title")?;
+    let content: String = column(row, id, "body")?;
+    let status: String = column(row, id, "status")?;
+    let priority: i64 = column(row, id, "priority")?;
+    let tags: String = column(row, id, "tags")?;
+    let scheduled_start = nullable(row, id, "scheduled_start")?;
+    let scheduled_end = nullable(row, id, "scheduled_end")?;
+    let created_at: String = column(row, id, "created_at")?;
+    let updated_at: String = column(row, id, "updated_at")?;
 
     let mut assets = Vec::new();
     if !content.is_empty() && content != "{}" {
@@ -233,7 +260,8 @@ fn markdown_page(
         &updated_at,
     );
 
-    MarkdownPage {
+    Ok(MarkdownPage {
+        id: id.to_string(),
         path: match &directory {
             Some(dir) => format!("{dir}/{filename}.md"),
             None => format!("{filename}.md"),
@@ -241,7 +269,7 @@ fn markdown_page(
         in_folder: directory.is_some(),
         contents: format!("{frontmatter}{}", markdown_body(&content, titles)),
         assets,
-    }
+    })
 }
 
 /// A page's final text, with every asset that was actually copied pointed at its
@@ -458,19 +486,19 @@ pub async fn build_export_csv(pool: &sqlx::SqlitePool, include_synced: bool) -> 
     let mut out = String::new();
     out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At\n");
 
-    for row in &pages {
-        let id: String = row.try_get("id").unwrap_or_default();
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content_text: String = row.try_get("content_text").unwrap_or_default();
-        let status: String = row.try_get("status").unwrap_or_default();
-        let priority: i64 = row.try_get("priority").unwrap_or(0);
-        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-        let scheduled_start = nullable(row, "scheduled_start");
-        let scheduled_end = nullable(row, "scheduled_end");
-        let created_at: String = row.try_get("created_at").unwrap_or_default();
-        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
-        let completed_at = nullable(row, "completed_at");
-        let folder_id = nullable(row, "folder_id");
+    for (position, row) in pages.iter().enumerate() {
+        let id = page_id(row, position)?;
+        let title: String = column(row, &id, "title")?;
+        let content_text: String = column(row, &id, "content_text")?;
+        let status: String = column(row, &id, "status")?;
+        let priority: i64 = column(row, &id, "priority")?;
+        let tags: String = column(row, &id, "tags")?;
+        let scheduled_start = nullable(row, &id, "scheduled_start")?;
+        let scheduled_end = nullable(row, &id, "scheduled_end")?;
+        let created_at: String = column(row, &id, "created_at")?;
+        let updated_at: String = column(row, &id, "updated_at")?;
+        let completed_at = nullable(row, &id, "completed_at")?;
+        let folder_id = nullable(row, &id, "folder_id")?;
 
         let folder_name = folder_id
             .as_deref()

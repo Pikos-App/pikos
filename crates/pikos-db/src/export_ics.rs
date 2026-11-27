@@ -22,10 +22,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use chrono::{Datelike, Days, Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
-use sqlx::Row;
 
 use crate::error::AppResult;
-use crate::export::fetch_export_pages;
+use crate::export::{column, fetch_export_pages, page_id};
 
 /// How far past the last exported occurrence the generated `VTIMEZONE` spells
 /// its transitions out. An unbounded `RRULE` outruns any window; 30 years puts
@@ -530,10 +529,12 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
         });
     };
 
-    for row in &pages {
-        let id: String = row.try_get("id").unwrap_or_default();
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content_text: String = row.try_get("content_text").unwrap_or_default();
+    for (position, row) in pages.iter().enumerate() {
+        let id = page_id(row, position)?;
+        let title: String = column(row, &id, "title")?;
+        let content_text: String = column(row, &id, "content_text")?;
+        let start: Option<String> = column(row, &id, "scheduled_start")?;
+        let end: Option<String> = column(row, &id, "scheduled_end")?;
         let rule = rules.get(&id);
 
         // Anchors on the rule's base occurrence: `scheduled_start` holds the next occurrence, and
@@ -546,8 +547,6 @@ pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> 
                 &device,
             ),
             None => {
-                let start: Option<String> = row.try_get("scheduled_start").ok();
-                let end: Option<String> = row.try_get("scheduled_end").ok();
                 let start = start.filter(|s| !s.is_empty());
                 start.as_deref().and_then(|start| {
                     Placement::build(
