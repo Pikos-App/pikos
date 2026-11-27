@@ -687,3 +687,22 @@ async fn a_one_page_markdown_export_with_an_unreadable_title_fails_naming_the_pa
 
     assert_names_page_and_column(err, "title");
 }
+
+#[tokio::test]
+async fn an_export_folder_that_cannot_be_made_names_the_step_and_the_folder() {
+    let pool = test_pool().await;
+    let dir = std::env::temp_dir().join(format!("pkos_export_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let blocker = dir.join("not-a-folder");
+    std::fs::write(&blocker, b"a file where the folder should be").unwrap();
+
+    let err = write_markdown_export(&pool, &blocker.join("out"), &dir, false)
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.kind(), "Io", "{err}");
+    let message = err.to_string();
+    assert!(message.contains("creating the export folder"), "{message}");
+    assert!(message.contains("not-a-folder"), "{message}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

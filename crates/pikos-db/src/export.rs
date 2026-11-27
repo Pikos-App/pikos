@@ -204,6 +204,7 @@ pub async fn plan_markdown_page(
     };
 
     let content: String = column(&row, page_id, "body")?;
+    // An unparseable body is logged once, by `markdown_page`.
     let titles = match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(doc) => crate::page_links::target_titles(pool, &doc).await?,
         Err(_) => HashMap::new(),
@@ -238,8 +239,12 @@ fn markdown_page(
 
     let mut assets = Vec::new();
     if !content.is_empty() && content != "{}" {
-        if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
-            collect_asset_paths(&doc, &mut assets);
+        match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(doc) => collect_asset_paths(&doc, &mut assets),
+            Err(e) => log::warn!(
+                "export_markdown_body_unparseable page={id} {}: the page exports with its frontmatter only",
+                AppError::from(e).log_summary()
+            ),
         }
     }
 
@@ -301,17 +306,24 @@ pub async fn write_markdown_export(
     include_synced: bool,
 ) -> AppResult<(usize, usize)> {
     let plan = plan_markdown_export(pool, include_synced).await?;
-    std::fs::create_dir_all(base_dir)?;
+    std::fs::create_dir_all(base_dir)
+        .map_err(|e| AppError::io_at("creating the export folder", base_dir, e))?;
 
     let mut copied = HashMap::new();
     for page in &plan {
         copy_page_assets(page, assets_dir, base_dir, &mut copied)?;
 
+        // The file and its folder are named after the page and its folder, so the error names the
+        // export folder and the page's id instead.
         let destination = base_dir.join(&page.path);
         if let Some(parent) = destination.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                let doing = format!("creating the folder for page {} in", page.id);
+                AppError::io_at(&doing, base_dir, e)
+            })?;
         }
-        std::fs::write(&destination, render_markdown_page(page, &copied))?;
+        std::fs::write(&destination, render_markdown_page(page, &copied))
+            .map_err(|e| AppError::io_at(&format!("writing page {} into", page.id), base_dir, e))?;
     }
 
     Ok((plan.len(), copied.len()))
@@ -330,20 +342,31 @@ pub fn copy_page_assets(
             continue;
         }
 
+        // Only a name Pikos gave the file is logged; any other stored path is the person's.
+        let image = crate::assets::pikos_file_name(stored).unwrap_or("(not a Pikos image)");
         let source = crate::assets::resolve_asset_path(assets_dir, stored);
         if !source.exists() {
+            log::warn!(
+                "export_markdown_image_missing page={} image={image}: the page keeps its reference",
+                page.id
+            );
             continue;
         }
 
-        std::fs::create_dir_all(base_dir.join("assets"))?;
+        let assets_out = base_dir.join("assets");
+        std::fs::create_dir_all(&assets_out)
+            .map_err(|e| AppError::io_at("creating the export's images folder", &assets_out, e))?;
         let filename = source
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("asset.bin")
             .to_string();
-        if let Err(e) = std::fs::copy(&source, base_dir.join("assets").join(&filename)) {
-            // The source is a user asset path — log only the io::ErrorKind, not the path.
-            log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
+        if let Err(e) = std::fs::copy(&source, assets_out.join(&filename)) {
+            log::warn!(
+                "export_markdown_copy_asset_failed page={} image={image} kind={:?}: the page keeps its reference",
+                page.id,
+                e.kind()
+            );
             continue;
         }
         copied.insert(stored.clone(), format!("assets/{filename}"));
