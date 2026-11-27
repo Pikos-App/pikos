@@ -280,7 +280,8 @@ impl ParsingComponents {
     /// coarsest unit in the duration, which is why "in 3 days" is certain about
     /// the weekday and "in 2 weeks" is not.
     pub fn relative_from_reference(reference: Reference, duration: &Duration) -> Option<Self> {
-        let date = add_duration(reference.instant, duration)?;
+        let mut duration = duration.clone();
+        let date = add_duration_spilling(reference.instant, &mut duration)?;
         let mut components = Self::new(reference);
 
         if duration.has_time_part() {
@@ -394,8 +395,14 @@ impl Duration {
 /// spills into the next — "half a day" becomes 12 hours — and each step uses
 /// JS setter semantics, so adding a month to 31 January lands in March.
 pub fn add_duration(reference: JsDate, duration: &Duration) -> Option<JsDate> {
+    add_duration_spilling(reference, &mut duration.clone())
+}
+
+/// `add_duration`, leaving each spilled fraction in `duration` as chrono's own
+/// does. That write-back is what makes "7.8 days" a timed result there: the
+/// caller then sees an hour in the duration and treats it as stated.
+fn add_duration_spilling(reference: JsDate, duration: &mut Duration) -> Option<JsDate> {
     let mut date = reference;
-    let mut duration = duration.clone();
 
     if let Some(years) = duration.year {
         let floor = years.floor();
@@ -570,6 +577,19 @@ mod tests {
             assert!(components.is_certain(component), "{component:?}");
         }
         assert_eq!(components.get(Component::Hour), Some(13));
+    }
+
+    #[test]
+    fn a_fractional_day_offset_is_certain_about_the_hour_it_spills_into() {
+        let components =
+            ParsingComponents::relative_from_reference(reference(), &Duration::days(7.81))
+                .expect("representable");
+
+        assert!(components.is_certain(Component::Hour));
+        assert_eq!(
+            (components.get(Component::Day), components.get(Component::Hour)),
+            (Some(23), Some(7))
+        );
     }
 
     #[test]
