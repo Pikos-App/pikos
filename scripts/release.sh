@@ -203,6 +203,12 @@ fi
 echo ""
 echo "Created tag $TAG"
 echo ""
+if [ -n "${HOTFIX:-}" ]; then
+  echo "Owed after the tag, in the QA copy's after-the-tag block (PKOS-0209):"
+  echo "  before publishing, the draft's signed download opens past Gatekeeper;"
+  echo "  after publishing, the previous release's updater offers $NEW and applies it."
+  echo ""
+fi
 
 git push --atomic $HOOK_FLAG origin "$RELEASE_BRANCH" "$TAG"
 

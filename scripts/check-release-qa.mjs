@@ -119,7 +119,9 @@ function check(opts) {
         problems.push("the hotfix sign-off has to end with the day it ran, as YYYY-MM-DD");
     }
     return {
-      line: "Cut as a hotfix: signed the hotfix block, not the rows (`PKOS-0117`).",
+      line:
+        "Cut as a hotfix: signed the hotfix block before the tag, not the rows; Gatekeeper is " +
+        "owed on the draft and the updater after publishing (`PKOS-0117`, `PKOS-0209`).",
       problems,
     };
   }
