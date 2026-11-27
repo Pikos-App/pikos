@@ -182,7 +182,8 @@ export class ViewCacheController {
     this.bodyBytes = 0;
   }
 
-  /** The full page, from memory with no database call while nothing has changed since it was read. */
+  /** The full page, from memory with no database call while nothing has changed since it was read.
+   *  Null is a page that's gone; a read that failed rejects, so the two aren't mistaken. */
   body(id: string): Promise<Page | null> {
     const answer = this.openBody(id);
     if (this.config.shadow) {
@@ -214,7 +215,7 @@ export class ViewCacheController {
       this.waitingPrefetch = id;
       return;
     }
-    void this.readBody(id);
+    this.readBody(id).catch((e: unknown) => quiet.warn("prefetching a page failed", e));
   }
 
   cancelPrefetch(id: string): void {
@@ -237,8 +238,6 @@ export class ViewCacheController {
         if (!page) return this.dropBody(id);
         this.holdBody(page, seen);
         return page;
-      } catch {
-        return null;
       } finally {
         this.bodyReads.delete(id);
         const next = this.waitingPrefetch;

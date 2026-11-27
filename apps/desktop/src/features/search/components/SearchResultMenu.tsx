@@ -1,5 +1,5 @@
 import type { PageActionId, PageSummary } from "@pikos/core";
-import { pageActions, toPageSummary } from "@pikos/core";
+import { pageActions, storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
 import { CalendarDays, Sun, Sunrise } from "lucide-react";
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
@@ -17,7 +17,11 @@ import {
 import { MoveToFolderSub } from "@/shared/components/MoveToFolderSub";
 import { ScheduleDateButton } from "@/shared/components/ScheduleDateButton";
 import { usePages } from "@/shared/context/PagesContext";
+import { postNotice } from "@/shared/events/noticeBus";
 import { type SendDay, usePageRowActions } from "@/shared/hooks/usePageRowActions";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("SearchResultMenu");
 
 /**
  * A search result's right-click menu: the list menu's moves, so a page found is sent to a day or
@@ -46,7 +50,12 @@ export function SearchResultMenu({
   function handleOpenChange(open: boolean) {
     if (!open) return;
 
-    void getPageAfterWrites(pageId).then((found) => setPage(found && toPageSummary(found)));
+    getPageAfterWrites(pageId)
+      .then((found) => setPage(found && toPageSummary(found)))
+      .catch((e: unknown) => {
+        log.warn(`reading page ${pageId} for its menu failed`, e);
+        postNotice(storageErrorUserMessage(toStorageError(e), "reading the page"));
+      });
   }
 
   const offered = new Set(

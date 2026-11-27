@@ -1,7 +1,7 @@
 // Reuses a single ProseMirror instance across page switches
 // (setContent instead of destroy/recreate) for instant switching.
 
-import { isBodyFromNewerBuild } from "@pikos/core";
+import { isBodyFromNewerBuild, storageErrorUserMessage } from "@pikos/core";
 import { createDocumentExtensions } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,6 +11,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { EDITOR_ATTRIBUTES, LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { MOD_KEY_LABEL } from "@/shared/constants/platform";
@@ -21,6 +22,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useViewCacheController, useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { createLogger } from "@/shared/logger";
 import { onFlushPending } from "@/shared/pendingWrites";
 import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
@@ -68,6 +70,8 @@ export const editorExtensions = [
 
 // tiptap-markdown converts pasted markdown only when the clipboard has no text/html, but VS Code,
 // browsers and ChatGPT all attach HTML. Force conversion when the plain text looks like markdown.
+const log = createLogger("EditorPane");
+
 function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): boolean {
   if (!editor) return false;
   // Inside a code block, raw text is intended.
@@ -107,7 +111,7 @@ function appendDocument(editor: Editor | null, doc: JSONContent): boolean {
 }
 
 export function EditorPane() {
-  const { isLoading, page } = useEditorPage();
+  const { error: loadError, isLoading, page, retry } = useEditorPage();
   const { getPageAfterWrites, updatePage } = usePages();
   const viewCache = useViewCacheController();
   const { on } = useWorkspace();
@@ -303,10 +307,15 @@ export function EditorPane() {
       const pageId = currentPageIdRef.current;
       if (pageId === null || pendingEditRef.current !== null) return;
 
-      void getPageAfterWrites(pageId).then((newer) => {
-        const isNewer = newer !== null && newer.content !== shownContentRef.current;
-        if (isNewer) showNewerBody(pageId, newer.content);
-      });
+      getPageAfterWrites(pageId)
+        .then((newer) => {
+          const isNewer = newer !== null && newer.content !== shownContentRef.current;
+          if (isNewer) showNewerBody(pageId, newer.content);
+        })
+        .catch((e: unknown) => {
+          // The open body stays as it is; the next outside change reads again.
+          log.warn(`reading page ${pageId} after an outside change failed`, e);
+        });
     });
   }, [viewCache, editor]);
 
@@ -362,6 +371,20 @@ export function EditorPane() {
   );
 
   if (!page) {
+    if (loadError) {
+      return (
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState icon={TriangleAlert} message="Couldn't open this page">
+            <p className="type-ui-sm mt-1 text-subtle">
+              {storageErrorUserMessage(loadError, "opening the page")}
+            </p>
+            <Button onClick={retry} size="sm" variant="outline">
+              Try again
+            </Button>
+          </EmptyState>
+        </div>
+      );
+    }
     // While a new page loads, render a blank surface; the empty state would flash.
     if (isLoading) {
       return <div className="flex flex-1 flex-col bg-surface-primary" />;

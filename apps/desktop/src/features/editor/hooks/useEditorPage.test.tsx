@@ -1,3 +1,4 @@
+import { toStorageError } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -93,5 +94,23 @@ describe("useEditorPage", () => {
     });
 
     await waitFor(() => expect(hook.result.current.editor.page?.scheduledStart ?? null).toBeNull());
+  });
+
+  it("stops loading and says why when the page can't be read, and reads it again on retry", async () => {
+    const { hook, ids } = await setup(["A"]);
+    const load = vi
+      .spyOn(MockStorageAdapter.prototype, "getPage")
+      .mockRejectedValueOnce(toStorageError({ kind: "Db", message: "locked" }, "get_page"));
+
+    act(() => hook.result.current.ui.openPage(ids[0]!));
+
+    await waitFor(() => expect(hook.result.current.editor.error?.kind).toBe("Db"));
+    expect(hook.result.current.editor.isLoading).toBe(false);
+
+    act(() => hook.result.current.editor.retry());
+
+    await waitFor(() => expect(hook.result.current.editor.page?.id).toBe(ids[0]));
+    expect(hook.result.current.editor.error).toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
   });
 });

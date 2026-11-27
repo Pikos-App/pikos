@@ -496,6 +496,23 @@ describe("ViewCacheController bodies", () => {
     expect(reads.full).toBe(2);
   });
 
+  it("rejects a read that failed rather than calling the page gone", async () => {
+    const { controller, ids, raw } = await withPages(1);
+    raw.getPage = () => Promise.reject(new Error("database is locked"));
+
+    await expect(controller.body(ids[0]!)).rejects.toThrow("database is locked");
+  });
+
+  it("reads again after a failed read, rather than holding the failure", async () => {
+    const { controller, ids, raw } = await withPages(1);
+    const getPage = raw.getPage.bind(raw);
+    raw.getPage = () => Promise.reject(new Error("database is locked"));
+    await controller.body(ids[0]!).catch(() => undefined);
+    raw.getPage = getPage;
+
+    expect((await controller.body(ids[0]!))?.id).toBe(ids[0]);
+  });
+
   it("keeps a held body current with what the app saved to it", async () => {
     const { adapter, controller, ids, reads } = await withPages(1);
     await controller.body(ids[0]!);
