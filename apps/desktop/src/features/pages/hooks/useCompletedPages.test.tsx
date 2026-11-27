@@ -136,6 +136,44 @@ describe("useCompletedPages — pagination", () => {
     const ids = hook.result.current.completed.completedPages.map((p) => p.id);
     expect(new Set(ids)).toEqual(new Set([a.id, b.id]));
   });
+
+  it("loadMore appends the next batch to the first and stops offering more at the end", async () => {
+    const hook = await setup("inbox");
+    const storage = hook.result.current.workspace.storage;
+    if (!storage) throw new Error("storage should be available after selectWorkspace");
+
+    const created: string[] = [];
+    await act(async () => {
+      for (let i = 1; i <= 25; i++) {
+        const page = await storage.createPage({
+          content: "",
+          folderId: null,
+          priority: 0,
+          status: "done",
+          subtitle: null,
+          tags: [],
+          title: `Historical ${i}`,
+        });
+        await storage.updatePage(page.id, {
+          completedAt: `2025-01-${String(i).padStart(2, "0")}T00:00:00`,
+        });
+        created.push(page.id);
+      }
+    });
+
+    await act(async () => {
+      await hook.result.current.completed.onExpand();
+    });
+    expect(hook.result.current.completed.completedPages).toHaveLength(20);
+    expect(hook.result.current.completed.hasMore).toBe(true);
+
+    await act(async () => {
+      await hook.result.current.completed.loadMore();
+    });
+    const ids = hook.result.current.completed.completedPages.map((p) => p.id);
+    expect(new Set(ids)).toEqual(new Set(created));
+    expect(hook.result.current.completed.hasMore).toBe(false);
+  });
 });
 
 describe("useCompletedPages — per-view isolation", () => {
