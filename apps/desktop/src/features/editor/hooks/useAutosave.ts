@@ -3,6 +3,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("useAutosave");
+
 export interface AutosaveState {
   isSaving: boolean;
   saveError: Error | null;
@@ -19,7 +23,10 @@ export interface AutosaveState {
  */
 export function useAutosave(
   saveFn: () => Promise<void>,
-  options: { delay?: number } = {}
+  options: {
+    delay?: number;
+    /** Names what's saved in the log, such as the page id. */ what?: () => string;
+  } = {}
 ): AutosaveState {
   const delay = options.delay ?? 800;
 
@@ -33,6 +40,8 @@ export function useAutosave(
   const mountedRef = useRef(true);
 
   saveFnRef.current = saveFn;
+  const whatRef = useRef(options.what);
+  whatRef.current = options.what;
 
   const doSave = useRef(async () => {
     if (!isPendingRef.current || isSavingRef.current) return;
@@ -45,6 +54,7 @@ export function useAutosave(
       await saveFnRef.current();
       if (mountedRef.current) setSaveError(null);
     } catch (err) {
+      log.error(`saving ${whatRef.current?.() ?? "an autosaved field"} failed`, err);
       isPendingRef.current = true;
       if (mountedRef.current) setSaveError(err instanceof Error ? err : new Error(String(err)));
     } finally {

@@ -8,6 +8,7 @@ import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
+import { createLogger } from "@/shared/logger";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
@@ -17,6 +18,8 @@ import { NotificationSettings } from "./NotificationSettings";
 import { SettingsNav } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
 import type { UsageStatsData } from "./UsageStats";
+
+const log = createLogger("SettingsPage");
 
 const DeveloperSettings = import.meta.env.DEV
   ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
@@ -62,7 +65,10 @@ export function SettingsPage() {
     storage
       .getUsageStats(weekStart)
       .then(setUsageStats)
-      .catch(() => {});
+      .catch((e: unknown) => {
+        // The figures are left out; nothing else on the Data tab depends on them.
+        log.warn("reading usage stats failed", e);
+      });
   }, [storage, settingsOpen, weekStart]);
 
   useEffect(() => {

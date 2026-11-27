@@ -6,6 +6,11 @@
 
 import type { PageStore, PageSummary } from "@pikos/core";
 
+import { createLogger, throttled } from "@/shared/logger";
+
+// Runs after every write, so a read that keeps failing would log on each one.
+const quiet = throttled(createLogger("writeMirror"));
+
 export class WriteMirror {
   private recording: number[] | null = null;
   private pageOf = new Map<number, string>();
@@ -90,8 +95,9 @@ export class WriteMirror {
     let rows: PageSummary[] = [];
     try {
       rows = await this.read(ids);
-    } catch {
+    } catch (e) {
       // Settled without rows; the next refresh brings them.
+      quiet.warn("reading back written rows failed", e);
     }
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const write of writes) {

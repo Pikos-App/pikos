@@ -305,9 +305,15 @@ export function SearchPalette() {
   useEffect(() => {
     if (!storage || !isOpen) return;
     let cancelled = false;
-    void storage.listRecentPages(activePageId, RECENT_LIMIT).then((rows) => {
-      if (!cancelled) setRecentRows(rows);
-    });
+    storage
+      .listRecentPages(activePageId, RECENT_LIMIT)
+      .then((rows) => {
+        if (!cancelled) setRecentRows(rows);
+      })
+      .catch((e: unknown) => {
+        // The palette still lists the recent pages held in memory.
+        log.warn("listing recent pages failed", e);
+      });
     return () => {
       cancelled = true;
     };

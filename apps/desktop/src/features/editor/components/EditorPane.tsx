@@ -176,10 +176,13 @@ export function EditorPane() {
     updatePage(sent.pageId, { baseContent: sent.baseContent, content: sent.content });
   }
 
-  const { flush, isSaving, saveError, schedule } = useAutosave(() => {
-    savePendingEdit();
-    return Promise.resolve();
-  });
+  const { flush, isSaving, saveError, schedule } = useAutosave(
+    () => {
+      savePendingEdit();
+      return Promise.resolve();
+    },
+    { what: () => `page ${currentPageIdRef.current ?? "(none)"}` }
+  );
 
   const editor = useEditor({
     editorProps: {
