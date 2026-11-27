@@ -304,12 +304,26 @@ async fn apply_alone(
     Ok(outcome)
 }
 
-/// Names the record an apply failed on. A busy database stays as it is, so the write is retried.
+/// Names the record an apply failed on, keeping the error's kind. A busy database stays as it is,
+/// so the write is retried.
 fn naming(error: AppError, name: &RecordName) -> AppError {
     if crate::tx::is_retryable_busy(&error) {
-        error
-    } else {
-        AppError::Internal(format!("applying {name}: {error}"))
+        return error;
+    }
+    let at = |why: String| format!("applying {}: {why}", shown(name.entity, &name.key));
+    match error {
+        AppError::NotFound(why) => AppError::NotFound(at(why)),
+        AppError::Conflict(why) => AppError::Conflict(at(why)),
+        AppError::Invalid(why) => AppError::Invalid(at(why)),
+        AppError::Network(why) => AppError::Network(at(why)),
+        AppError::Corrupt(why) => AppError::Corrupt(at(why)),
+        AppError::Internal(why) => AppError::Internal(at(why)),
+        AppError::Io(e) => AppError::Io(std::io::Error::new(e.kind(), at(e.to_string()))),
+        // A sqlx or serde error can't carry the name without losing its class.
+        other => {
+            log::warn!("replica: {}", at(other.log_summary()));
+            other
+        }
     }
 }
 
@@ -490,7 +504,8 @@ async fn take_held(
             .bind(&name)
             .execute(&mut *conn)
             .await?;
-        taken.push((parsed, map_from_json(&record)?, Some(since)));
+        let fields = map_from_json(&shown(parsed.entity, &parsed.key), &record)?;
+        taken.push((parsed, fields, Some(since)));
     }
     Ok(taken)
 }
@@ -514,7 +529,11 @@ async fn hold_record(
             .fetch_optional(&mut *conn)
             .await?;
     let merged = match already {
-        Some(held) => merge_held(name, &map_from_json(&held)?, map),
+        Some(held) => merge_held(
+            name,
+            &map_from_json(&shown(name.entity, &name.key), &held)?,
+            map,
+        ),
         None => None,
     };
     let map = merged.as_ref().unwrap_or(map);
@@ -551,8 +570,16 @@ async fn pen(
 /// case the newer arrival is kept.
 fn merge_held(name: &RecordName, held: &FieldMap, arrived: &FieldMap) -> Option<FieldMap> {
     let shape = shape(entity_map(name.entity)?);
-    let held = codec::decode(name.clone(), held, &shape).ok()?;
-    let arrived = codec::decode(name.clone(), arrived, &shape).ok()?;
+    let decoded = |side: &str, map: &FieldMap| match codec::decode(name.clone(), map, &shape) {
+        Ok(record) => Some(record),
+        Err(e) => {
+            let whose = shown(name.entity, &name.key);
+            log::warn!("replica: holding the arrived {whose} unmerged, the {side} copy: {e}");
+            None
+        }
+    };
+    let held = decoded("held", held)?;
+    let arrived = decoded("arrived", arrived)?;
     let record = Record {
         name: name.clone(),
         row: merge::merge(Some(&held.row), &arrived.row).row,
@@ -577,13 +604,24 @@ fn map_to_json(map: &FieldMap) -> String {
     serde_json::Value::Object(object).to_string()
 }
 
-fn map_from_json(text: &str) -> AppResult<FieldMap> {
-    let bad = || AppError::Internal("held record is unreadable".into());
+/// A held record's fields back from the pen. The error names the record and the field, never a
+/// value, which can be anything the person wrote.
+fn map_from_json(name: &str, text: &str) -> AppResult<FieldMap> {
     let object: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(text).map_err(|_| bad())?;
+        serde_json::from_str(text).map_err(|e| {
+            AppError::Internal(format!(
+                "held record {name} is unreadable: {}",
+                AppError::from(e).log_summary()
+            ))
+        })?;
     object
         .into_iter()
         .map(|(k, v)| {
+            let bad = || {
+                AppError::Internal(format!(
+                    "held record {name} is unreadable: field {k} isn't a tagged value"
+                ))
+            };
             let value = match &v {
                 serde_json::Value::Null => Value::Null,
                 serde_json::Value::Object(o) => match o.iter().next() {

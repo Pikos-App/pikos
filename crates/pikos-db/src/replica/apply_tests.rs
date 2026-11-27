@@ -361,6 +361,27 @@ async fn an_edit_made_before_a_purge_loses_to_it() {
     assert!(get_page(&phone, &page.id).await.unwrap().is_none());
 }
 
+#[test]
+fn a_failed_apply_names_its_record_and_keeps_the_kind_of_failure() {
+    let image = RecordName::live(Entity::Asset, "a.png");
+
+    let damaged = super::naming(AppError::Corrupt("file is damaged".into()), &image);
+    let missing = super::naming(AppError::NotFound("download gone".into()), &image);
+
+    assert_eq!(damaged.kind(), "Corrupt");
+    assert_eq!(missing.kind(), "NotFound");
+    assert!(damaged.to_string().contains("asset:a.png"), "{damaged}");
+}
+
+#[test]
+fn a_tag_record_is_named_without_its_tag() {
+    let tagged = RecordName::live(Entity::PageTag, "p1/salary review");
+
+    let named = super::naming(AppError::Internal("write failed".into()), &tagged);
+
+    assert!(!named.to_string().contains("salary"), "{named}");
+}
+
 #[tokio::test]
 async fn a_child_whose_page_has_an_unreadable_tombstone_waits_rather_than_treat_it_as_none() {
     let (mac, phone) = (device().await, device().await);
