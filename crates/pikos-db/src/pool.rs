@@ -13,6 +13,98 @@ use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::error::{AppError, AppResult};
 
+/// Names the step of a longer operation an error came from, so "unable to open database file"
+/// reads "opening the workspace file: unable to open database file". The kind survives, and with
+/// it the class and SQLite code `log_summary` reports. A step that names a file uses
+/// [`AppError::io_at`] instead.
+pub(crate) trait AtStep<T> {
+    fn at_step(self, step: &str) -> AppResult<T>;
+}
+
+impl<T, E: Into<AppError>> AtStep<T> for Result<T, E> {
+    fn at_step(self, step: &str) -> AppResult<T> {
+        self.map_err(|e| at_step(e.into(), step))
+    }
+}
+
+pub(crate) fn at_step(err: AppError, step: &str) -> AppError {
+    let named = |message: String| format!("{step}: {message}");
+    match err {
+        AppError::Db(e) => AppError::Db(sqlx_at_step(e, step)),
+        AppError::Io(e) => AppError::Io(std::io::Error::new(e.kind(), named(e.to_string()))),
+        AppError::Corrupt(m) => AppError::Corrupt(named(m)),
+        AppError::NotFound(m) => AppError::NotFound(named(m)),
+        AppError::Conflict(m) => AppError::Conflict(named(m)),
+        AppError::Network(m) => AppError::Network(named(m)),
+        AppError::Internal(m) => AppError::Internal(named(m)),
+        // Invalid is written for the person and TooNew is whole. Serde's error takes no prefix
+        // without losing the position `log_summary` reads.
+        other @ (AppError::Invalid(_) | AppError::Serde(_) | AppError::TooNew { .. }) => other,
+    }
+}
+
+/// [`at_step`] inside a sqlx error. The ones left as they are read whole already: a closed pool,
+/// a missing row, or a migration error, which names its migration.
+fn sqlx_at_step(err: sqlx::Error, step: &str) -> sqlx::Error {
+    match err {
+        sqlx::Error::Database(inner) => sqlx::Error::Database(Box::new(DbErrorAtStep {
+            step: step.to_string(),
+            inner,
+        })),
+        sqlx::Error::Io(e) => {
+            sqlx::Error::Io(std::io::Error::new(e.kind(), format!("{step}: {e}")))
+        }
+        sqlx::Error::Protocol(m) => sqlx::Error::Protocol(format!("{step}: {m}")),
+        other => other,
+    }
+}
+
+/// SQLite's error with the step in front of its text. The code, kind and message pass through,
+/// so sorting a damaged file or a newer build's workspace from it works as on the bare error.
+#[derive(Debug)]
+struct DbErrorAtStep {
+    step: String,
+    inner: Box<dyn sqlx::error::DatabaseError>,
+}
+
+impl std::fmt::Display for DbErrorAtStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.step, self.inner)
+    }
+}
+
+impl std::error::Error for DbErrorAtStep {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.inner.as_error())
+    }
+}
+
+impl sqlx::error::DatabaseError for DbErrorAtStep {
+    fn message(&self) -> &str {
+        self.inner.message()
+    }
+
+    fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+        self.inner.code()
+    }
+
+    fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+        self
+    }
+
+    fn kind(&self) -> sqlx::error::ErrorKind {
+        self.inner.kind()
+    }
+}
+
 /// The embedded migration set, run by `open_pool` and read by the pre-migration backup check.
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
@@ -246,7 +338,7 @@ async fn open_pool_reporting_integrity(
     match open_pool_inner(path, checkpoints).await {
         Ok(pool) => Ok(pool),
         Err(err) => Err(match integrity_failure(path).await {
-            Some(detail) => AppError::Corrupt(detail),
+            Some(detail) => AppError::Corrupt(format!("{detail} (the open failed with {err})")),
             None => too_new(path).await.unwrap_or(err),
         }),
     }
@@ -374,7 +466,8 @@ pub(crate) async fn open_pool_for_maintenance(path: &str) -> AppResult<SqlitePoo
 
 async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<SqlitePool> {
     if let Some(parent) = std::path::Path::new(path).parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::io_at("creating the workspace folder", parent, e))?;
     }
 
     // Before this open's own migrations have run there may be no `_sqlx_migrations` to read, and a
@@ -428,7 +521,8 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
                 )
                 .foreign_keys(true),
         )
-        .await?;
+        .await
+        .at_step("opening the workspace file")?;
 
     // Migrations are forward-only and some are lossy, so only the pre-migration file recovers a
     // bad release.
@@ -440,38 +534,53 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
         .map_err(|e| AppError::Db(sqlx::Error::Migrate(Box::new(e))))?;
     migrated.store(true, Ordering::Release);
 
-    backfill_content_text(&pool).await?;
-    crate::changes::prune_writers(&pool).await?;
+    backfill_content_text(&pool)
+        .await
+        .at_step("filling in the text of pages missing it")?;
+    crate::changes::prune_writers(&pool)
+        .await
+        .at_step("pruning idle writers from the change counter")?;
 
     let stored: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&pool)
-        .await?;
-    let definition = crate::search::index_definition(&pool).await?;
+        .await
+        .at_step("reading the derived-text version")?;
+    let definition = crate::search::index_definition(&pool)
+        .await
+        .at_step("reading the search index definition")?;
 
     let derived_text_is_stale = stored != DERIVED_TEXT_VERSION;
     let definition_changed = matches!(definition, crate::search::IndexDefinition::Changed(_));
     if derived_text_is_stale || definition_changed {
         if stored < 2 {
-            rederive_line_breaks(&pool).await?;
+            rederive_line_breaks(&pool)
+                .await
+                .at_step("re-deriving the text of pages with line breaks")?;
         }
         if stored < 4 {
-            crate::reconciler::rebuild_seeded_bodies(&pool).await?;
+            crate::reconciler::rebuild_seeded_bodies(&pool)
+                .await
+                .at_step("rebuilding the bodies of pages seeded from a calendar")?;
         }
 
         sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
             .execute(&pool)
-            .await?;
+            .await
+            .at_step("rebuilding the search index")?;
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "PRAGMA user_version = {DERIVED_TEXT_VERSION}"
         ))) // sql-ok: compile-time constant
         .execute(&pool)
-        .await?;
+        .await
+        .at_step("recording the derived-text version")?;
     }
 
     if let crate::search::IndexDefinition::Changed(current)
     | crate::search::IndexDefinition::Unrecorded(current) = definition
     {
-        crate::search::record_index_definition(&pool, &current).await?;
+        crate::search::record_index_definition(&pool, &current)
+            .await
+            .at_step("recording the search index definition")?;
     }
 
     Ok(pool)
@@ -481,6 +590,12 @@ async fn open_pool_inner(path: &str, checkpoints: Checkpoints) -> AppResult<Sqli
 /// pointless: a brand-new workspace, an up-to-date one, or an empty one. Shared by `open_pool`
 /// so the CLI, which mutates the same file, gets the same protection.
 async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppResult<()> {
+    pending_migration_backup(pool, path)
+        .await
+        .at_step("backing up the workspace before migrating it")
+}
+
+async fn pending_migration_backup(pool: &SqlitePool, path: &str) -> AppResult<()> {
     let known_max = embedded_migration_max();
 
     // No migrations table: the file was just created.
@@ -523,7 +638,8 @@ async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64)
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("backups");
-    std::fs::create_dir_all(&backup_dir)?;
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| AppError::io_at("creating the backups folder", &backup_dir, e))?;
 
     // Timestamp first, with no colons, so a lexical sort is chronological for pruning.
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
@@ -534,17 +650,25 @@ async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64)
     let sql = format!("VACUUM INTO '{}'", dest_str.replace('\'', "''"));
     sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .execute(pool)
-        .await?;
+        .await
+        .at_step("writing the backup file")?;
 
     prune_migration_backups(&backup_dir, MAX_MIGRATION_BACKUPS);
     Ok(())
 }
 
-/// Deletes all but the newest `keep` `pre-migration-*.sqlite` files in `dir`. Best-effort: a
-/// stale extra backup is harmless.
+/// Deletes all but the newest `keep` `pre-migration-*.sqlite` files in `dir`. Best-effort, as a
+/// stale extra backup is harmless, but logged: a folder that never prunes keeps growing.
 fn prune_migration_backups(dir: &Path, keep: usize) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            log::warn!(
+                "pruning pre-migration backups: reading the folder failed: {:?}",
+                e.kind()
+            );
+            return;
+        }
     };
     let mut snaps: Vec<PathBuf> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -559,7 +683,17 @@ fn prune_migration_backups(dir: &Path, keep: usize) {
     }
     snaps.sort();
     for old in &snaps[..snaps.len() - keep] {
-        let _ = std::fs::remove_file(old);
+        if let Err(e) = std::fs::remove_file(old) {
+            // Pikos named the file, so its name carries nothing of the person's.
+            let name = old
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default();
+            log::warn!(
+                "pruning pre-migration backups: removing {name} failed: {:?}",
+                e.kind()
+            );
+        }
     }
 }
 

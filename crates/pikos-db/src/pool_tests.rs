@@ -1725,3 +1725,87 @@ async fn upgrading_chunks_every_page_body_once() {
     assert!(!columns.iter().any(|c| c == "content"));
     let _ = std::fs::remove_dir_all(&staged);
 }
+
+// A failed open says which of its steps stopped it, since the log and the message are all there is.
+
+#[tokio::test]
+async fn a_workspace_folder_that_cannot_be_made_names_the_step_and_the_folder() {
+    let dir = unique_tmp_dir();
+    let blocker = dir.join("not-a-folder");
+    std::fs::write(&blocker, b"a file where the folder should be").unwrap();
+    let path = blocker.join("workspace.sqlite");
+
+    let err = open_pool(path.to_str().unwrap()).await.unwrap_err();
+
+    assert_eq!(err.kind(), "Io", "{err}");
+    let message = err.to_string();
+    assert!(
+        message.contains("creating the workspace folder"),
+        "{message}"
+    );
+    assert!(message.contains("not-a-folder"), "{message}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_damaged_workspace_keeps_the_error_its_open_failed_with() {
+    let dir = unique_tmp_dir();
+    let path = dir.join("workspace.sqlite");
+    std::fs::write(&path, vec![0x5A; 8192]).unwrap();
+
+    let err = open_pool(path.to_str().unwrap()).await.unwrap_err();
+
+    assert_eq!(err.kind(), "Corrupt", "{err}");
+    assert!(
+        err.to_string().contains("opening the workspace file"),
+        "the probe's finding replaced the open's own error: {err}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_pre_migration_backup_that_fails_says_the_open_stopped_there() {
+    let dir = unique_tmp_dir();
+    let path = dir.join("workspace.sqlite");
+    let path_str = path.to_str().unwrap().to_string();
+    let pool = open_pool(&path_str).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Keep me"))
+        .await
+        .unwrap();
+    simulate_pending_migration(&pool).await;
+    std::fs::write(dir.join("backups"), b"a file where the folder should be").unwrap();
+
+    let err = maybe_backup_before_migrations(&pool, &path_str)
+        .await
+        .unwrap_err();
+    pool.close().await;
+
+    assert_eq!(err.kind(), "Io", "{err}");
+    let message = err.to_string();
+    assert!(
+        message.contains("backing up the workspace before migrating it"),
+        "{message}"
+    );
+    assert!(message.contains("creating the backups folder"), "{message}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_step_name_keeps_a_database_errors_kind_and_code() {
+    let pool = test_pool().await;
+    let failed = sqlx::query("INSERT INTO folders (id) VALUES (NULL)")
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    let bare = AppError::from(failed);
+    let summary = bare.log_summary();
+
+    let named = at_step(bare, "moving the furniture");
+
+    assert_eq!(named.kind(), "Db");
+    assert_eq!(named.log_summary(), summary);
+    assert!(
+        named.to_string().contains("moving the furniture: "),
+        "{named}"
+    );
+}
