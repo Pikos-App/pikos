@@ -1,10 +1,15 @@
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
+import { getPlatform } from "@/shared/platform";
 
 import { type ICloudSyncAction, useICloudSync } from "../hooks/useICloudSync";
 import { SettingsSection } from "./SettingsSection";
+
+const PRIVACY_NOTE =
+  "Sync stays off until you turn it on. Apple can read what syncs unless Advanced Data Protection is on for your Apple ID.";
+const ADVANCED_DATA_PROTECTION_URL = "https://support.apple.com/en-us/108756";
 
 const ACTION_LABELS: Record<Exclude<ICloudSyncAction, "none">, string> = {
   uploadAgain: "Upload this Mac's pages again",
@@ -58,6 +63,15 @@ export function ICloudSyncSettings() {
               )}
             </div>
           )}
+          <div className="flex flex-col items-start gap-2 border-t border-border py-3">
+            <p className="text-xs text-muted-foreground">{PRIVACY_NOTE}</p>
+            <button
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => void getPlatform().openExternal(ADVANCED_DATA_PROTECTION_URL)}
+            >
+              How to turn on Advanced Data Protection <ExternalLink className="h-3 w-3" />
+            </button>
+          </div>
           <div className="flex items-center justify-between gap-3 border-t border-border py-3">
             <div>
               <p className="text-sm font-medium">Sync report</p>

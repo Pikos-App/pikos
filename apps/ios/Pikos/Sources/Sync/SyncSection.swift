@@ -30,7 +30,12 @@ struct SyncSection: View {
         } header: {
             Text("iCloud").sectionLabelStyle()
         } footer: {
-            Text("Keeps your pages the same on every device signed in to your iCloud account.")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Keeps your pages the same on every device signed in to your iCloud account.")
+                Text(
+                    "Sync stays off until you turn it on. Apple can read what syncs unless Advanced Data Protection is on for your Apple ID. [How to turn on Advanced Data Protection](https://support.apple.com/en-us/108756)"
+                )
+            }
         }
     }
 
