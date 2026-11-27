@@ -8,16 +8,20 @@
 // between the two. release.sh runs it for the desktop; SKIP_SCREEN_REVIEW="<why>" bypasses it.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const ROOT = join(import.meta.dirname, "..");
 const RECORD = join(ROOT, ".agent/qa/screen-review.json");
 
-/** What a screenshot of each app can show. A change anywhere else leaves its screens as reviewed. */
+/**
+ * Everything that ships in each app. Shared code counts: a change to date handling in the core
+ * changes the labels a person reads, so only docs, scripts and tests leave screens as reviewed.
+ */
 export const SCREEN_PATHS = {
-  desktop: ["apps/desktop/src", "packages/ui", "packages/editor-schema"],
-  ios: ["apps/ios/Pikos", "apps/ios/PikosWidgets", "packages/ui", "packages/editor-mobile", "packages/editor-schema"],
+  desktop: ["apps/desktop", "packages", "crates", ":!**/*.test.*", ":!**/tests/**", ":!**/e2e/**", ":!**/*.md"],
+  ios: ["apps/ios", "apps/apple", "packages", "crates", ":!**/*.test.*", ":!**/tests/**", ":!**/e2e/**", ":!**/*.md"],
 };
 
 /** Why the release must wait, or null when the recorded review still covers `head`. */
@@ -48,7 +52,9 @@ function changedSince(commit, paths) {
   return out.split("\n").filter(Boolean);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compared as resolved file URLs, so a path with a space or a symlink still runs the check rather
+// than skipping it and exiting 0.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const at = process.argv.indexOf("--platform");
   const platform = at === -1 ? "desktop" : process.argv[at + 1];
   if (!SCREEN_PATHS[platform]) {
