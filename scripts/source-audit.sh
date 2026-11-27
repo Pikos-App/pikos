@@ -301,6 +301,44 @@ else
   pass "No stored value read as a silent default"
 fi
 
+# The Swift side of the same rule. An empty catch leaves nothing behind, and a workspace error's
+# `localizedDescription` is the Swift spelling of the enum (`PikosCore.WorkspaceError.Database(…)`),
+# not its message: show `FailureText` and log through a `Logger`. The generated bindings are left
+# out. Intentional silence says why with `// swallow-ok:` on the catch line or the one above.
+hits=$(git ls-files -- 'apps/ios/**/*.swift' 'apps/apple/**/*.swift' \
+  | grep -vE '(Tests/|Tests\.swift$|UITests/|/PikosCore/Sources/PikosCore/PikosCore\.swift$)' | python3 -c '
+import re, sys
+
+EMPTY = re.compile(r"\bcatch\b[^{]*\{\s*\}")
+OPENS = re.compile(r"\bcatch\b[^{]*\{\s*$")
+SHOWS = re.compile(r"=\s*error\.localizedDescription\s*$")
+
+for path in sys.stdin.read().split("\n"):
+    if not path:
+        continue
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        continue
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("//"):
+            continue
+        empty = EMPTY.search(line) or (
+            OPENS.search(line) and i + 1 < len(lines) and lines[i + 1].strip() == "}"
+        )
+        if not (empty or SHOWS.search(line)):
+            continue
+        if any("swallow-ok:" in w for w in lines[max(0, i - 1) : i + 1]):
+            continue
+        print("{}:{}:{}".format(path, i + 1, line.strip()))
+' 2>/dev/null || true)
+
+if [ -n "$hits" ]; then
+  fail "A Swift failure is dropped or shown as its Swift spelling (log it, show FailureText, or add '// swallow-ok: <why>')" $hits
+else
+  pass "No silent or raw Swift failures"
+fi
+
 cap_files=$(git ls-files -- 'apps/desktop/src-tauri/capabilities/*.json')
 if [ -n "$cap_files" ]; then
   hits=$(echo "$cap_files" \
