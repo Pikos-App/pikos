@@ -115,8 +115,8 @@ pub async fn report(pool: &SqlitePool) -> AppResult<String> {
         if sync.on { "on" } else { "off" },
         sync.text
     );
-    let header =
-        CString::new(header).map_err(|_| AppError::Internal("the sync state held a NUL".into()))?;
+    let header = CString::new(header)
+        .map_err(|_nul| AppError::Internal("the sync state held a NUL".into()))?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let reply = unsafe { pikos_sync_report(header.as_ptr()) }; // SAFETY: NUL-terminated for the call, and Swift copies it

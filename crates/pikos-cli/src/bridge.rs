@@ -50,8 +50,14 @@ pub fn run_bridge(cmd: &str, payload: &str) -> Result<Value, CliError> {
                 CliError::internal(format!("failed to run node for the parser bridge: {e}"))
             }
         })?;
-    let v: Value = serde_json::from_slice(&out.stdout)
-        .map_err(|_| CliError::internal("parser bridge returned invalid output"))?;
+    let v: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
+        CliError::internal(format!(
+            "parser bridge returned invalid output ({:?} at {}:{})",
+            e.classify(),
+            e.line(),
+            e.column()
+        ))
+    })?;
     if v.get("ok").and_then(Value::as_bool) != Some(true) {
         let msg = v
             .get("error")

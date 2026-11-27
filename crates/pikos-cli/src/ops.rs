@@ -113,7 +113,7 @@ pub struct ListEntry {
 
 fn local_day_start_utc(day: &str) -> Result<String, CliError> {
     let date = NaiveDate::parse_from_str(day, "%Y-%m-%d")
-        .map_err(|_| CliError::usage(format!("not a date: \"{day}\"")))?;
+        .map_err(|e| CliError::usage(format!("not a date: \"{day}\" ({e})")))?;
     let midnight = date.and_time(NaiveTime::MIN);
     let instant = Local.from_local_datetime(&midnight).earliest().map_or_else(
         || Utc.from_utc_datetime(&midnight),
@@ -419,8 +419,14 @@ pub fn parse_only(text: &str) -> Result<Value, CliError> {
 /// derived schedule rather than what was asked for.
 pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
     let parsed = parse_only(text)?;
-    let result: ParseResult = serde_json::from_value(parsed)
-        .map_err(|_| CliError::internal("could not interpret parser output"))?;
+    let result: ParseResult = serde_json::from_value(parsed).map_err(|e| {
+        CliError::internal(format!(
+            "could not interpret parser output ({:?} at {}:{})",
+            e.classify(),
+            e.line(),
+            e.column()
+        ))
+    })?;
 
     let mut created: Vec<Page> = Vec::new();
     match result {

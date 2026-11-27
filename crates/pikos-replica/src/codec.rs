@@ -97,7 +97,9 @@ fn clock(map: &FieldMap, key: &str) -> Result<Option<Hlc>, DecodeError> {
 
 pub fn decode(name: RecordName, map: &FieldMap, shape: Shape) -> Result<Record, DecodeError> {
     let format = match map.get(FORMAT) {
-        Some(Value::Integer(v)) => u32::try_from(*v).map_err(|_| malformed("format"))?,
+        Some(Value::Integer(v)) => {
+            u32::try_from(*v).map_err(|_out_of_range| malformed("format"))?
+        }
         _ => return Err(malformed("format")),
     };
     if format > FORMAT_VERSION {

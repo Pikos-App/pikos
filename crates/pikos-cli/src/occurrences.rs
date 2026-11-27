@@ -52,10 +52,10 @@ fn occurrence_on(
         &format!("{day}T23:59:59"),
         &rule.rrule_exdates,
     )
-    .map_err(|_| {
-        CliError::conflict(
-            "This page's repeat rule can't be read here — change it in the Pikos app.",
-        )
+    .map_err(|e| {
+        CliError::conflict(format!(
+            "This page's repeat rule can't be read here ({e}). Change it in the Pikos app."
+        ))
     })?;
     found
         .into_iter()

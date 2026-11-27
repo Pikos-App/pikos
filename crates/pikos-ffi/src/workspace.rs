@@ -2398,9 +2398,12 @@ impl Workspace {
         horizon_days: u32,
         default_minutes: i64,
     ) -> Result<Vec<UpcomingReminder>, WorkspaceError> {
-        let zone: chrono_tz::Tz = timezone.parse().map_err(|_| WorkspaceError::InvalidInput {
-            message: format!("not an IANA time zone: {timezone}"),
-        })?;
+        let zone: chrono_tz::Tz =
+            timezone
+                .parse()
+                .map_err(|_not_a_zone| WorkspaceError::InvalidInput {
+                    message: format!("not an IANA time zone: {timezone}"),
+                })?;
         let reminders = pikos_db::upcoming_reminders(
             &self.pool,
             chrono::Utc::now(),
@@ -3012,7 +3015,7 @@ async fn window_of(
     let after = after
         .map(|text| serde_json::from_str(&text))
         .transpose()
-        .map_err(|_| WorkspaceError::InvalidInput {
+        .map_err(|_not_a_cursor| WorkspaceError::InvalidInput {
             message: "not a cursor this list gave out".to_string(),
         })?;
     let window = pikos_db::views::list_view(pool, key, after.as_ref(), limit as usize).await?;

@@ -108,8 +108,8 @@ impl FromStr for Hlc {
         }
         let (wall, counter) = s.split_at(WALL_DIGITS);
         Ok(Hlc {
-            wall_ms: u64::from_str_radix(wall, 16).map_err(|_| err())?,
-            counter: u32::from_str_radix(counter, 16).map_err(|_| err())?,
+            wall_ms: u64::from_str_radix(wall, 16).map_err(|_not_hex| err())?,
+            counter: u32::from_str_radix(counter, 16).map_err(|_not_hex| err())?,
         })
     }
 }

@@ -623,7 +623,8 @@ async fn call_tool(
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, CliError> {
-    serde_json::to_value(value).map_err(|_| CliError::internal("could not serialize the result"))
+    serde_json::to_value(value)
+        .map_err(|e| CliError::internal(format!("could not serialize the result: {e}")))
 }
 
 fn require_str(args: &Value, key: &str) -> Result<String, CliError> {
