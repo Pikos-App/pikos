@@ -44,17 +44,11 @@ export function useDeepLinkRouter() {
         void getPlatform()
           .replayPendingNotificationClicks()
           .catch((err: unknown) => {
-            log.error(
-              "failed to replay pending notification clicks",
-              err instanceof Error ? err.name : "unknown"
-            );
+            log.error("failed to replay pending notification clicks", err);
           });
       })
       .catch((err: unknown) => {
-        log.error(
-          "failed to subscribe to deep-link events",
-          err instanceof Error ? err.name : "unknown"
-        );
+        log.error("failed to subscribe to deep-link events", err);
       });
 
     return () => {

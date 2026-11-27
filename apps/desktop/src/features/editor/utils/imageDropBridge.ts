@@ -35,9 +35,7 @@ async function insertImageAt(editor: Editor, sourcePath: string, pos: number): P
     editor.view.dispatch(tr);
     return pos + node.nodeSize;
   } catch (e) {
-    // Don't pass `e` directly — the Tauri command's error string can echo
-    // the user's source path. Log only a fixed message + error class name.
-    log.error("save_asset failed", e instanceof Error ? e.name : "unknown");
+    log.error("save_asset failed", e);
     postNotice("Couldn't save the image. Check disk space and permissions.");
     return pos;
   }

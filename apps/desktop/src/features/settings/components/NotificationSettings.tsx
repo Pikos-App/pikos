@@ -83,7 +83,7 @@ export function NotificationSettings() {
       .catch((e: unknown) => {
         // Nothing here is load-bearing for the settings the user came for, so a
         // failed read leaves the section empty rather than taking the panel down.
-        log.warn("loadHistory failed", e instanceof Error ? e.name : "unknown");
+        log.warn("loadHistory failed", e);
       });
   }
 
@@ -123,7 +123,7 @@ export function NotificationSettings() {
     getPlatform()
       .openNotificationSettings()
       .catch((e: unknown) => {
-        log.warn("openNotificationSettings failed", e instanceof Error ? e.name : "unknown");
+        log.warn("openNotificationSettings failed", e);
       });
   }
 
@@ -134,7 +134,7 @@ export function NotificationSettings() {
       setPermissionGranted(granted);
       setPermissionError(false);
     } catch (e) {
-      log.error("requestPermission failed", e instanceof Error ? e.name : "unknown");
+      log.error("requestPermission failed", e);
       setPermissionError(true);
     }
   }

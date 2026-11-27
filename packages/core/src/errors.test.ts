@@ -24,6 +24,12 @@ describe("toStorageError", () => {
     }
   );
 
+  it("names the command that rejected, when given", () => {
+    expect(toStorageError({ kind: "Db", message: "x" }, "move_pages").command).toBe("move_pages");
+    expect(toStorageError("x", "save_asset").command).toBe("save_asset");
+    expect(toStorageError({ kind: "Db", message: "x" }).command).toBeUndefined();
+  });
+
   it("preserves the original payload as cause for log scrubbing", () => {
     const raw = { kind: "Db", message: "near WHERE: syntax error" };
     expect(toStorageError(raw).cause).toBe(raw);

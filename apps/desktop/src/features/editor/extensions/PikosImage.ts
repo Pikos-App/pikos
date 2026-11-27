@@ -54,8 +54,7 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
         view.dispatch(tr);
       }
     } catch (e) {
-      // Tauri command error may echo the user's source path. Log class only.
-      log.error("Failed to save asset", e instanceof Error ? e.name : "unknown");
+      log.error("Failed to save asset", e);
       postNotice(IMAGE_SAVE_FAILED_NOTICE);
     }
   }
@@ -182,7 +181,7 @@ export async function insertImageFromDialog(view: EditorView): Promise<void> {
       view.dispatch(tr);
     }
   } catch (e) {
-    log.error("Failed to upload from dialog", e instanceof Error ? e.name : "unknown");
+    log.error("Failed to upload from dialog", e);
     postNotice(IMAGE_SAVE_FAILED_NOTICE);
   }
 }
