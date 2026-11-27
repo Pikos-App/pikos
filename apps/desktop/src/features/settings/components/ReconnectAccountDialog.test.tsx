@@ -1,4 +1,4 @@
-import type { SyncAccount } from "@pikos/core";
+import { StorageError, type SyncAccount } from "@pikos/core";
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -58,7 +58,7 @@ describe("ReconnectAccountDialog", () => {
     const onOpenChange = vi.fn();
     render({
       onOpenChange,
-      onReconnect: () => Promise.reject(new Error("Bad credentials")),
+      onReconnect: () => Promise.reject(new StorageError("Invalid", "Bad credentials")),
     });
 
     fireEvent.change(screen.getByLabelText("App password"), { target: { value: "wrong" } });

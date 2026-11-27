@@ -1,3 +1,4 @@
+import { StorageError } from "@pikos/core";
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -98,7 +99,9 @@ describe("AddAccountDialog", () => {
   });
 
   it("returns to the picker with an error when the Google grant fails", async () => {
-    const onConnectGoogle = vi.fn().mockRejectedValue(new Error("Authorization was cancelled"));
+    const onConnectGoogle = vi
+      .fn()
+      .mockRejectedValue(new StorageError("Invalid", "Authorization was cancelled"));
     const onOpenChange = vi.fn();
     render({ onConnectGoogle, onOpenChange });
     fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
@@ -227,15 +230,32 @@ describe("AddAccountDialog", () => {
   });
 
   it("shows the error and stays open when the connection fails", async () => {
-    const onConnect = vi.fn().mockRejectedValue(new Error("401 Unauthorized"));
+    const onConnect = vi
+      .fn()
+      .mockRejectedValue(new StorageError("Invalid", "The server refused the sign-in."));
     const onOpenChange = vi.fn();
     render({ onConnect, onOpenChange });
     fireEvent.click(screen.getByText("CalDAV"));
     fillForm();
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(await screen.findByText("401 Unauthorized")).toBeInTheDocument();
+    expect(await screen.findByText("The server refused the sign-in.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("names the network, not the password, when the server can't be reached", async () => {
+    const onConnect = vi
+      .fn()
+      .mockRejectedValue(new StorageError("Network", "network: CalDAV network error: dns error"));
+    render({ onConnect, onOpenChange: vi.fn() });
+    fireEvent.click(screen.getByText("CalDAV"));
+    fillForm();
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText(/^Couldn't reach the network while connecting the account/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/dns error/)).toBeNull();
   });
 
   it("Back returns to the provider picker", () => {
