@@ -582,8 +582,7 @@ async fn create_external_folder(
     let sort_order: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM folders")
             .fetch_one(&mut **tx)
-            .await
-            .unwrap_or(0);
+            .await?;
     sqlx::query(
         "INSERT INTO folders (id, name, sort_order, color, is_external_calendar, created_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?)",

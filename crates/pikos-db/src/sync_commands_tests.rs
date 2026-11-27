@@ -355,6 +355,34 @@ async fn enable_creates_external_folder_and_links_it() {
 }
 
 #[tokio::test]
+async fn enable_fails_when_the_next_folder_position_cannot_be_read() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let cal = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    // A real in an INTEGER column stays real, so the next position doesn't decode as an integer.
+    sqlx::query(
+        "INSERT INTO folders (id, name, sort_order, created_at, updated_at)
+         VALUES ('odd', 'Odd', 1.5, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let err = toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, AppError::Db(_)), "{err:?}");
+    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(folders, 1, "no folder is made at position 0");
+}
+
+#[tokio::test]
 async fn disable_tears_down_bare_folder_and_clears_cursor() {
     let pool = test_pool().await;
     let acc = account(&pool).await;
