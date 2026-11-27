@@ -92,6 +92,7 @@ export function formatError(e: unknown, depth = 0): string {
   if (typeof e === "string") return truncate(scrub(e));
   try {
     return truncate(scrub(JSON.stringify(e)));
+    // eslint-disable-next-line pikos/no-silent-catch -- the line says it couldn't print the value, which is the trace
   } catch {
     return "(unserializable)";
   }
@@ -131,6 +132,7 @@ function emit(level: Level, scope: string, msg: string, err?: unknown): void {
       const payload = err === undefined ? tag : `${tag} | ${formatError(err)}`;
       return log[level](payload);
     })
+    // eslint-disable-next-line pikos/no-silent-catch -- the log itself failed, so there is nowhere to write that down
     .catch(() => {});
 }
 

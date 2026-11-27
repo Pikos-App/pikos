@@ -53,6 +53,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   async checkNotificationPermission(): Promise<boolean | null> {
     try {
       return await invokeCommand<boolean>("check_notification_permission");
+      // eslint-disable-next-line pikos/no-silent-catch -- invokeCommand logged the failure, and null tells the panel to say it can't tell
     } catch {
       return null;
     }

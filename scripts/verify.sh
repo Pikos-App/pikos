@@ -95,6 +95,8 @@ run_check "shortcut-conflicts" node scripts/check-shortcut-conflicts.mjs &
 # Pre-push tests only the crates a push reaches, and this is what keeps that selection honest
 # against the real crate graph. Reads Cargo manifests only, so it costs a fraction of a second.
 run_check "rust-slice"        node --test scripts/rust-affected.test.mjs &
+# The repo's own lint rules: a rule that stops flagging passes every file it was meant to catch.
+run_check "eslint-rules"      node --test scripts/eslint/no-silent-catch.test.mjs &
 # Release cleanup removes worktrees and branches, so what it counts as merged is tested.
 run_check "merged-cleanup"    node --test scripts/clean-merged-work.test.mjs &
 # A behaviour lands with a test claiming its QA row. The master is gitignored, so CI has none to
@@ -118,7 +120,7 @@ fi
 
 wait
 
-for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts rust-slice merged-cleanup qa-rows tests; do
+for name in typecheck lint prettier depcruise e2e-tags ui-tokens migrations body-reads shortcut-conflicts rust-slice eslint-rules merged-cleanup qa-rows tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then

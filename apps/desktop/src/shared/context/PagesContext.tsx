@@ -168,7 +168,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   function recordPageOpened(id: string): void {
     const at = recordOpen(id);
     // A lost open time costs a recent-pages entry, never data, so it isn't worth a notice.
-    enqueue(id, () => adapter.updatePage(id, { lastOpenedAt: at })).catch(() => undefined);
+    enqueue(id, () => adapter.updatePage(id, { lastOpenedAt: at })).catch((e: unknown) => {
+      log.warn(`recording page ${id} opened failed`, e);
+    });
   }
 
   const recurring = useRecurringWrites({

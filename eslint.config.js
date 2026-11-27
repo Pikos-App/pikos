@@ -6,7 +6,10 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
-import pikos from "./scripts/eslint/no-render-clock.js";
+import renderClock from "./scripts/eslint/no-render-clock.js";
+import noSilentCatch from "./scripts/eslint/no-silent-catch.js";
+
+const pikos = { rules: { ...renderClock.rules, "no-silent-catch": noSilentCatch } };
 
 const memoSyntax = {
   message:
@@ -17,7 +20,8 @@ const memoSyntax = {
 // A mutated Date is shared by every reference to it, so a setter on a value
 // passed in changes the caller's date too. date-fns returns a new one.
 const dateMutationSyntax = {
-  message: "Don't mutate a Date. Use date-fns (addMinutes, setHours, startOfDay…), which returns a new one.",
+  message:
+    "Don't mutate a Date. Use date-fns (addMinutes, setHours, startOfDay…), which returns a new one.",
   selector:
     "CallExpression[callee.type='MemberExpression'][callee.property.name=/^set(UTC)?(FullYear|Month|Date|Hours|Minutes|Seconds|Milliseconds|Time)$/]",
 };
@@ -141,6 +145,16 @@ export default tseslint.config(
       "no-restricted-syntax": ["error", memoSyntax, dateMutationSyntax, svgSyntax],
     },
   },
+  // With no telemetry, pikos.log and what the person is shown are the only evidence of a failure,
+  // so a catch that leaves neither is a failure nobody can report.
+  {
+    files: ["apps/desktop/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/test/**"],
+    plugins: { pikos },
+    rules: {
+      "pikos/no-silent-catch": "error",
+    },
+  },
   // Tests legitimately spy on console.* (e.g. suppressing React's expected
   // error logs when asserting hooks throw outside their provider).
   {
@@ -207,5 +221,5 @@ export default tseslint.config(
     rules: {
       "react-hooks/rules-of-hooks": "off",
     },
-  },
+  }
 );

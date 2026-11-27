@@ -25,6 +25,7 @@ export function parseDeepLink(raw: string): DeepLinkAction | null {
   let url: URL;
   try {
     url = new URL(raw);
+    // eslint-disable-next-line pikos/no-silent-catch -- null is this parser's answer for a link it can't read, and the router logs it
   } catch {
     return null;
   }

@@ -13,6 +13,7 @@ export function caldavBaseUrl(typed: string): string {
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
     return new URL(withScheme).href;
+    // eslint-disable-next-line pikos/no-silent-catch -- a half-typed address is normal in the form, and discovery reports a bad one
   } catch {
     return trimmed;
   }
@@ -29,6 +30,7 @@ export function caldavSendsPasswordInClear(typed: string): boolean {
   let url: URL;
   try {
     url = new URL(caldavBaseUrl(typed));
+    // eslint-disable-next-line pikos/no-silent-catch -- an address that isn't a URL yet can't send a password at all
   } catch {
     return false;
   }
