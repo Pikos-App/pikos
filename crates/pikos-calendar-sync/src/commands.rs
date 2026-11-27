@@ -292,10 +292,13 @@ pub async fn disconnect_account(
     account_id: &str,
 ) -> AppResult<()> {
     go_dormant(pool, account_id).await?;
-    let provider = account_provider_impl(pool, account_id)
-        .await?
-        .unwrap_or_default();
-    release_credential(&keychain, account_id, &provider).await;
+    let provider = account_provider_impl(pool, account_id).await?;
+    if provider.is_none() {
+        // Without the row there is no telling a Google account from a CalDAV one, so a grant
+        // it held stays in the user's connected apps.
+        log::warn!("sync: account {account_id} has no row, so no Google grant was revoked");
+    }
+    release_credential(&keychain, account_id, &provider.unwrap_or_default()).await;
     Ok(())
 }
 
@@ -350,7 +353,9 @@ async fn release_credential(keychain: &Keychain, account_id: &str, provider: &st
             log::warn!("sync: could not revoke the Google grant for {account_id}: {e}");
         }
     }
-    let _ = keychain.delete(account_id);
+    if let Err(e) = keychain.delete(account_id) {
+        log::warn!("sync: could not delete the stored credential for {account_id}: {e}");
+    }
 }
 
 /// Resync an account through the provider its `provider` column names. The scheduler resolves
