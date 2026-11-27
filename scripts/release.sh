@@ -85,6 +85,16 @@ else
   RECORD+=("$QA_LINE")
 fi
 
+# The agent screen review has to have read these screens: this commit, or one nothing visible has
+# changed since. SKIP_SCREEN_REVIEW="<why>" lets a release through and records why.
+if [ -n "${SKIP_SCREEN_REVIEW:-}" ]; then
+  RECORD+=("Bypass: SKIP_SCREEN_REVIEW, the screens weren't reviewed: ${SKIP_SCREEN_REVIEW}")
+else
+  SCREEN_LINE=$(node "$ROOT/scripts/check-screen-review.mjs" --platform desktop) || exit 1
+  [ -n "$SCREEN_LINE" ] || { echo "The screen review check printed nothing, so it didn't run." >&2; exit 1; }
+  RECORD+=("$SCREEN_LINE")
+fi
+
 # The app's own log from the QA pass: a warning the app emits about itself is a defect or a line
 # that shouldn't be there, and both want a decision before a tag. The pass runs on Pikos Staging,
 # so its log is the one that judges this build. SKIP_LOG_CHECK="<why>" records why.
@@ -115,6 +125,17 @@ if [ -n "${SKIP_SPEED:-}" ]; then
 else
   SPEED_LINE=$(node "$ROOT/scripts/check-speed-gate.mjs") || exit 1
   RECORD+=("$SPEED_LINE")
+fi
+
+# One agent reads the release's diff for what no gate checks: sync and data loss, behaviour without
+# a test, the two apps diverging, privacy. Its findings are for reading before the sign-off below.
+# SKIP_DIFF_REVIEW="<why>" skips it and records why.
+if [ -n "${SKIP_DIFF_REVIEW:-}" ]; then
+  RECORD+=("Bypass: SKIP_DIFF_REVIEW, the release diff wasn't reviewed: ${SKIP_DIFF_REVIEW}")
+else
+  DIFF_REVIEW=$(bash "$ROOT/scripts/review-release-diff.sh" | tail -1) || exit 1
+  echo "Release diff review: $DIFF_REVIEW. Read it before signing off."
+  RECORD+=("Release diff reviewed by an agent: $DIFF_REVIEW")
 fi
 
 # Tagging triggers the publish pipeline and is irreversible, so a human reviews the notes first.

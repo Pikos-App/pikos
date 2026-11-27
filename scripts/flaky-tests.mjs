@@ -6,7 +6,8 @@
 // Writes the list to the GitHub job summary when there is one. With FAIL_ON_FLAKY=true it
 // exits non-zero when any test was flaky, which is how a scheduled run turns a flake into an issue.
 
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 /** "file › title (project)" for each test the report marks flaky, in report order. */
 export function flakyTests(report) {
@@ -24,7 +25,7 @@ export function flakyTests(report) {
   return found;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const path = process.argv[2];
   if (!path) {
     console.error("usage: node scripts/flaky-tests.mjs <playwright-json-report>");
