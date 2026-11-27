@@ -48,7 +48,7 @@ Never copy or move another file over the workspace while anything has it open, w
 { "mcpServers": { "pikos": { "command": "pikos", "args": ["mcp"] } } }
 ```
 
-Add `"--db", "/path/to/workspace.sqlite"` to the args to target another workspace. The tools are listed by the server's `tools/list`.
+Add `"--db", "/path/to/workspace.sqlite"` to the args to target another workspace. The tools are listed by the server's `tools/list`, each marked read-only or not, so a client can tell a read from a write. Only `update_page` is marked destructive, since its content replaces the whole body; the rest either read or can be taken back by another tool.
 
 Two things the protocol does not offer, so that nothing an agent does is unrecoverable:
 

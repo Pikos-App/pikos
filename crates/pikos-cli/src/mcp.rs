@@ -149,7 +149,40 @@ fn tool_content(payload: &Value, is_error: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": is_error })
 }
 
-fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
+/// What a tool does to the workspace, sent as its MCP annotations.
+///
+/// Every tool declares one, because the protocol's defaults for a tool with no
+/// annotations are a write that may destroy data and reach the outside world, so
+/// a client warned that `read_page` was destructive. No tool here touches the
+/// network, so `openWorldHint` is always false.
+#[derive(Clone, Copy)]
+enum Effect {
+    Reads,
+    /// Writes that another tool can take back: a trash has its restore, a tick
+    /// its set_status, a skip its unskip.
+    Changes,
+    /// Can replace what's there with nothing kept to restore: update_page's
+    /// content swaps the whole body.
+    Overwrites,
+}
+
+fn tool(
+    name: &str,
+    description: &str,
+    effect: Effect,
+    properties: Value,
+    required: &[&str],
+) -> Value {
+    let annotations = match effect {
+        Effect::Reads => json!({ "readOnlyHint": true, "openWorldHint": false }),
+        Effect::Changes => {
+            json!({ "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false })
+        }
+        Effect::Overwrites => {
+            json!({ "readOnlyHint": false, "destructiveHint": true, "openWorldHint": false })
+        }
+    };
+
     json!({
         "name": name,
         "description": description,
@@ -157,7 +190,8 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
             "type": "object",
             "properties": properties,
             "required": required,
-        }
+        },
+        "annotations": annotations,
     })
 }
 
@@ -172,6 +206,7 @@ fn tool_definitions() -> Vec<Value> {
             "Full-text search across every page, ranked by relevance. A page must hold every word; \
              when none does, the search falls back to pages holding any of them and says so with \
              anyWord. Results show a short preview; read_page returns the whole page.",
+            Effect::Reads,
             json!({
                 "query": string_prop("Words to search for. One or two distinctive words work best."),
                 "anyWord": { "type": "boolean", "description": "Match pages holding any of the words rather than all. Pass it with a cursor from an anyWord result." },
@@ -186,6 +221,7 @@ fn tool_definitions() -> Vec<Value> {
             "Read one page's metadata and its body as markdown, by id. To change part of the body, \
              pass update_page an append, insert or replaceSection under a heading; to rewrite it \
              all, edit the markdown and pass it as content.",
+            Effect::Reads,
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
@@ -193,6 +229,7 @@ fn tool_definitions() -> Vec<Value> {
             "list_pages",
             "List pages, filtered by folder, status, priority, text, tags, due date, when they were \
              created or completed, whether they repeat or have reminders, or whether they are scheduled.",
+            Effect::Reads,
             json!({
                 "created": string_prop("Created on a day (YYYY-MM-DD) or in an inclusive range (YYYY-MM-DD..YYYY-MM-DD)."),
                 "completed": string_prop("Completed on a day or in an inclusive range, same forms as created."),
@@ -214,6 +251,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "create_page",
             "Create pages from natural language, parsing dates, tags, priority, folder, repetition and reminders out of the text.",
+            Effect::Changes,
             json!({
                 "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, as markdown."),
                 "dryRun": { "type": "boolean", "description": "Return the parse for review and write nothing." },
@@ -223,6 +261,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "update_page",
             "Change a page's title, subtitle, body, status, priority, tags, schedule or folder.",
+            Effect::Overwrites,
             json!({
                 "id": string_prop("The page id."),
                 "title": string_prop("New title."),
@@ -248,6 +287,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "set_status",
             "Set a page to done or not_started.",
+            Effect::Changes,
             json!({
                 "id": string_prop("The page id."),
                 "status": { "type": "string", "enum": ["not_started", "done"], "description": "The state to set." },
@@ -258,6 +298,7 @@ fn tool_definitions() -> Vec<Value> {
             "complete_page",
             "Mark a page done. On a repeating page this ticks off one occurrence, the oldest \
              open one unless date names another, and the page moves on to the next.",
+            Effect::Changes,
             json!({
                 "id": string_prop("The page id."),
                 "date": string_prop("On a repeating page, the occurrence to tick off, YYYY-MM-DD. A series made in Pikos takes only its oldest open one; a calendar's takes any since it was connected."),
@@ -267,6 +308,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "skip_occurrence",
             "Skip one occurrence of a repeating page, named by its date. unskip_occurrence brings it back.",
+            Effect::Changes,
             json!({
                 "id": string_prop("The repeating page's id."),
                 "date": string_prop("The occurrence's date, YYYY-MM-DD."),
@@ -276,6 +318,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "unskip_occurrence",
             "Bring back an occurrence skip_occurrence skipped.",
+            Effect::Changes,
             json!({
                 "id": string_prop("The repeating page's id."),
                 "date": string_prop("The skipped occurrence's date, YYYY-MM-DD."),
@@ -287,6 +330,7 @@ fn tool_definitions() -> Vec<Value> {
             "Move one occurrence of a repeating page, keeping its length unless end says otherwise. \
              The rest of the series stays put. To reopen a ticked-off occurrence, set_status its \
              done page to not_started.",
+            Effect::Changes,
             json!({
                 "id": string_prop("The repeating page's id."),
                 "date": string_prop("The occurrence's date, YYYY-MM-DD."),
@@ -299,42 +343,49 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "delete_page",
             "Move a page to the trash, where restore_page can bring it back. Never destroys anything.",
+            Effect::Changes,
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
         tool(
             "restore_page",
             "Bring a trashed page back.",
+            Effect::Changes,
             json!({ "id": string_prop("The page id.") }),
             &["id"],
         ),
         tool(
             "list_trash",
             "List trashed pages, newest first, with their ids for restore_page.",
+            Effect::Reads,
             json!({}),
             &[],
         ),
         tool(
             "list_tags",
             "List the tags on open pages, most used first, with how many pages carry each.",
+            Effect::Reads,
             json!({}),
             &[],
         ),
         tool(
             "list_folders",
             "List the workspace's folders with their page counts.",
+            Effect::Reads,
             json!({}),
             &[],
         ),
         tool(
             "create_folder",
             "Create a folder. Pages are filed into it with create_page's ~folder or update_page's folder.",
+            Effect::Changes,
             json!({ "name": string_prop("The folder's name.") }),
             &["name"],
         ),
         tool(
             "rename_folder",
             "Rename a folder. A folder that mirrors a connected calendar follows its calendar's name and is refused.",
+            Effect::Changes,
             json!({
                 "folder": string_prop("The folder's id or its whole current name."),
                 "name": string_prop("The new name."),
@@ -344,24 +395,28 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "delete_folder",
             "Move a folder and every page in it to the trash. restore_folder brings both back; never destroys anything.",
+            Effect::Changes,
             json!({ "folder": string_prop("The folder's id or its whole name.") }),
             &["folder"],
         ),
         tool(
             "restore_folder",
             "Bring a trashed folder back, with the pages that were trashed along with it.",
+            Effect::Changes,
             json!({ "id": string_prop("The folder id delete_folder returned.") }),
             &["id"],
         ),
         tool(
             "list_reminders",
             "List one page's reminders. To find which pages have reminders, use list_pages with hasReminders.",
+            Effect::Reads,
             json!({ "pageId": string_prop("The page id.") }),
             &["pageId"],
         ),
         tool(
             "add_reminder",
             "Add a reminder a given number of minutes before a page's scheduled start.",
+            Effect::Changes,
             json!({
                 "pageId": string_prop("The page id."),
                 "minutes": { "type": "integer", "description": "Minutes before the start; 0 fires at the start." },
@@ -371,6 +426,7 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "remove_reminder",
             "Remove one reminder by its own id.",
+            Effect::Changes,
             json!({ "reminderId": string_prop("The reminder id.") }),
             &["reminderId"],
         ),
@@ -633,6 +689,30 @@ mod tests {
                     t["inputSchema"]["properties"].get(key).is_some(),
                     "{name} requires \"{key}\" but does not declare it"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_body_overwrite_is_destructive_and_reads_declare_themselves() {
+        let destructive: Vec<String> = tool_definitions()
+            .iter()
+            .filter(|t| t["annotations"]["destructiveHint"] == true)
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+
+        assert_eq!(destructive, ["update_page"]);
+
+        for t in tool_definitions() {
+            let name = t["name"].as_str().unwrap();
+            let is_read = name.starts_with("search_")
+                || name.starts_with("read_")
+                || name.starts_with("list_");
+
+            assert_eq!(t["annotations"]["readOnlyHint"], is_read, "{name}");
+            assert_eq!(t["annotations"]["openWorldHint"], false, "{name}");
+            if !is_read {
+                assert!(t["annotations"]["destructiveHint"].is_boolean(), "{name}");
             }
         }
     }
