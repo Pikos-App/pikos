@@ -43,10 +43,17 @@ final class DeviceSync {
 
     /// At launch: syncs again if it was on when the app last ran.
     func resume() async {
-        guard Self.isAvailable, let workspace = workspace(),
-            let state = try? await workspace.syncState(),
-            state.started && !state.paused
-        else { return }
+        guard Self.isAvailable, let workspace = workspace() else { return }
+
+        let state: SyncState
+        do {
+            state = try await workspace.syncState()
+        } catch {
+            // Otherwise a phone that synced would quietly stop at launch.
+            fail("this device couldn't read whether sync was on", error)
+            return
+        }
+        guard state.started && !state.paused else { return }
 
         await connect(workspace)
     }
@@ -60,7 +67,7 @@ final class DeviceSync {
                 try await workspace.setSyncPaused(paused: false)
             }
         } catch {
-            show(.failed(error.localizedDescription))
+            fail("turning sync on failed", error)
             return
         }
         await connect(workspace)
@@ -70,8 +77,13 @@ final class DeviceSync {
     func turnOff() async {
         await starter?.stop()
         starter = nil
-        try? await workspace()?.setSyncPaused(paused: true)
         isOn = false
+        do {
+            try await workspace()?.setSyncPaused(paused: true)
+        } catch {
+            fail("turning sync off wasn't saved, so it may come back on at the next launch", error)
+            return
+        }
         show(nil)
     }
 
@@ -82,8 +94,21 @@ final class DeviceSync {
 
         await starter?.stop()
         starter = nil
-        try? await workspace.forgetSync()
+        do {
+            try await workspace.forgetSync()
+        } catch {
+            fail("starting this device over failed", error)
+            return
+        }
         await turnOn()
+    }
+
+    /// A workspace call sync depends on failed: logged by its kind and shown on the status line,
+    /// after "Couldn't sync:", with the workspace's own message.
+    private func fail(_ what: String, _ error: Error) {
+        let message = FailureText.message(error)
+        Self.log.error("\(what, privacy: .public): \(FailureText.kind(error), privacy: .public): \(message, privacy: .public)")
+        show(.failed("\(what). \(message)"))
     }
 
     /// Asks iOS for time to finish the send, so an edit made just before the app is put away still
@@ -126,6 +151,7 @@ final class DeviceSync {
         let starter = SyncStarter<CloudKitSync> { [weak self] in
             try await self?.start(workspace, container: container)
         } failed: { [weak self] error in
+            let error = WorkspaceReplicaStore.readable(error, op: "start")
             Self.log.error("\(SyncFailure.logLine("start", error), privacy: .public)")
             await self?.show(SyncFailure.status(for: error))
         }
@@ -175,7 +201,15 @@ final class DeviceSync {
     }
 
     private func refreshLine() async {
-        let summary = try? await workspace()?.syncSummary()
+        var summary: SyncSummary?
+        do {
+            summary = try await workspace()?.syncSummary()
+        } catch {
+            Self.log.error(
+                "reading what waits to send failed: \(FailureText.kind(error), privacy: .public): \(FailureText.message(error), privacy: .public)"
+            )
+            counts = "Couldn't read what waits to send: \(FailureText.message(error))"
+        }
         let queue = summary.map {
             SyncStatusLine.Queue(
                 toSend: Int($0.pending),
