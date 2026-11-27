@@ -534,3 +534,72 @@ async fn open_pool_fts_triggers_track_writer_inserts_updates_deletes() {
 
     pool.close().await;
 }
+
+// Pruning the reminder log and sweeping the trash change nothing the workspace's integrity rests
+// on, so either failing still lets the workspace open.
+
+#[tokio::test]
+async fn a_workspace_opens_when_pruning_the_notification_log_fails() {
+    let db = TempDb::new("prune");
+    let pool = open_pool(&db.path).await.unwrap();
+    sqlx::query("DROP TABLE notification_log")
+        .execute(&pool)
+        .await
+        .unwrap();
+    close_pool(&pool).await;
+
+    let pool = super::open_pool(&db.path)
+        .await
+        .expect("a failed prune kept the workspace from opening");
+    close_pool(&pool).await;
+}
+
+#[tokio::test]
+async fn a_workspace_opens_when_sweeping_the_trash_fails() {
+    let db = TempDb::new("sweep");
+    let pool = open_pool(&db.path).await.unwrap();
+    insert_test_page(&pool, TestPage::new("old", "Trashed long ago"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET deleted_at = '2000-01-01T00:00:00.000Z' WHERE id = 'old'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER held BEFORE DELETE ON pages BEGIN SELECT RAISE(ABORT, 'held'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    close_pool(&pool).await;
+
+    let pool = super::open_pool(&db.path)
+        .await
+        .expect("a failed trash sweep kept the workspace from opening");
+    let kept: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE id = 'old'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(kept, 1, "the sweep's page is left for the next launch");
+    close_pool(&pool).await;
+}
+
+#[test]
+fn a_sweep_that_finds_the_workspace_damaged_still_fails_the_open() {
+    let damaged = super::carry_on_after(
+        "sweeping the trash",
+        AppError::Corrupt("database disk image is malformed".into()),
+    )
+    .unwrap_err();
+    assert_eq!(damaged.kind(), "Corrupt");
+    assert!(
+        damaged.to_string().contains("sweeping the trash"),
+        "{damaged}"
+    );
+
+    assert!(super::carry_on_after(
+        "sweeping the trash",
+        AppError::Internal("anything else".into())
+    )
+    .is_ok());
+}
