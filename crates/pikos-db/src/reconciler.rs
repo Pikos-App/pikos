@@ -362,6 +362,9 @@ async fn carry_past_end(
         .and_then(|d| d.succ_opt())
         .map(|d| d.format("%Y-%m-%d").to_string())
     else {
+        log::warn!(
+            "reconciler: page {from_page} ends on {ends}, which isn't a day, so nothing past it moves to page {to_page}"
+        );
         return Ok(());
     };
     let (ticked, ticks_left) = move_occurring_dates(
@@ -778,10 +781,12 @@ async fn load_carried_occurrences(
     .fetch_all(&mut **tx)
     .await?;
 
-    Ok(CarriedOccurrences {
-        exdates: serde_json::from_str(&exdates_json).unwrap_or_default(),
-        overrides,
-    })
+    // Not refused: these are the provider's, and the next full enumerate sends them again.
+    let exdates = crate::schedules::stored_exdates(&rule_id, &exdates_json).unwrap_or_else(|e| {
+        log::warn!("reconciler: {e}; carried forward as none");
+        Vec::new()
+    });
+    Ok(CarriedOccurrences { exdates, overrides })
 }
 
 /// Applies a lone occurrence change against the stored series. Returns a missing-master signal
@@ -1245,8 +1250,15 @@ async fn float_wall_clock(
         .as_ref()
         .map(|(_, _, _, _, tz)| tz.clone())
         .or_else(|| schedules.iter().find_map(|(_, _, _, tz)| tz.clone()));
-    let Some(source) = source.and_then(|tz| tz.parse::<Tz>().ok()) else {
+    let Some(source) = source else {
         return Ok(());
+    };
+    let source = match source.parse::<Tz>() {
+        Ok(source) => source,
+        Err(e) => {
+            log::warn!("reconciler: page {page_id} keeps its stored wall clock: {e}");
+            return Ok(());
+        }
     };
     let device = device_zone();
     if source == device {
@@ -1269,7 +1281,7 @@ async fn float_wall_clock(
                  timezone = ?
              WHERE id = ?",
         )
-        .bind(shift_until_to_device(rrule, source, device))
+        .bind(shift_until_to_device(rule_id, rrule, source, device))
         .bind(&start)
         .bind(end)
         .bind(device.name())
@@ -1281,8 +1293,15 @@ async fn float_wall_clock(
     // Override rows too: a moved instance renders and fires on its own row. Each converts from
     // its own stamp, since a provider can move an instance into another zone than the master's.
     for (schedule_id, start, end, tz) in &schedules {
-        let Some(row_source) = tz.as_ref().and_then(|tz| tz.parse::<Tz>().ok()) else {
+        let Some(tz) = tz else {
             continue;
+        };
+        let row_source = match tz.parse::<Tz>() {
+            Ok(row_source) => row_source,
+            Err(e) => {
+                log::warn!("reconciler: schedule {schedule_id} keeps its stored wall clock: {e}");
+                continue;
+            }
         };
         let converted_start = to_device_wall_clock(start, row_source, device);
         let converted_end = end
@@ -1344,9 +1363,18 @@ pub(crate) fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> 
 
 /// Shifts a source-zone `UNTIL` token to device-local so the bound floats with its occurrences.
 /// Ingest already rewrote any UTC `UNTIL`, so no `Z` is left; a date-only bound needs no shift.
-fn shift_until_to_device(rrule: &str, source: Tz, device: Tz) -> String {
+fn shift_until_to_device(rule_id: &str, rrule: &str, source: Tz, device: Tz) -> String {
     rewrite_until_with(rrule, |value| {
-        let naive = NaiveDateTime::parse_from_str(value, UNTIL_FMT).ok()?;
+        let date_only = value.len() == 8 && value.bytes().all(|b| b.is_ascii_digit());
+        let naive = match NaiveDateTime::parse_from_str(value, UNTIL_FMT) {
+            Ok(naive) => naive,
+            Err(e) => {
+                if !date_only {
+                    log::warn!("reconciler: rule {rule_id} keeps UNTIL={value} unshifted: {e}");
+                }
+                return None;
+            }
+        };
         Some(
             convert_instant(naive, source, device)?
                 .format(UNTIL_FMT)
@@ -1762,8 +1790,17 @@ fn project_description(text: &str) -> (String, String) {
 /// place through [`rewrite_until_with`], since a parse round-trip would drop BYSETPOS and
 /// BYMONTHDAY.
 fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
-    let Ok(zone) = tz.parse::<Tz>() else {
-        return rrule.to_string();
+    let zone = match tz.parse::<Tz>() {
+        Ok(zone) => zone,
+        Err(e) => {
+            let utc_until = rrule
+                .split(';')
+                .any(|part| part.starts_with("UNTIL=") && part.ends_with('Z'));
+            if utc_until {
+                log::warn!("reconciler: a UTC UNTIL is kept in UTC: {e}");
+            }
+            return rrule.to_string();
+        }
     };
     rewrite_until_with(rrule, |value| until_utc_to_wall_clock(value, zone))
 }
@@ -1772,7 +1809,13 @@ fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
 /// `None` for anything that isn't a UTC date-time, which is already wall-clock.
 fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
     let stamp = value.strip_suffix('Z')?;
-    let naive = NaiveDateTime::parse_from_str(stamp, UNTIL_FMT).ok()?;
+    let naive = match NaiveDateTime::parse_from_str(stamp, UNTIL_FMT) {
+        Ok(naive) => naive,
+        Err(e) => {
+            log::warn!("reconciler: UNTIL={value} is kept as it came: {e}");
+            return None;
+        }
+    };
     let local = zoned::wall_clock_at(zone, Utc.from_utc_datetime(&naive));
     Some(local.format(UNTIL_FMT).to_string())
 }
