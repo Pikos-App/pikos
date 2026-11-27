@@ -217,6 +217,28 @@ appTest(
   }
 );
 
+appTest(
+  "an edit waiting to save on a page deleted outside the app is dropped without an error",
+  async ({ app, storage }) => {
+    appTest.skip(storage !== "bridge", "needs the bridge to delete outside the app");
+    const errors: string[] = [];
+    app.on("pageerror", (e) => errors.push(e.message));
+    await quickAdd(app, "goes while saving");
+    const row = app.locator("[data-page-list-item]").filter({ hasText: "goes while saving" });
+    const id = await row.getAttribute("data-page-id");
+    await row.click();
+
+    await app.getByLabel("Page title").click();
+    await app.keyboard.type(" edited");
+    await bridgeCall(app, "delete_page", { id });
+    await app.getByRole("textbox", { name: "Page content" }).click();
+    await app.waitForTimeout(WRITE_QUEUE_DEBOUNCE_MS * 2);
+
+    await expect(app.getByText("Not found")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  }
+);
+
 function paragraphDoc(text: string): string {
   return JSON.stringify({
     content: [{ content: [{ text, type: "text" }], type: "paragraph" }],

@@ -4,7 +4,7 @@
 // optimistic-write shape every mutation uses: patch state now, write, and on failure restore the
 // state and surface the error.
 
-import type { PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
+import type { Page, PageUpdate, StorageAdapter, StorageError } from "@pikos/core";
 import { storageErrorUserMessage, toPageSummary, toStorageError } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
@@ -164,7 +164,19 @@ export function usePageWriteQueue({
       rethrow,
       rollback: () => {},
       write: async () => {
-        const updated = await adapter.updatePage(id, patch);
+        let updated: Page;
+        try {
+          updated = await adapter.updatePage(id, patch);
+        } catch (err: unknown) {
+          // Sync or another window can delete a page while an edit to it waits. The edit has
+          // nowhere to land, so it isn't a failure to roll back or report.
+          const isPageGone = toStorageError(err).kind === "NotFound";
+          if (!isPageGone) throw err;
+
+          log.info(`page write for ${id} dropped: the page is gone`);
+          return;
+        }
+
         if (adoptEcho) {
           const summary = toPageSummary(updated);
           mirror.confirmRow(summary);
