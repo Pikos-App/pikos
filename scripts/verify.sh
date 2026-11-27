@@ -45,6 +45,14 @@ if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '(\.md|\.txt|LICENSE)
   exit $overall
 fi
 
+# Without this, each gate fails on "turbo: not found", which the summary below filters out, and
+# reports a bare failure with no reason.
+if [ ! -d node_modules ]; then
+  fail "dependencies"
+  echo "no dependencies, run pnpm install --frozen-lockfile --offline"
+  exit 1
+fi
+
 . scripts/lib/turbo-cache.sh
 
 # Auto-fix, skipped in CI where a clean checkout has no changed files.
