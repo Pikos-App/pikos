@@ -641,7 +641,6 @@ pub enum FocusOutcome {
     TooShort { label: String },
 }
 
-
 /// One colour a folder can be.
 #[derive(Debug, uniffi::Record)]
 pub struct PaletteColor {

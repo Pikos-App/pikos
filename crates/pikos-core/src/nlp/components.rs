@@ -587,7 +587,10 @@ mod tests {
 
         assert!(components.is_certain(Component::Hour));
         assert_eq!(
-            (components.get(Component::Day), components.get(Component::Hour)),
+            (
+                components.get(Component::Day),
+                components.get(Component::Hour)
+            ),
             (Some(23), Some(7))
         );
     }
