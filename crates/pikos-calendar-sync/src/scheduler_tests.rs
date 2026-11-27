@@ -447,3 +447,64 @@ async fn once_every_account_is_disconnected_polling_reaches_no_provider() {
         "an idle poll after disconnect asked a provider for something"
     );
 }
+
+/// One account, two calendars: the first errors and the second has an event.
+async fn seed_two_calendar_account(pool: &SqlitePool) {
+    seed_account(pool, "acc1", "f1").await;
+    insert_test_folder_for(pool, "f2").await;
+    let now = pikos_db::now_iso();
+    sqlx::query(
+        "INSERT INTO sync_calendar
+         (id, account_id, calendar_id, display_name, color, enabled, folder_id, sync_token, ctag,
+          last_full_sync_at, last_synced_at, created_at, updated_at)
+         VALUES ('acc1-cal2', 'acc1', 'https://dav.example/acc1/two/', 'Two', NULL, 1, 'f2',
+                 NULL, NULL, NULL, NULL, ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_test_folder_for(pool: &SqlitePool, id: &str) {
+    pikos_db::insert_test_folder(pool, id, "Two").await.unwrap();
+}
+
+/// A calendar's error used to abort its account, so a calendar after it never synced and the
+/// pass reported nothing changed.
+#[tokio::test]
+async fn a_failing_calendar_leaves_the_rest_of_its_account_syncing() {
+    let pool = test_pool().await;
+    seed_two_calendar_account(&pool).await;
+    let provider = Shared::default()
+        .with_sync(Err(AppError::Internal("boom".into())))
+        .with_sync(Ok(delta(vec![event("/e1.ics", "u1")])));
+
+    let report = super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
+
+    assert_eq!(provider.calls.get(), 2, "both calendars polled");
+    assert!(report.changed, "the second calendar's event applied");
+    assert_eq!(
+        report.errors.len(),
+        1,
+        "the first calendar's error is reported"
+    );
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+/// The driver logs each failure, and "which calendar" is the first thing a reader of the log asks.
+#[tokio::test]
+async fn a_failing_calendar_is_reported_by_its_id() {
+    let pool = test_pool().await;
+    seed_account(&pool, "acc1", "f1").await;
+    let provider = Shared::default().with_sync(Err(AppError::Internal("boom".into())));
+
+    let report = super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
+
+    let [failure] = report.errors.as_slice() else {
+        panic!("one failure expected, got {:?}", report.errors);
+    };
+    assert_eq!(failure.account_id, "acc1");
+    assert_eq!(failure.calendar_id.as_deref(), Some("acc1-cal"));
+}

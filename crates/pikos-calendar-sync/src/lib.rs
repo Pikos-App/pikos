@@ -36,4 +36,6 @@ pub use engine::{sync_calendar, SyncOutcome};
 pub use google::{GoogleCredentials, GoogleError, GoogleProvider};
 pub use keychain::{Keychain, KeychainError};
 pub use provider::AnyProvider;
-pub use scheduler::{run_sync_loop, PassReport, SchedulerConfig, SyncTrigger, TriggerSource};
+pub use scheduler::{
+    run_sync_loop, PassError, PassReport, SchedulerConfig, SyncTrigger, TriggerSource,
+};

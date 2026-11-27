@@ -368,22 +368,65 @@ pub async fn resync_account_auto(
 /// Resync every enabled calendar on an account through the poll engine. A calendar's
 /// transport or credential failure surfaces as an `offline`/`reconnectNeeded` result and
 /// doesn't abort the account.
+///
+/// Any other calendar failure doesn't stop the calendars after it either. Once they have all
+/// run, the first such failure is returned, so the panel still says the resync went wrong.
 pub async fn resync_account<P: CalendarProvider>(
     pool: &SqlitePool,
     provider: &P,
     account_id: &str,
 ) -> AppResult<Vec<CalendarSyncResult>> {
+    let pass = sync_account_calendars(pool, provider, account_id).await?;
+    match pass.failures.into_iter().next() {
+        Some(failure) => Err(failure.error),
+        None => Ok(pass.results),
+    }
+}
+
+/// One account's pass: a result per calendar that reached an outcome, and the calendars that
+/// failed outright, each kept apart so one can't hide the others.
+pub(crate) struct AccountPass {
+    pub results: Vec<CalendarSyncResult>,
+    pub failures: Vec<CalendarFailure>,
+}
+
+pub(crate) struct CalendarFailure {
+    /// The `sync_calendar` row id, as the engine's log lines name it.
+    pub calendar_id: String,
+    pub error: AppError,
+}
+
+pub(crate) async fn sync_account_calendars<P: CalendarProvider>(
+    pool: &SqlitePool,
+    provider: &P,
+    account_id: &str,
+) -> AppResult<AccountPass> {
     let account = sync_account_row_impl(pool, account_id).await?;
     let calendars = enabled_calendar_rows_impl(pool, account_id).await?;
 
     let mut results = Vec::with_capacity(calendars.len());
+    let mut failures = Vec::new();
     let mut any_reconnect = false;
     let mut any_synced = false;
     for cal in &calendars {
         let Some(folder_id) = cal.folder_id.clone() else {
             continue;
         };
-        let outcome = sync_calendar(pool, provider, &account, cal, &folder_id).await?;
+        let outcome = match sync_calendar(pool, provider, &account, cal, &folder_id).await {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                log::warn!(
+                    "calendar_sync_calendar_failed account={account_id} calendar={} cause={}",
+                    cal.id,
+                    crate::engine::log_cause(&error)
+                );
+                failures.push(CalendarFailure {
+                    calendar_id: cal.id.clone(),
+                    error,
+                });
+                continue;
+            }
+        };
         match outcome {
             SyncOutcome::ReconnectNeeded => any_reconnect = true,
             SyncOutcome::Synced { .. } => any_synced = true,
@@ -409,7 +452,7 @@ pub async fn resync_account<P: CalendarProvider>(
             log::info!("calendar_sync_reconnected account={account_id}");
         }
     }
-    Ok(results)
+    Ok(AccountPass { results, failures })
 }
 
 /// Refresh an account through the provider its `provider` column names. Pairs with

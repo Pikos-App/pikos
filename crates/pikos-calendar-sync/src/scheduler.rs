@@ -15,7 +15,7 @@ use pikos_db::sync::SyncAccountRow;
 use pikos_db::sync_commands::pollable_account_rows_impl;
 use pikos_db::sync_delta::CalendarProvider;
 
-use crate::commands::resync_account;
+use crate::commands::sync_account_calendars;
 
 #[cfg(test)]
 #[path = "scheduler_tests.rs"]
@@ -63,9 +63,18 @@ impl Default for SchedulerConfig {
 #[derive(Debug, Default)]
 pub struct PassReport {
     pub changed: bool,
-    /// Per-account failures (`account_id`, error). Transport/credential failures
-    /// are engine *outcomes*, not errors, so anything here is a genuine bug.
-    pub errors: Vec<(String, AppError)>,
+    /// Failures the pass carried on past. Transport/credential failures are engine
+    /// *outcomes*, not errors, so anything here is a bug or a server answer sync
+    /// doesn't handle.
+    pub errors: Vec<PassError>,
+}
+
+#[derive(Debug)]
+pub struct PassError {
+    pub account_id: String,
+    /// The `sync_calendar` row id, or `None` when the account itself couldn't be read.
+    pub calendar_id: Option<String>,
+    pub error: AppError,
 }
 
 /// Run the scheduler until the trigger stream ends.
@@ -118,17 +127,34 @@ where
     let mut report = PassReport::default();
     let accounts = match pollable_account_rows_impl(pool).await {
         Ok(a) => a,
-        Err(e) => {
-            report.errors.push(("<account enumeration>".into(), e));
+        Err(error) => {
+            report.errors.push(PassError {
+                account_id: "<account enumeration>".into(),
+                calendar_id: None,
+                error,
+            });
             return report;
         }
     };
 
     for account in &accounts {
         let provider = provider_for(account);
-        match resync_account(pool, &provider, &account.id).await {
-            Ok(results) => report.changed |= results.iter().any(|r| r.changed),
-            Err(e) => report.errors.push((account.id.clone(), e)),
+        match sync_account_calendars(pool, &provider, &account.id).await {
+            Ok(pass) => {
+                report.changed |= pass.results.iter().any(|r| r.changed);
+                report
+                    .errors
+                    .extend(pass.failures.into_iter().map(|f| PassError {
+                        account_id: account.id.clone(),
+                        calendar_id: Some(f.calendar_id),
+                        error: f.error,
+                    }));
+            }
+            Err(error) => report.errors.push(PassError {
+                account_id: account.id.clone(),
+                calendar_id: None,
+                error,
+            }),
         }
     }
     report
